@@ -4,7 +4,9 @@ from sqlalchemy.engine import make_url
 from trader_db import DbSettings, make_async_engine, make_engine
 
 
-def test_default_url_points_to_localhost() -> None:
+def test_default_url_points_to_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRADER_DATABASE_URL", raising=False)
+
     assert make_url(DbSettings().database_url).host == "127.0.0.1"
 
 
