@@ -66,29 +66,28 @@ def test_hole_across_session_boundary_is_one_interval() -> None:
     assert result.missing_minutes == 20
 
 
-def test_overnight_gap_is_expected_not_missing() -> None:
-    tuesday = minutes(DAY, DAY_MINUTES)
-    wednesday = minutes(DAY + timedelta(days=1), DAY_MINUTES)
+def full_day(days: int = 0) -> list[datetime]:
+    """Все минуты сессии дня: с аукционной 03:59 UTC до 20:49 UTC."""
+    return minutes(DAY - MINUTE + timedelta(days=days), DAY_MINUTES + 1)
 
-    result = analyze_coverage(tuesday + wednesday, CALENDAR)
+
+def test_overnight_gap_is_expected_not_missing() -> None:
+    result = analyze_coverage(full_day() + full_day(1), CALENDAR)
 
     assert result.missing_minutes == 0
     assert result.outside_session == []
 
 
 def test_whole_missing_day_is_reported() -> None:
-    tuesday = minutes(DAY, DAY_MINUTES)
-    thursday = minutes(DAY + timedelta(days=2), DAY_MINUTES)
+    result = analyze_coverage(full_day() + full_day(2), CALENDAR)
 
-    result = analyze_coverage(tuesday + thursday, CALENDAR)
-
-    assert result.missing_intervals == [(utc(9, 30, 4), utc(9, 30, 20, 50))]
-    assert result.missing_minutes == DAY_MINUTES
+    assert result.missing_intervals == [(utc(9, 30, 3, 59), utc(9, 30, 20, 50))]
+    assert result.missing_minutes == DAY_MINUTES + 1
 
 
 def test_weekend_is_expected_when_calendar_has_no_session_for_it() -> None:
-    friday = minutes(utc(10, 2, 4), DAY_MINUTES)
-    monday = minutes(utc(10, 5, 4), DAY_MINUTES)
+    friday = minutes(utc(10, 2, 3, 59), DAY_MINUTES + 1)
+    monday = minutes(utc(10, 5, 3, 59), DAY_MINUTES + 1)
     weekdays = CALENDAR.excluding_weekend_sessions()
 
     result = analyze_coverage(friday + monday, weekdays)

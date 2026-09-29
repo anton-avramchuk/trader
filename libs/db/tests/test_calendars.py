@@ -5,14 +5,24 @@ from typing import Any
 
 import pytest
 from alembic import command
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from trader_engine.calendar import moex_forts_calendar
+from trader_engine.calendar import (
+    MOEX_FORTS_HOLIDAYS,
+    MOEX_FORTS_RULES,
+    MOEX_FORTS_SPECIAL_DAYS,
+    moex_forts_calendar,
+)
 
 from trader_db import load_trading_calendar, make_engine
 from trader_db.migrate import alembic_config
-from trader_db.models import CalendarHoliday, CalendarRule, TradingCalendar
+from trader_db.models import (
+    CalendarHoliday,
+    CalendarRule,
+    CalendarSpecialDay,
+    TradingCalendar,
+)
 
 WINDOWS: list[dict[str, Any]] = [
     {"name": "main", "start": "10:00", "end": "14:00", "next_day": False}
@@ -137,4 +147,57 @@ def test_seed_is_not_duplicated_after_downgrade_and_upgrade(
         )
     engine.dispose()
 
-    assert (rules, calendars) == (2, 1)
+    assert (rules, calendars) == (len(MOEX_FORTS_RULES), 1)
+
+
+def test_seeded_holidays_and_special_days_match_the_reference(session: Session) -> None:
+    holidays = set(
+        session.scalars(
+            select(CalendarHoliday.date).where(
+                CalendarHoliday.calendar_id == calendar_id(session)
+            )
+        )
+    )
+    special = set(
+        session.scalars(
+            select(CalendarSpecialDay.date).where(
+                CalendarSpecialDay.calendar_id == calendar_id(session)
+            )
+        )
+    )
+
+    assert holidays == set(MOEX_FORTS_HOLIDAYS)
+    assert special == set(MOEX_FORTS_SPECIAL_DAYS)
+
+
+def test_working_saturday_is_loaded_as_a_trading_day(session: Session) -> None:
+    loaded = load_trading_calendar(session, "moex_forts")
+
+    sessions = loaded.sessions_on(date(2025, 11, 1))
+
+    assert [s.name for s in sessions] == ["morning", "main", "main_2", "evening"]
+    assert not any(s.is_weekend for s in sessions)
+
+
+def test_calibration_migration_rolls_back_to_the_initial_rules(
+    temp_database_url: str,
+) -> None:
+    config = alembic_config(temp_database_url)
+    command.upgrade(config, "head")
+
+    command.downgrade(config, "0005")
+
+    engine = make_engine(temp_database_url)
+    with Session(engine) as session:
+        rules = session.scalars(
+            select(CalendarRule.effective_from).order_by(CalendarRule.effective_from)
+        ).all()
+        holidays = session.scalar(select(func.count()).select_from(CalendarHoliday))
+        tables = inspect(engine).get_table_names()
+    engine.dispose()
+
+    assert rules == [date(2020, 1, 1), date(2026, 3, 23)]
+    assert holidays == 0
+    assert "trading_calendar_special_days" not in tables
+
+    command.upgrade(config, "head")  # и снова вперёд без ошибок

@@ -142,7 +142,8 @@ class TestReport:
     ) -> None:
         hole = range(360, 370)  # 10:00–10:10 UTC
         tuesday = [m for i, m in enumerate(day_rows()) if i not in hole]
-        wednesday = day_rows(start=DAY + timedelta(days=1))
+        # Сессия дня начинается с минуты аукциона 03:59 UTC.
+        wednesday = day_rows(DAY_MINUTES + 1, start=DAY + timedelta(days=1) - MINUTE)
         rows: list[RawRow | RowError] = [*tuesday, *wednesday]
 
         outcome = do_import(session_factory, committed_contract_id, rows)

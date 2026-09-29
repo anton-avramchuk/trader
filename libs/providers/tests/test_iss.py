@@ -296,6 +296,49 @@ class TestCandles:
         assert make_client(FakeIss()).candle_range("BRZ0") is None
 
 
+class TestDailyHistory:
+    def test_days_with_volume_and_trades(self) -> None:
+        fake = FakeIss()
+        fake.daily["BRZ0"] = [
+            ["2020-11-02", 2755469, 213408],
+            ["2020-11-03", 3602655, 268035],
+            ["2020-11-05", 2250216, 194206],
+        ]
+
+        bars = make_client(fake).daily_history(
+            "BRZ0", date(2020, 11, 1), date(2020, 11, 30)
+        )
+
+        assert [(b.trade_date, b.volume, b.trades) for b in bars] == [
+            (date(2020, 11, 2), 2755469, 213408),
+            (date(2020, 11, 3), 3602655, 268035),
+            (date(2020, 11, 5), 2250216, 194206),
+        ]
+
+    def test_range_is_inclusive_and_paginated_by_100(self) -> None:
+        fake = FakeIss()
+        start = date(2020, 1, 1)
+        fake.daily["BRZ0"] = [
+            [(start + timedelta(days=i)).isoformat(), 10, 1] for i in range(250)
+        ]
+
+        bars = make_client(fake).daily_history(
+            "BRZ0", start, start + timedelta(days=249)
+        )
+
+        assert len(bars) == 250
+        starts = [r.url.params["start"] for r in fake.requests]
+        assert starts == ["0", "100", "200", "250"]
+
+    def test_unknown_contract_has_no_days(self) -> None:
+        assert (
+            make_client(FakeIss()).daily_history(
+                "NOPE", date(2020, 1, 1), date(2020, 2, 1)
+            )
+            == []
+        )
+
+
 class TestResilience:
     def test_retries_server_errors_with_backoff_then_succeeds(self) -> None:
         fake, time_ = FakeIss(), FakeTime()

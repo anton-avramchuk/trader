@@ -11,6 +11,7 @@ from trader_engine.calendar import TradingCalendar as EngineCalendar
 from trader_db.models import (
     CalendarHoliday,
     CalendarRule,
+    CalendarSpecialDay,
     Contract,
     Root,
     TradingCalendar,
@@ -49,7 +50,14 @@ def load_trading_calendar(session: Session, code: str) -> EngineCalendar:
     holidays = session.scalars(
         select(CalendarHoliday.date).where(CalendarHoliday.calendar_id == calendar.id)
     ).all()
-    return EngineCalendar(calendar.timezone, [_rule(r) for r in rules], holidays)
+    special_days = session.scalars(
+        select(CalendarSpecialDay.date).where(
+            CalendarSpecialDay.calendar_id == calendar.id
+        )
+    ).all()
+    return EngineCalendar(
+        calendar.timezone, [_rule(r) for r in rules], holidays, special_days
+    )
 
 
 def load_contract_calendar(session: Session, contract_id: int) -> EngineCalendar:
