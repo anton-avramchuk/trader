@@ -75,3 +75,18 @@ curl -X POST http://127.0.0.1:8000/jobs/1/cancel
 
 Новый обработчик регистрируется в `apps/worker/src/trader_worker/handlers.py` (`default_registry`) и должен быть идемпотентным: задача потерянного worker'а выполняется заново.
 
+## Импорт файлов
+
+Файл кладётся в каталог импорта (`TRADER_IMPORT_DIR`; в Compose — том `imports`), затем ставится задача `import.file`:
+
+```bash
+docker compose cp finam.csv worker:/data/imports/finam.csv
+
+curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '{
+  "type": "import.file",
+  "params": {"contract_id": 1, "file": "finam.csv", "preset": "finam"}
+}'
+```
+
+Встроенные пресеты: `finam`, `finam_no_header`, `iso_utc`. Свой формат — `mapping` вместо `preset`, поправка пресета — `overrides` (например, `{"timezone": "UTC", "encoding": "cp1251"}`). Форматы: CSV, JSON (массив или NDJSON), Parquet. Отчёт (вставлено, дубликаты, конфликты, ошибки строк, пропуски, диапазон, min/max цена) — в результате задачи. Подробности — ADR-0015 и ADR-0016.
+

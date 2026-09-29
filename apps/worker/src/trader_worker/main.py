@@ -10,7 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 from trader_db import make_engine
 
-from trader_worker.handlers import default_registry
+from trader_worker.file_sources import ImportSettings
+from trader_worker.registry import build_registry
 from trader_worker.runner import Worker, WorkerConfig
 
 
@@ -49,9 +50,10 @@ def main() -> None:
     stop = Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
+    session_factory = sessionmaker(engine, expire_on_commit=False)
     worker = Worker(
-        sessionmaker(engine, expire_on_commit=False),
-        default_registry(),
+        session_factory,
+        build_registry(session_factory, ImportSettings().import_dir),
         WorkerSettings().to_config(),
     )
     worker.run(stop)

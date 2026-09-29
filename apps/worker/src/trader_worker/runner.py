@@ -24,6 +24,7 @@ from trader_worker.handlers import (
     HandlerRegistry,
     JobCancelled,
     JobContext,
+    JobFailed,
     JobInterrupted,
     JobLost,
 )
@@ -161,6 +162,8 @@ class Worker:
             outcome = "release"
         except JobLost:
             outcome = "lost"
+        except JobFailed as error:
+            outcome, payload = "fail", str(error)
         except Exception:
             outcome, payload = "fail", traceback.format_exc()[-_ERROR_LIMIT:]
         finally:

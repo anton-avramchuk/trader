@@ -10,11 +10,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 from trader_db import load_contract_calendar, run_candle_import
+from trader_engine.file_import import MappingError, SourceError
 from trader_engine.ingest import RawRow, RowError
 
-from trader_worker.handlers import Handler, HandlerRegistry, JobContext
+from trader_worker.handlers import Handler, HandlerRegistry, JobContext, JobFailed
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +31,25 @@ class ImportSource:
 
 SourceFactory = Callable[[JobContext], ImportSource]
 
+# Ожидаемые ошибки пользователя: в задачу пишется короткое сообщение без traceback.
+USER_ERRORS = (
+    MappingError,
+    SourceError,
+    FileNotFoundError,
+    LookupError,
+    ValidationError,
+)
+
+
+def _describe(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc'])}: {item['msg']}"
+            for item in error.errors()
+        )
+        return f"Некорректный маппинг: {problems}"
+    return str(error)
+
 
 def make_import_handler(
     session_factory: sessionmaker[Session], source_factory: SourceFactory
@@ -39,8 +60,10 @@ def make_import_handler(
     цены. Результат задачи — id импорта, id версии и полный отчёт.
     """
 
-    def handler(context: JobContext) -> dict[str, Any]:
-        contract_id = int(context.params["contract_id"])
+    def run(context: JobContext) -> dict[str, Any]:
+        contract_id = context.params.get("contract_id")
+        if isinstance(contract_id, bool) or not isinstance(contract_id, int):
+            raise JobFailed("Не задан параметр contract_id (целое число)")
         with session_factory() as session:
             calendar = load_contract_calendar(session, contract_id)
         source = source_factory(context)
@@ -64,6 +87,12 @@ def make_import_handler(
             "dataset_version_id": outcome.dataset_version_id,
             "report": outcome.report,
         }
+
+    def handler(context: JobContext) -> dict[str, Any]:
+        try:
+            return run(context)
+        except USER_ERRORS as error:
+            raise JobFailed(_describe(error)) from error
 
     return handler
 

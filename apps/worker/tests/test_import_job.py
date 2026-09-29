@@ -2,22 +2,18 @@
 
 import time
 from collections.abc import Iterator
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Event
 from typing import Any
 
-import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 from trader_db import request_cancel, start_import
 from trader_db.models import (
-    Contract,
     DataImport,
     DatasetVersion,
     RawCandle1m,
-    Root,
-    TradingCalendar,
 )
 from trader_engine.ingest import RawRow, RowError
 
@@ -28,31 +24,6 @@ from trader_worker.runner import Worker
 
 DAY = datetime(2026, 9, 29, 4, 0, tzinfo=UTC)
 MINUTE = timedelta(minutes=1)
-
-
-@pytest.fixture
-def contract_id(session_factory: sessionmaker[Session]) -> int:
-    with session_factory() as session:
-        calendar_id = session.scalars(
-            select(TradingCalendar.id).where(TradingCalendar.code == "moex_forts")
-        ).one()
-        root = Root(
-            code="BR",
-            name="Brent",
-            exchange="MOEX",
-            quote_currency="USD",
-            tick_size=Decimal("0.01"),
-            calendar_id=calendar_id,
-            roll_trading_days=5,
-        )
-        session.add(root)
-        session.flush()
-        contract = Contract(root_id=root.id, expiration_date=date(2026, 12, 1))
-        session.add(contract)
-        session.flush()
-        contract_id = contract.id
-        session.commit()
-    return contract_id
 
 
 def rows(count: int) -> Iterator[RawRow | RowError]:
