@@ -216,3 +216,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Nx / Angular
+node_modules/
+tmp/
+out-tsc/
+/coverage
+.nx/cache
+.nx/workspace-data
+.nx/polygraph
+.nx/self-healing
+.nx/migrate-runs
+.angular/
+npm-debug.log
+.DS_Store
+Thumbs.db
+.idea/
+
+.angular
+
+__screenshots__/
+
+# Python test reports
+/reports
