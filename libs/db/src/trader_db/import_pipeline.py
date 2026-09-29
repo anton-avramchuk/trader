@@ -19,6 +19,7 @@ from trader_engine.coverage import MINUTE, analyze_coverage
 from trader_engine.ingest import RawRow, RowError, validate_rows
 
 from trader_db.datasets import extend_dataset_version
+from trader_db.derived import enqueue_aggregation
 from trader_db.imports import finish_import, insert_candles, start_import
 from trader_db.models import DataImport, DataImportError
 
@@ -142,6 +143,9 @@ def _process(
         assert data_import is not None
         data_import.report = {**report, "dataset_version_id": version_id}
         report = data_import.report
+        # Новые минутные данные — бары надо достроить (ADR-0018); в той же
+        # транзакции, чтобы версия и задача появлялись вместе.
+        enqueue_aggregation(session, contract_id)
     session.flush()
     return ImportOutcome(import_id, report, version_id)
 

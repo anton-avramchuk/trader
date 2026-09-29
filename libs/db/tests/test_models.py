@@ -23,6 +23,8 @@ EXPECTED_TABLES = {
     "jobs",
     "job_schedules",
     "import_presets",
+    "derived_candles",
+    "derived_builds",
 }
 
 

@@ -13,6 +13,7 @@ from trader_db import make_engine, upgrade_head
 from trader_db.models import Contract, Root, TradingCalendar
 from trader_db.testing import temporary_database
 
+from tests.fake_provider import MON, NOW, TODAY, TUE, WED, FakeProvider, contract
 from trader_worker.handlers import HandlerRegistry
 from trader_worker.registry import build_registry
 from trader_worker.runner import Worker, WorkerConfig
@@ -91,3 +92,56 @@ def file_worker(
     return Worker(
         session_factory, build_registry(session_factory, import_dir), worker.config
     )
+
+
+@pytest.fixture
+def root_id(session_factory: sessionmaker[Session]) -> int:
+    with session_factory() as session:
+        calendar_id = session.scalars(
+            select(TradingCalendar.id).where(TradingCalendar.code == "moex_forts")
+        ).one()
+        root = Root(
+            code="BR",
+            name="Brent",
+            exchange="MOEX",
+            quote_currency="USD",
+            tick_size=Decimal("0.01"),
+            calendar_id=calendar_id,
+            roll_trading_days=5,
+        )
+        session.add(root)
+        session.flush()
+        root_id = root.id
+        session.commit()
+    return root_id
+
+
+@pytest.fixture
+def provider() -> FakeProvider:
+    fake = FakeProvider(
+        [
+            contract("BRX6", date(2026, 11, 2)),
+            contract("BRZ6", date(2026, 12, 1)),
+            contract("NGZ6", date(2026, 12, 29), asset="NG"),
+        ]
+    )
+    fake.set_days("BRZ6", [MON, TUE, WED])
+    return fake
+
+
+@pytest.fixture
+def iss_worker(
+    worker: Worker,
+    session_factory: sessionmaker[Session],
+    provider: FakeProvider,
+    tmp_path: Path,
+) -> Worker:
+    registry = build_registry(
+        session_factory,
+        tmp_path,
+        provider.factory,
+        chunk_days=2,
+        today=lambda: TODAY,
+        clock=lambda: NOW,
+    )
+    return Worker(session_factory, registry, worker.config)

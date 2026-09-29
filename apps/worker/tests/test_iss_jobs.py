@@ -1,12 +1,9 @@
 """Задачи MOEX ISS на поддельном провайдере (нужен TRADER_DATABASE_URL)."""
 
 from datetime import date
-from decimal import Decimal
-from pathlib import Path
 from threading import Event
 from typing import Any
 
-import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 from trader_db import provider_contract_id
@@ -16,79 +13,27 @@ from trader_db.models import (
     DatasetVersion,
     Job,
     RawCandle1m,
-    Root,
-    TradingCalendar,
 )
 from trader_engine.ingest import RowError
 from trader_providers import IssError
 
-from tests.fake_provider import FakeProvider, contract, day_rows
+from tests.fake_provider import MON, TODAY, TUE, WED, FakeProvider, day_rows
 from tests.helpers import enqueue, load
-from trader_worker.registry import build_registry
 from trader_worker.runner import Worker
-
-TODAY = date(2026, 10, 5)
-MON, TUE, WED = date(2026, 9, 28), date(2026, 9, 29), date(2026, 9, 30)
-
-
-@pytest.fixture
-def root_id(session_factory: sessionmaker[Session]) -> int:
-    with session_factory() as session:
-        calendar_id = session.scalars(
-            select(TradingCalendar.id).where(TradingCalendar.code == "moex_forts")
-        ).one()
-        root = Root(
-            code="BR",
-            name="Brent",
-            exchange="MOEX",
-            quote_currency="USD",
-            tick_size=Decimal("0.01"),
-            calendar_id=calendar_id,
-            roll_trading_days=5,
-        )
-        session.add(root)
-        session.flush()
-        root_id = root.id
-        session.commit()
-    return root_id
-
-
-@pytest.fixture
-def provider() -> FakeProvider:
-    fake = FakeProvider(
-        [
-            contract("BRX6", date(2026, 11, 2)),
-            contract("BRZ6", date(2026, 12, 1)),
-            contract("NGZ6", date(2026, 12, 29), asset="NG"),
-        ]
-    )
-    fake.set_days("BRZ6", [MON, TUE, WED])
-    return fake
-
-
-@pytest.fixture
-def iss_worker(
-    worker: Worker,
-    session_factory: sessionmaker[Session],
-    provider: FakeProvider,
-    tmp_path: Path,
-) -> Worker:
-    registry = build_registry(
-        session_factory,
-        tmp_path,
-        provider.factory,
-        chunk_days=2,
-        today=lambda: TODAY,
-    )
-    return Worker(session_factory, registry, worker.config)
 
 
 def run_job(
     worker: Worker, factory: sessionmaker[Session], job_type: str, **params: Any
 ) -> Any:
     job_id = enqueue(factory, job_type, params)
-    worker.run_once(Event())
-    return load(factory, job_id)
+    # Импорты сами ставят сборку баров: задачи, стоящие в очереди раньше нужной,
+    # выполняются по пути (FIFO).
+    for _ in range(20):
+        worker.run_once(Event())
+        job = load(factory, job_id)
+        if job.status not in ("queued", "running"):
+            return job
+    raise AssertionError(f"задача {job_type} не выполнена")
 
 
 def count(factory: sessionmaker[Session], model: type) -> int:
@@ -495,7 +440,7 @@ class TestWholeRoot:
         while iss_worker.run_once(Event()):
             processed += 1
 
-        assert processed == 3  # sync + два import.iss
+        assert processed == 5  # sync + два import.iss + две сборки баров
         assert count(session_factory, RawCandle1m) == 90 + 60
         with session_factory() as session:
             statuses = set(session.scalars(select(Job.status)))

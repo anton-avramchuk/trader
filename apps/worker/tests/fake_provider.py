@@ -9,6 +9,9 @@ from trader_engine.ingest import RawRow, RowError
 from trader_providers import IssError, ProviderContract
 
 MSK = ZoneInfo("Europe/Moscow")
+TODAY = date(2026, 10, 5)
+NOW = datetime(2026, 10, 5, 9, 0, tzinfo=UTC)
+MON, TUE, WED = date(2026, 9, 28), date(2026, 9, 29), date(2026, 9, 30)
 
 
 def contract(

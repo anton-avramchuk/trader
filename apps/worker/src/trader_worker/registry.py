@@ -7,6 +7,12 @@ from pathlib import Path
 from sqlalchemy.orm import Session, sessionmaker
 from trader_providers import IssClient
 
+from trader_worker.aggregate_jobs import (
+    AGGREGATE_JOB_TYPE,
+    Clock,
+    make_aggregate_handler,
+    utc_now,
+)
 from trader_worker.file_sources import file_source
 from trader_worker.handlers import HandlerRegistry, default_registry
 from trader_worker.import_jobs import register_import_job
@@ -28,6 +34,7 @@ def build_registry(
     *,
     chunk_days: int = DEFAULT_CHUNK_DAYS,
     today: Callable[[], date] = msk_today,
+    clock: Clock = utc_now,
 ) -> HandlerRegistry:
     """Демо-задачи, импорт файлов (``import.file``) и задачи MOEX ISS."""
     registry = default_registry()
@@ -44,5 +51,8 @@ def build_registry(
         make_iss_import_handler(
             session_factory, provider_factory, chunk_days=chunk_days, today=today
         )
+    )
+    registry.register(AGGREGATE_JOB_TYPE)(
+        make_aggregate_handler(session_factory, now=clock)
     )
     return registry
