@@ -12,6 +12,22 @@ concurrency:
 jobs:
   main:
     runs-on: ubuntu-latest
+    env:
+      TRADER_DATABASE_URL: postgresql+psycopg://trader:trader@localhost:5432/trader
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trader
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trader -d trader"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:

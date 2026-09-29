@@ -10,7 +10,7 @@
 - Python 3.12: FastAPI, Pydantic, SQLAlchemy 2 (sync в worker, async в API), Alembic, NumPy, Polars; ruff, pyright (strict для engine), pytest + hypothesis.
 - Графики: **TradingView Lightweight Charts v5** (свечи, оверлеи через primitives/custom series) + **ECharts** (`ngx-echarts`) для статистики. Plotly не используется.
 - TS-клиент API генерируется из OpenAPI FastAPI в Nx-библиотеку.
-- PostgreSQL 16, всё поднимается через **Docker Compose**. Однопользовательский режим, без auth до MVP-10.
+- PostgreSQL 18, всё поднимается через **Docker Compose**. Однопользовательский режим, без auth до MVP-10.
 - Долгие операции — **очередь задач на PostgreSQL** (`FOR UPDATE SKIP LOCKED`) + отдельный worker; прогресс в UI через WebSocket.
 
 ### Рынок и инструменты
