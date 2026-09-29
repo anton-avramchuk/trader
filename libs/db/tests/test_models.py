@@ -21,6 +21,7 @@ EXPECTED_TABLES = {
     "dataset_version_imports",
     "jobs",
     "job_schedules",
+    "import_presets",
 }
 
 

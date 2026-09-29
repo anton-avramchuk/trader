@@ -19,6 +19,10 @@ class JobLost(Exception):
     """Задача больше не принадлежит этому worker'у (возвращена в очередь и т. п.)."""
 
 
+class JobFailed(Exception):
+    """Ожидаемая ошибка (неверный файл, маппинг…): в задачу пишется только сообщение."""
+
+
 ProgressSink = Callable[[float | None, str | None], bool | None]
 
 

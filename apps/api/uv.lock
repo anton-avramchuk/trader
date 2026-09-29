@@ -681,11 +681,15 @@ name = "trader-engine"
 version = "1.0.0"
 source = { editable = "../../libs/engine" }
 dependencies = [
+    { name = "pydantic" },
     { name = "tzdata" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "tzdata", specifier = ">=2026.4" }]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "tzdata", specifier = ">=2026.4" },
+]
 
 [package.metadata.requires-dev]
 dev = [

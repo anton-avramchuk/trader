@@ -36,6 +36,7 @@ from trader_db.jobs import (
 )
 from trader_db.migrate import upgrade_head
 from trader_db.models import Base
+from trader_db.presets import delete_preset, get_preset, list_presets, save_preset
 from trader_db.schedules import create_schedule, run_due_schedules
 from trader_db.settings import DbSettings
 
@@ -52,6 +53,7 @@ __all__ = [
     "complete_job",
     "create_dataset_version",
     "create_schedule",
+    "delete_preset",
     "enqueue_job",
     "enqueue_statement",
     "extend_dataset_version",
@@ -59,9 +61,11 @@ __all__ = [
     "finish_import",
     "get_job",
     "get_job_statement",
+    "get_preset",
     "insert_candles",
     "latest_dataset_version",
     "list_jobs_statement",
+    "list_presets",
     "load_contract_calendar",
     "load_trading_calendar",
     "make_async_engine",
@@ -74,6 +78,7 @@ __all__ = [
     "resolve_conflicts",
     "run_candle_import",
     "run_due_schedules",
+    "save_preset",
     "start_import",
     "touch_job",
     "upgrade_head",
