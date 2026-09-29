@@ -9,6 +9,14 @@ from trader_db.models.instruments import (
     Timeframe,
     TradingCalendar,
 )
+from trader_db.models.raw import (
+    DataImport,
+    DataImportError,
+    DatasetVersion,
+    DatasetVersionImport,
+    ImportConflict,
+    RawCandle1m,
+)
 
 __all__ = [
     "Base",
@@ -17,7 +25,13 @@ __all__ = [
     "Contract",
     "ContractProviderId",
     "ContractStepPrice",
+    "DataImport",
+    "DataImportError",
     "DataProvider",
+    "DatasetVersion",
+    "DatasetVersionImport",
+    "ImportConflict",
+    "RawCandle1m",
     "Root",
     "Timeframe",
     "TradingCalendar",
