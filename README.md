@@ -59,3 +59,19 @@ docker compose up -d --build
 ```bash
 TRADER_DATABASE_URL=postgresql+psycopg://trader:trader@127.0.0.1:5432/trader npx nx run-many -t test -p db api
 ```
+
+## Очередь задач
+
+Долгие операции выполняет worker; API только ставит задачи и показывает прогресс (ADR-0002).
+
+```bash
+# поставить демо-задачу (встроенный обработчик demo.sleep)
+curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "demo.sleep", "params": {"seconds": 5, "steps": 10}}'
+
+curl http://127.0.0.1:8000/jobs/1          # состояние
+curl -X POST http://127.0.0.1:8000/jobs/1/cancel
+# WebSocket с прогрессом: ws://127.0.0.1:8000/ws/jobs/1
+```
+
+Новый обработчик регистрируется в `apps/worker/src/trader_worker/handlers.py` (`default_registry`) и должен быть идемпотентным: задача потерянного worker'а выполняется заново.
+

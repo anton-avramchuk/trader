@@ -37,8 +37,8 @@ dev = [
   "pytest-sugar>=1.0.0",
   "pytest-cov>=6.0.0",
   "pytest-html>=4.1.1",
-  "httpx>=0.28.1",
   "pyright>=1.1.414",
+  "httpx2>=2.13.1",
 ]
 
 [build-system]

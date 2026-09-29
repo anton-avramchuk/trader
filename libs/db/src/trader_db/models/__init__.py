@@ -9,6 +9,7 @@ from trader_db.models.instruments import (
     Timeframe,
     TradingCalendar,
 )
+from trader_db.models.jobs import Job, JobSchedule
 from trader_db.models.raw import (
     DataImport,
     DataImportError,
@@ -31,6 +32,8 @@ __all__ = [
     "DatasetVersion",
     "DatasetVersionImport",
     "ImportConflict",
+    "Job",
+    "JobSchedule",
     "RawCandle1m",
     "Root",
     "Timeframe",
