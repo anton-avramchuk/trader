@@ -1,23 +1,48 @@
 """Сборка реестра обработчиков worker'а."""
 
+from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
+from trader_providers import IssClient
 
 from trader_worker.file_sources import file_source
 from trader_worker.handlers import HandlerRegistry, default_registry
 from trader_worker.import_jobs import register_import_job
+from trader_worker.iss_jobs import (
+    DEFAULT_CHUNK_DAYS,
+    IMPORT_JOB_TYPE,
+    SYNC_JOB_TYPE,
+    ProviderFactory,
+    make_iss_import_handler,
+    make_sync_root_handler,
+    msk_today,
+)
 
 
 def build_registry(
-    session_factory: sessionmaker[Session], import_dir: Path
+    session_factory: sessionmaker[Session],
+    import_dir: Path,
+    provider_factory: ProviderFactory = IssClient,
+    *,
+    chunk_days: int = DEFAULT_CHUNK_DAYS,
+    today: Callable[[], date] = msk_today,
 ) -> HandlerRegistry:
-    """Демо-задачи и импорт файлов (``import.file``)."""
+    """Демо-задачи, импорт файлов (``import.file``) и задачи MOEX ISS."""
     registry = default_registry()
     register_import_job(
         registry,
         "import.file",
         session_factory,
         file_source(session_factory, import_dir),
+    )
+    registry.register(SYNC_JOB_TYPE)(
+        make_sync_root_handler(session_factory, provider_factory, today=today)
+    )
+    registry.register(IMPORT_JOB_TYPE)(
+        make_iss_import_handler(
+            session_factory, provider_factory, chunk_days=chunk_days, today=today
+        )
     )
     return registry
