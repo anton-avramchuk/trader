@@ -1,6 +1,6 @@
 """Доступ к PostgreSQL: настройки, движки SQLAlchemy, миграции Alembic."""
 
-from trader_db.calendars import load_trading_calendar
+from trader_db.calendars import load_contract_calendar, load_trading_calendar
 from trader_db.datasets import (
     create_dataset_version,
     extend_dataset_version,
@@ -8,6 +8,7 @@ from trader_db.datasets import (
     read_candles,
 )
 from trader_db.engine import check_connection, make_async_engine, make_engine
+from trader_db.import_pipeline import ImportOutcome, run_candle_import
 from trader_db.imports import (
     Candle1m,
     InsertReport,
@@ -42,6 +43,7 @@ __all__ = [
     "Base",
     "Candle1m",
     "DbSettings",
+    "ImportOutcome",
     "InsertReport",
     "cancel_running_job",
     "cancel_statement",
@@ -60,6 +62,7 @@ __all__ = [
     "insert_candles",
     "latest_dataset_version",
     "list_jobs_statement",
+    "load_contract_calendar",
     "load_trading_calendar",
     "make_async_engine",
     "make_engine",
@@ -69,6 +72,7 @@ __all__ = [
     "request_cancel",
     "requeue_stale_jobs",
     "resolve_conflicts",
+    "run_candle_import",
     "run_due_schedules",
     "start_import",
     "touch_job",

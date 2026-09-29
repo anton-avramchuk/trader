@@ -11,14 +11,16 @@
   dataset version продолжают возвращать прежние данные.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
+import psycopg
 from sqlalchemy import insert, select, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from trader_engine.ingest import Candle1m
 
 from trader_db.models import (
     DataImport,
@@ -28,19 +30,15 @@ from trader_db.models import (
     RawCandle1m,
 )
 
-
-@dataclass(frozen=True, slots=True)
-class Candle1m:
-    """Минутная свеча на входе; ``timestamp`` — время открытия, aware."""
-
-    timestamp: datetime
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
-    volume: Decimal
-    trade_count: int | None = None
-    quote_volume: Decimal | None = None
+__all__ = [
+    "Candle1m",
+    "InsertReport",
+    "finish_import",
+    "insert_candles",
+    "record_error",
+    "resolve_conflicts",
+    "start_import",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,14 +145,45 @@ def _same_values(
     )
 
 
+_CANDLE_COLUMNS = (
+    "contract_id",
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "trade_count",
+    "quote_volume",
+    "data_import_id",
+)
+
+
+def _copy_candles(session: Session, rows: list[dict[str, Any]]) -> None:
+    """Массовая вставка через ``COPY`` (примерно в 5 раз быстрее executemany)."""
+    session.flush()
+    driver = cast(Any, session.connection().connection.driver_connection)
+    statement = f"COPY raw_candles_1m ({', '.join(_CANDLE_COLUMNS)}) FROM STDIN"
+    try:
+        with driver.cursor() as cursor, cursor.copy(statement) as copy:
+            for row in rows:
+                copy.write_row(tuple(row[column] for column in _CANDLE_COLUMNS))
+    except psycopg.Error as error:
+        # Как и при обычной вставке: вызывающий ловит исключения SQLAlchemy.
+        raise DBAPIError.instance(statement, None, error, psycopg.Error) from error
+
+
 def insert_candles(
     session: Session,
     import_id: int,
     candles: Sequence[Candle1m],
     *,
     batch_size: int = 5000,
+    progress: Callable[[int, int], None] | None = None,
 ) -> InsertReport:
     """Записать свечи импорта; вернуть, сколько вставлено, продублировано и в конфликте.
+
+    ``progress(сделано, всего)`` вызывается после каждого пакета.
 
     Свечи должны быть валидными (OHLC, volume) — иначе CHECK в БД остановит запись;
     проверку и учёт ошибочных строк выполняет конвейер импорта.
@@ -231,11 +260,13 @@ def insert_candles(
                     }
                 )
         if new_rows:
-            session.execute(insert(RawCandle1m), new_rows)
+            _copy_candles(session, new_rows)
         if conflict_rows:
             session.execute(insert(ImportConflict), conflict_rows)
         inserted += len(new_rows)
         conflicts += len(conflict_rows)
+        if progress is not None:
+            progress(inserted + duplicates + conflicts, len(candles))
     return InsertReport(inserted=inserted, duplicates=duplicates, conflicts=conflicts)
 
 
