@@ -85,3 +85,14 @@ class BarSlot:
     close_time: datetime
     trading_day: date
     is_partial: bool
+    # Граница ячейки сетки и куски сессий внутри неё (UTC): по ним потоковый
+    # агрегатор определяет, что следующая свеча попала в ту же ячейку, не считая
+    # слот заново.
+    grid_end: datetime | None = None
+    pieces: tuple[tuple[datetime, datetime], ...] = ()
+
+    def contains(self, moment: datetime) -> bool:
+        """Момент внутри ячейки и внутри одного из кусков сессии."""
+        if self.grid_end is None or not self.start <= moment < self.grid_end:
+            return False
+        return any(start <= moment < end for start, end in self.pieces)

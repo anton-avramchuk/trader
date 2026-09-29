@@ -105,3 +105,13 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d
 
 Загрузка возобновляемая: повторный запуск догружает только недостающее; сегодняшний день не грузится. Подробности — ADR-0017. Проверка на настоящем ISS: `TRADER_LIVE_TESTS=1 uv run pytest tests/test_iss_live.py` в `libs/providers`.
 
+## Бары 15m / 1h / 4h / 1d / 1w
+
+Бары строятся из минутных свечей по торговому календарю (ADR-0018). Импорт, добавивший свечи, сам ставит задачу `aggregate.contract`; вручную:
+
+```bash
+curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "aggregate.contract", "params": {"contract_id": 12, "timeframes": ["1d"], "force": true}}'
+```
+
+Пересборка инкрементальная (от торговой недели с новыми данными); формирующийся бар не публикуется.
+

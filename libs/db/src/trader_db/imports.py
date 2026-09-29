@@ -14,14 +14,13 @@
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
-import psycopg
 from sqlalchemy import insert, select, update
-from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 from trader_engine.ingest import Candle1m
 
+from trader_db.bulk import copy_rows
 from trader_db.models import (
     DataImport,
     DataImportError,
@@ -160,17 +159,12 @@ _CANDLE_COLUMNS = (
 
 
 def _copy_candles(session: Session, rows: list[dict[str, Any]]) -> None:
-    """Массовая вставка через ``COPY`` (примерно в 5 раз быстрее executemany)."""
-    session.flush()
-    driver = cast(Any, session.connection().connection.driver_connection)
-    statement = f"COPY raw_candles_1m ({', '.join(_CANDLE_COLUMNS)}) FROM STDIN"
-    try:
-        with driver.cursor() as cursor, cursor.copy(statement) as copy:
-            for row in rows:
-                copy.write_row(tuple(row[column] for column in _CANDLE_COLUMNS))
-    except psycopg.Error as error:
-        # Как и при обычной вставке: вызывающий ловит исключения SQLAlchemy.
-        raise DBAPIError.instance(statement, None, error, psycopg.Error) from error
+    copy_rows(
+        session,
+        "raw_candles_1m",
+        _CANDLE_COLUMNS,
+        ([row[column] for column in _CANDLE_COLUMNS] for row in rows),
+    )
 
 
 def insert_candles(

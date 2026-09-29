@@ -186,17 +186,19 @@ class TestUnifiedRegime:
             utc(2026, 9, 29, 20, 50),
         )
 
-    def test_weekend_session_is_own_trading_day(
+    def test_weekend_session_belongs_to_the_trading_day_of_monday(
         self, calendar: TradingCalendar
     ) -> None:
-        (session,) = calendar.sessions_on(date(2026, 9, 26))
+        (saturday,) = calendar.sessions_on(date(2026, 9, 26))
+        (sunday,) = calendar.sessions_on(date(2026, 9, 27))
 
-        assert (session.start, session.end) == (
+        assert (saturday.start, saturday.end) == (
             utc(2026, 9, 26, 6, 59),
             utc(2026, 9, 26, 16),
         )
-        assert session.trading_day == date(2026, 9, 26)
-        assert session.is_weekend
+        assert saturday.is_weekend and sunday.is_weekend
+        # Проверено по объёмам ISS: объём понедельника включает субботу и воскресенье.
+        assert saturday.trading_day == sunday.trading_day == date(2026, 9, 28)
 
     def test_weekend_sessions_can_be_excluded(self, calendar: TradingCalendar) -> None:
         without = calendar.excluding_weekend_sessions()
@@ -211,9 +213,10 @@ class TestUnifiedRegime:
     ) -> None:
         week = date(2026, 9, 28)
 
+        # Выходные сессии — часть недели, которая начинается с понедельника.
         assert calendar.trading_week_bounds(week) == (
-            utc(2026, 9, 28, 3, 59),
-            utc(2026, 10, 4, 16),
+            utc(2026, 9, 26, 6, 59),
+            utc(2026, 10, 2, 20, 50),
         )
         assert calendar.excluding_weekend_sessions().trading_week_bounds(week) == (
             utc(2026, 9, 28, 3, 59),
@@ -268,7 +271,21 @@ class TestWeekendsAndSpecialDays:
         assert windows(calendar, saturday) == expected(
             saturday, ("weekend", "09:59", "19:00")
         )
-        assert calendar.trading_day_of(msk(saturday, "12:00")) == saturday
+        assert calendar.trading_day_of(msk(saturday, "12:00")) == date(2025, 9, 15)
+
+    def test_trading_days_never_go_back_in_time_around_a_weekend(
+        self, calendar: TradingCalendar
+    ) -> None:
+        # Пятничный вечер, суббота, воскресенье и понедельник — один торговый день.
+        friday_evening = calendar.sessions_on(date(2025, 9, 12))[-1]
+        days = [
+            friday_evening.trading_day,
+            *(s.trading_day for s in calendar.sessions_on(date(2025, 9, 13))),
+            *(s.trading_day for s in calendar.sessions_on(date(2025, 9, 14))),
+            *(s.trading_day for s in calendar.sessions_on(date(2025, 9, 15))[:1]),
+        ]
+
+        assert days == [date(2025, 9, 15)] * 4
 
     def test_some_weekends_have_no_session(self, calendar: TradingCalendar) -> None:
         assert calendar.sessions_on(date(2026, 9, 12)) == ()  # суббота без торгов

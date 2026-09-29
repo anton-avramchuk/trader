@@ -31,6 +31,13 @@ def _visible(contract_id: int, manifest: Sequence[int]) -> list[ColumnElement[bo
     ]
 
 
+def visible_filter(
+    contract_id: int, manifest: Sequence[int]
+) -> list[ColumnElement[bool]]:
+    """Условия WHERE для свечей, видимых в версии с манифестом ``manifest``."""
+    return _visible(contract_id, manifest)
+
+
 def manifest_of(session: Session, dataset_version_id: int) -> list[int]:
     return sorted(
         session.scalars(

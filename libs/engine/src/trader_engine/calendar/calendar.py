@@ -1,5 +1,7 @@
 """Торговый календарь: сессии, торговые дни и недели, ожидаемые разрывы, сетка баров."""
 
+import hashlib
+import json
 from bisect import bisect_right
 from collections.abc import Iterable
 from dataclasses import replace
@@ -12,6 +14,15 @@ from trader_engine.calendar.model import BarSlot, Session, SessionRule, SessionW
 # сессия пятницы принадлежит понедельнику; праздники удлиняют цепочку).
 _LOOKBACK_DAYS = 14
 _NEXT_TRADING_DAY_LIMIT = 14
+
+
+def _window_key(window: SessionWindow) -> list[object]:
+    return [
+        window.name,
+        window.start.isoformat(),
+        window.end.isoformat(),
+        window.next_day,
+    ]
 
 
 def _require_aware(moment: datetime) -> None:
@@ -46,6 +57,9 @@ class TradingCalendar:
         self._holidays = frozenset(holidays)
         # Выходные, которые торгуются как обычный день (рабочие субботы-переносы).
         self._special_days = frozenset(special_days)
+        # Календарь неизменяем, поэтому окна дня можно кэшировать: при обработке
+        # миллионов свечей они запрашиваются на каждой.
+        self._sessions_cache: dict[date, tuple[Session, ...]] = {}
 
     @property
     def timezone(self) -> str:
@@ -92,7 +106,37 @@ class TradingCalendar:
         return datetime.combine(day, at, tzinfo=self._tz).astimezone(UTC)
 
     def sessions_on(self, day: date) -> tuple[Session, ...]:
-        """Окна торгов на локальную дату ``day``, по порядку."""
+        """Окна торгов на локальную дату ``day``, по порядку (результат кэшируется)."""
+        cached = self._sessions_cache.get(day)
+        if cached is None:
+            cached = self._compute_sessions(day)
+            self._sessions_cache[day] = cached
+        return cached
+
+    def fingerprint(self) -> str:
+        """Отпечаток определения календаря: меняется, если изменилось расписание.
+
+        По нему определяют, что построенные по календарю данные (бары) устарели.
+        """
+        definition = {
+            "timezone": self._timezone_name,
+            "rules": [
+                {
+                    "from": rule.effective_from.isoformat(),
+                    "to": rule.effective_to.isoformat() if rule.effective_to else None,
+                    "anchor": rule.bar_anchor.isoformat(),
+                    "weekday": [_window_key(w) for w in rule.weekday_windows],
+                    "weekend": [_window_key(w) for w in rule.weekend_windows],
+                }
+                for rule in self._rules
+            ],
+            "holidays": sorted(d.isoformat() for d in self._holidays),
+            "special_days": sorted(d.isoformat() for d in self._special_days),
+        }
+        payload = json.dumps(definition, sort_keys=True, ensure_ascii=False)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _compute_sessions(self, day: date) -> tuple[Session, ...]:
         rule = self.rule_for(day)
         if rule is None or day in self._holidays:
             return ()
@@ -233,4 +277,12 @@ class TradingCalendar:
             ),
             trading_day=session.trading_day,
             is_partial=covered != duration,
+            grid_end=slot_end.astimezone(UTC),
+            pieces=tuple(
+                (
+                    max(piece.start, slot_start).astimezone(UTC),
+                    min(piece.end, slot_end).astimezone(UTC),
+                )
+                for piece in pieces
+            ),
         )
