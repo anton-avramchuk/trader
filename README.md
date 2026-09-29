@@ -47,7 +47,7 @@ docker compose up -d --build
 
 | Сервис | Адрес |
 |---|---|
-| PostgreSQL 16 | `127.0.0.1:5432` (данные в томе `pgdata`) |
+| PostgreSQL 18 | `127.0.0.1:5432` (данные в томе `pgdata`) |
 | API | http://127.0.0.1:8000/health |
 | Web (dev-сервер) | http://127.0.0.1:4200 |
 | worker | без порта, статус в `docker compose logs worker` |

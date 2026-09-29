@@ -6,7 +6,7 @@
 Импорт, агрегация, прогоны движков, research и бэктест — долгие операции. Kafka, микросервисы и лишняя инфраструктура запрещены ТЗ (§79).
 
 ## Решение
-Таблица `jobs` в PostgreSQL, отдельный worker-процесс, захват задач через `SELECT … FOR UPDATE SKIP LOCKED`. Прогресс публикуется в UI через WebSocket. Всё поднимается через Docker Compose (PostgreSQL 16, api, worker, web). Однопользовательский режим без auth до MVP-10.
+Таблица `jobs` в PostgreSQL, отдельный worker-процесс, захват задач через `SELECT … FOR UPDATE SKIP LOCKED`. Прогресс публикуется в UI через WebSocket. Всё поднимается через Docker Compose (PostgreSQL 18, api, worker, web). Однопользовательский режим без auth до MVP-10.
 
 ## Последствия
 - Задачи переживают рестарт; статус связан с `experiment_runs`.

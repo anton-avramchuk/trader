@@ -16,7 +16,7 @@ jobs:
       TRADER_DATABASE_URL: postgresql+psycopg://trader:trader@localhost:5432/trader
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: trader
           POSTGRES_PASSWORD: trader
