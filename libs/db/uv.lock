@@ -471,6 +471,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "trader-engine" },
 ]
 
 [package.dev-dependencies]
@@ -492,6 +493,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.1" },
+    { name = "trader-engine", editable = "../engine" },
 ]
 
 [package.metadata.requires-dev]
@@ -500,6 +502,29 @@ dev = [
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-cov", specifier = ">=6.0.0" },
+    { name = "pytest-html", specifier = ">=4.1.1" },
+    { name = "pytest-sugar", specifier = ">=1.0.0" },
+    { name = "ruff", specifier = ">=0.8.2" },
+]
+
+[[package]]
+name = "trader-engine"
+version = "1.0.0"
+source = { editable = "../engine" }
+dependencies = [
+    { name = "tzdata" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tzdata", specifier = ">=2026.4" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "autopep8", specifier = ">=2.3.1" },
+    { name = "hypothesis", specifier = ">=6.168.3" },
+    { name = "pyright", specifier = ">=1.1.414" },
+    { name = "pytest", specifier = ">=8.3.4" },
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "pytest-html", specifier = ">=4.1.1" },
     { name = "pytest-sugar", specifier = ">=1.0.0" },

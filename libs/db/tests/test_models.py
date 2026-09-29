@@ -11,6 +11,8 @@ EXPECTED_TABLES = {
     "contract_provider_ids",
     "timeframes",
     "contract_step_prices",
+    "trading_calendar_rules",
+    "trading_calendar_holidays",
 }
 
 

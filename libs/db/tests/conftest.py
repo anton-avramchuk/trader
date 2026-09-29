@@ -5,6 +5,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
+
+from trader_db import make_engine, upgrade_head
 
 
 @pytest.fixture
@@ -27,3 +30,13 @@ def temp_database_url() -> Iterator[str]:
         with admin.connect() as connection:
             connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         admin.dispose()
+
+
+@pytest.fixture
+def session(temp_database_url: str) -> Iterator[Session]:
+    """Сессия на временной БД, уже мигрированной до head."""
+    upgrade_head(temp_database_url)
+    engine = make_engine(temp_database_url)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()

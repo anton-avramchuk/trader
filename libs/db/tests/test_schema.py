@@ -1,6 +1,5 @@
 """Интеграционные тесты схемы на временной БД (нужен TRADER_DATABASE_URL)."""
 
-from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 
@@ -10,7 +9,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from trader_db import make_engine, upgrade_head
+from trader_db import make_engine
 from trader_db.migrate import alembic_config
 from trader_db.models import (
     Contract,
@@ -21,15 +20,6 @@ from trader_db.models import (
     Timeframe,
     TradingCalendar,
 )
-
-
-@pytest.fixture
-def session(temp_database_url: str) -> Iterator[Session]:
-    upgrade_head(temp_database_url)
-    engine = make_engine(temp_database_url)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
 
 
 def make_root(session: Session, code: str = "BR") -> Root:
