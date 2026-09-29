@@ -38,4 +38,3 @@ def test_health_with_real_database_applies_migrations() -> None:
 
     assert response.status_code == 200
     assert response.json()["database"] == "ok"
-

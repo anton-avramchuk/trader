@@ -17,8 +17,25 @@ from trader_db.imports import (
     resolve_conflicts,
     start_import,
 )
+from trader_db.jobs import (
+    cancel_running_job,
+    cancel_statement,
+    claim_next_job,
+    complete_job,
+    enqueue_job,
+    enqueue_statement,
+    fail_job,
+    get_job,
+    get_job_statement,
+    list_jobs_statement,
+    release_job,
+    request_cancel,
+    requeue_stale_jobs,
+    touch_job,
+)
 from trader_db.migrate import upgrade_head
 from trader_db.models import Base
+from trader_db.schedules import create_schedule, run_due_schedules
 from trader_db.settings import DbSettings
 
 __all__ = [
@@ -26,18 +43,34 @@ __all__ = [
     "Candle1m",
     "DbSettings",
     "InsertReport",
+    "cancel_running_job",
+    "cancel_statement",
     "check_connection",
+    "claim_next_job",
+    "complete_job",
     "create_dataset_version",
+    "create_schedule",
+    "enqueue_job",
+    "enqueue_statement",
     "extend_dataset_version",
+    "fail_job",
     "finish_import",
+    "get_job",
+    "get_job_statement",
     "insert_candles",
     "latest_dataset_version",
+    "list_jobs_statement",
     "load_trading_calendar",
     "make_async_engine",
     "make_engine",
     "read_candles",
     "record_error",
+    "release_job",
+    "request_cancel",
+    "requeue_stale_jobs",
     "resolve_conflicts",
+    "run_due_schedules",
     "start_import",
+    "touch_job",
     "upgrade_head",
 ]

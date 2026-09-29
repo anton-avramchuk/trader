@@ -19,6 +19,8 @@ EXPECTED_TABLES = {
     "import_conflicts",
     "dataset_versions",
     "dataset_version_imports",
+    "jobs",
+    "job_schedules",
 }
 
 
