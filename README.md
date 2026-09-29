@@ -91,3 +91,17 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '
 
 Встроенные пресеты: `finam`, `finam_no_header`, `iso_utc`. Свой формат — `mapping` вместо `preset`, поправка пресета — `overrides` (например, `{"timezone": "UTC", "encoding": "cp1251"}`). Форматы: CSV, JSON (массив или NDJSON), Parquet. Отчёт (вставлено, дубликаты, конфликты, ошибки строк, пропуски, диапазон, min/max цена) — в результате задачи. Подробности — ADR-0015 и ADR-0016.
 
+## Загрузка истории с MOEX ISS
+
+Root (например, `NG`) заводится в БД; его `code` — код базового актива ISS. Затем:
+
+```bash
+# найти контракты 2020–2021 и поставить загрузку истории по каждому
+curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "iss.sync_root", "params": {"root_id": 2, "from_year": 2020}}'
+
+# история одного контракта за период (без from/till — вся доступная)
+curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "import.iss", "params": {"contract_id": 12, "from": "2020-11-01", "till": "2020-11-30"}}'
+```
+
+Загрузка возобновляемая: повторный запуск догружает только недостающее; сегодняшний день не грузится. Подробности — ADR-0017. Проверка на настоящем ISS: `TRADER_LIVE_TESTS=1 uv run pytest tests/test_iss_live.py` в `libs/providers`.
+

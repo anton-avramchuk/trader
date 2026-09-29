@@ -7,6 +7,7 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY libs/engine libs/engine
 COPY libs/db libs/db
+COPY libs/providers libs/providers
 COPY apps/worker apps/worker
 
 WORKDIR /app/apps/worker
