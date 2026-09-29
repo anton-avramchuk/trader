@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 from alembic import command
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -49,10 +49,26 @@ def test_migrations_apply_and_roll_back(temp_database_url: str) -> None:
 
     command.downgrade(config, "base")
     assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
+    with engine.connect() as connection:
+        leftover = connection.scalars(
+            text(
+                "SELECT proname FROM pg_proc "
+                "WHERE proname IN ('raw_candles_1m_guard', 'forbid_modification')"
+            )
+        ).all()
+    assert leftover == []
 
     command.upgrade(config, "head")
     assert "contracts" in inspect(engine).get_table_names()
     engine.dispose()
+
+
+def test_models_match_migrations(temp_database_url: str) -> None:
+    """Модели и миграции не разошлись (колонки, индексы, внешние ключи)."""
+    config = alembic_config(temp_database_url)
+    command.upgrade(config, "head")
+
+    command.check(config)
 
 
 def test_reference_data_is_seeded(session: Session) -> None:
