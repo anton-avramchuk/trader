@@ -6,12 +6,10 @@ import pytest
 
 from trader_db import check_connection, make_async_engine, upgrade_head
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("TRADER_DATABASE_URL"),
-    reason="TRADER_DATABASE_URL не задан",
+
+@pytest.mark.skipif(
+    not os.environ.get("TRADER_DATABASE_URL"), reason="TRADER_DATABASE_URL не задан"
 )
-
-
 async def test_check_connection_ok() -> None:
     engine = make_async_engine()
     try:
@@ -20,6 +18,6 @@ async def test_check_connection_ok() -> None:
         await engine.dispose()
 
 
-def test_upgrade_head_is_idempotent() -> None:
-    upgrade_head()
-    upgrade_head()
+def test_upgrade_head_is_idempotent(temp_database_url: str) -> None:
+    upgrade_head(temp_database_url)
+    upgrade_head(temp_database_url)
