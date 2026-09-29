@@ -649,6 +649,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "trader-engine" },
 ]
 
 [package.metadata]
@@ -658,6 +659,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.6" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.1" },
+    { name = "trader-engine", editable = "../../libs/engine" },
 ]
 
 [package.metadata.requires-dev]
@@ -676,8 +678,12 @@ dev = [
 name = "trader-engine"
 version = "1.0.0"
 source = { editable = "../../libs/engine" }
+dependencies = [
+    { name = "tzdata" },
+]
 
 [package.metadata]
+requires-dist = [{ name = "tzdata", specifier = ">=2026.4" }]
 
 [package.metadata.requires-dev]
 dev = [
