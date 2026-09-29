@@ -48,6 +48,7 @@ docker compose up -d --build
 | Сервис | Адрес |
 |---|---|
 | PostgreSQL 18 | `127.0.0.1:5432` (данные в томе `pgdata`) |
+| pgAdmin | http://127.0.0.1:5050 — без входа, сервер «trader» уже добавлен и подключается без пароля |
 | API | http://127.0.0.1:8000/health |
 | Web (dev-сервер) | http://127.0.0.1:4200 |
 | worker | без порта, статус в `docker compose logs worker` |
