@@ -23,6 +23,7 @@ requires-python = ">=3.12,<3.13"
 readme = 'README.md'
 dependencies = [
     "fastapi>=0.141.1",
+    "trader-db",
     "trader-engine",
     "uvicorn[standard]>=0.54.0",
 ]
@@ -78,6 +79,7 @@ unfixable = []
 
 [tool.uv.sources]
 trader-engine = { path = "../../libs/engine", editable = true }
+trader-db = { path = "../../libs/db", editable = true }
 
 [tool.pyright]
 include = ["src", "tests"]
