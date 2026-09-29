@@ -31,6 +31,7 @@ class TradingCalendar:
         timezone: str,
         rules: Iterable[SessionRule],
         holidays: Iterable[date] = (),
+        special_days: Iterable[date] = (),
     ) -> None:
         self._timezone_name = timezone
         self._tz = ZoneInfo(timezone)
@@ -43,6 +44,8 @@ class TradingCalendar:
                 raise ValueError("Правила календаря пересекаются по датам")
         self._starts = [rule.effective_from for rule in self._rules]
         self._holidays = frozenset(holidays)
+        # Выходные, которые торгуются как обычный день (рабочие субботы-переносы).
+        self._special_days = frozenset(special_days)
 
     @property
     def timezone(self) -> str:
@@ -51,7 +54,14 @@ class TradingCalendar:
     def excluding_weekend_sessions(self) -> "TradingCalendar":
         """Календарь без выходных сессий (``include_weekend_sessions = false``)."""
         rules = [replace(rule, weekend_windows=()) for rule in self._rules]
-        return TradingCalendar(self._timezone_name, rules, self._holidays)
+        return TradingCalendar(
+            self._timezone_name, rules, self._holidays, self._special_days
+        )
+
+    @property
+    def rules(self) -> tuple[SessionRule, ...]:
+        """Правила по возрастанию даты начала."""
+        return self._rules
 
     def rule_for(self, day: date) -> SessionRule | None:
         index = bisect_right(self._starts, day) - 1
@@ -61,8 +71,9 @@ class TradingCalendar:
         return rule if rule.contains(day) else None
 
     def is_trading_weekday(self, day: date) -> bool:
+        """Торговый день с обычными окнами: будний или особый выходной."""
         return (
-            day.weekday() < 5
+            (day.weekday() < 5 or day in self._special_days)
             and day not in self._holidays
             and self.rule_for(day) is not None
         )
@@ -85,7 +96,7 @@ class TradingCalendar:
         rule = self.rule_for(day)
         if rule is None or day in self._holidays:
             return ()
-        is_weekend = day.weekday() >= 5
+        is_weekend = day.weekday() >= 5 and day not in self._special_days
         windows: tuple[SessionWindow, ...] = (
             rule.weekend_windows if is_weekend else rule.weekday_windows
         )

@@ -50,6 +50,8 @@ class FakeIss:
         # secid -> свечи ``[open, close, high, low, value, volume, begin, end]``
         self.candles: dict[str, list[list[Any]]] = {}
         self.borders: dict[str, list[list[Any]]] = {}
+        # secid -> дни ``[TRADEDATE, VOLUME, NUMTRADES]`` для дневной истории
+        self.daily: dict[str, list[list[Any]]] = {}
         self.series_rows = list(SERIES_ROWS)
         # Очередь ответов-сбоев, отдаваемых до нормальной работы: коды или исключения.
         self.failures: deque[int | Exception] = deque()
@@ -84,6 +86,10 @@ class FakeIss:
             return httpx.Response(
                 200, json={"series": block(SERIES_COLUMNS, self.series_rows)}
             )
+        if match := re.fullmatch(
+            r"/iss/history/engines/.*/securities/(.+)\.json", path
+        ):
+            return httpx.Response(200, json=self._history(match.group(1), params))
         if match := re.fullmatch(r"/iss/securities/(.+)\.json", path):
             return httpx.Response(200, json=self._description(match.group(1)))
         if match := re.fullmatch(r".*/securities/(.+)/candleborders\.json", path):
@@ -127,6 +133,16 @@ class FakeIss:
                     [secid, "FIQS", None, None],
                 ],
             ),
+        }
+
+    def _history(self, secid: str, params: httpx.QueryParams) -> dict[str, Any]:
+        first, last = params["from"], params["till"]
+        start = int(params.get("start", "0"))
+        rows = [r for r in self.daily.get(secid, []) if first <= r[0] <= last]
+        return {
+            "history": block(
+                ["TRADEDATE", "VOLUME", "NUMTRADES"], rows[start : start + 100]
+            )
         }
 
     def _candles(self, secid: str, params: httpx.QueryParams) -> dict[str, Any]:

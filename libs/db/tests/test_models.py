@@ -13,6 +13,7 @@ EXPECTED_TABLES = {
     "contract_step_prices",
     "trading_calendar_rules",
     "trading_calendar_holidays",
+    "trading_calendar_special_days",
     "data_imports",
     "data_import_errors",
     "raw_candles_1m",

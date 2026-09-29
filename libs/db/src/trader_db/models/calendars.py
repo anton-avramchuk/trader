@@ -63,3 +63,18 @@ class CalendarHoliday(Base):
     )
     date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     name: Mapped[str | None] = mapped_column(String(128))
+
+
+class CalendarSpecialDay(Base):
+    """Выходной, который торгуется как обычный день (рабочая суббота-перенос).
+
+    Окна такого дня — как у будних дней действующего правила, а не выходные.
+    """
+
+    __tablename__ = "trading_calendar_special_days"
+
+    calendar_id: Mapped[int] = mapped_column(
+        ForeignKey("trading_calendars.id", ondelete="CASCADE"), primary_key=True
+    )
+    date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(128))

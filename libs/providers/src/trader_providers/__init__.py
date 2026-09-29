@@ -1,6 +1,12 @@
 """Поставщики рыночных данных."""
 
 from trader_providers.base import HistoricalDataProvider, ProviderContract
-from trader_providers.iss import IssClient, IssError
+from trader_providers.iss import DailyBar, IssClient, IssError
 
-__all__ = ["HistoricalDataProvider", "IssClient", "IssError", "ProviderContract"]
+__all__ = [
+    "DailyBar",
+    "HistoricalDataProvider",
+    "IssClient",
+    "IssError",
+    "ProviderContract",
+]

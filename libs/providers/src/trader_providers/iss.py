@@ -16,6 +16,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -38,6 +39,15 @@ _BOARD = "RFUD"
 
 class IssError(Exception):
     """Сбой обращения к ISS; сообщение объясняет причину."""
+
+
+@dataclass(frozen=True, slots=True)
+class DailyBar:
+    """Итог торгового дня контракта (для торговых дней и ликвидности)."""
+
+    trade_date: date
+    volume: int
+    trades: int
 
 
 def _table(payload: dict[str, Any], block: str) -> list[dict[str, Any]]:
@@ -270,6 +280,38 @@ class IssClient:
             for row in page:
                 row_number += 1
                 yield self._to_row(row_number, row)
+            offset += len(page)
+
+    def daily_history(self, provider_id: str, start: date, end: date) -> list[DailyBar]:
+        """Дни, в которые контракт торговался, с объёмом и числом сделок."""
+        path = (
+            f"/iss/history/engines/futures/markets/forts/securities/{provider_id}.json"
+        )
+        bars: list[DailyBar] = []
+        offset = 0
+        while True:
+            payload = self._get(
+                path,
+                {
+                    "from": start.isoformat(),
+                    "till": end.isoformat(),
+                    "start": offset,
+                    "iss.only": "history",
+                },
+            )
+            page = _table(payload, "history")
+            if not page:
+                return bars
+            for row in page:
+                trade_date = _date(row.get("TRADEDATE"))
+                if trade_date is not None:
+                    bars.append(
+                        DailyBar(
+                            trade_date,
+                            int(row.get("VOLUME") or 0),
+                            int(row.get("NUMTRADES") or 0),
+                        )
+                    )
             offset += len(page)
 
     @staticmethod
