@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from trader_engine.calendar import SessionRule, SessionWindow
 from trader_engine.calendar import TradingCalendar as EngineCalendar
 
-from trader_db.models import CalendarHoliday, CalendarRule, TradingCalendar
+from trader_db.models import (
+    CalendarHoliday,
+    CalendarRule,
+    Contract,
+    Root,
+    TradingCalendar,
+)
 
 
 def _window(raw: dict[str, Any]) -> SessionWindow:
@@ -44,3 +50,16 @@ def load_trading_calendar(session: Session, code: str) -> EngineCalendar:
         select(CalendarHoliday.date).where(CalendarHoliday.calendar_id == calendar.id)
     ).all()
     return EngineCalendar(calendar.timezone, [_rule(r) for r in rules], holidays)
+
+
+def load_contract_calendar(session: Session, contract_id: int) -> EngineCalendar:
+    """Календарь root, которому принадлежит контракт."""
+    code = session.scalars(
+        select(TradingCalendar.code)
+        .join(Root, Root.calendar_id == TradingCalendar.id)
+        .join(Contract, Contract.root_id == Root.id)
+        .where(Contract.id == contract_id)
+    ).one_or_none()
+    if code is None:
+        raise LookupError(f"Контракт {contract_id} не найден")
+    return load_trading_calendar(session, code)
