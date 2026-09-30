@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from trader_engine.events.atr import WilderAtr
 from trader_engine.events.base import EventEngine
 from trader_engine.events.registry import register
 from trader_engine.indicators.base import BarInput
@@ -52,33 +53,13 @@ class ZigZag(EventEngine):
         self._ext: dict[str, Any] = {}
         self._leg: list[list[Any]] = []  # [open, high, low] с бара экстремума
         self._chain: int | None = None  # последнее событие цепочки кандидата
-        self._prev_close: float | None = None
-        self._seed: list[float] = []
-        self._atr: float | None = None
-
-    def _update_atr(self, bar: BarInput) -> None:
-        n = self.typed_params(ZigZagParams).atr_period
-        if self._prev_close is None:
-            true_range = bar.high - bar.low
-        else:
-            true_range = max(
-                bar.high - bar.low,
-                abs(bar.high - self._prev_close),
-                abs(bar.low - self._prev_close),
-            )
-        self._prev_close = bar.close
-        if self._atr is None:
-            self._seed.append(true_range)
-            if len(self._seed) >= n:
-                self._atr = sum(self._seed) / n
-                self._seed = []
-        else:
-            self._atr = (self._atr * (n - 1) + true_range) / n
+        self._atr = WilderAtr(self.typed_params(ZigZagParams).atr_period)
 
     def _threshold(self, price: float) -> float | None:
         p = self.typed_params(ZigZagParams)
         if p.threshold == "atr":
-            return None if self._atr is None else p.atr_mult * self._atr
+            atr = self._atr.value
+            return None if atr is None else p.atr_mult * atr
         return price * p.percent / 100
 
     def _payload(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -92,7 +73,7 @@ class ZigZag(EventEngine):
         return payload | (extra or {})
 
     def on_bar(self, bar: BarInput) -> None:
-        self._update_atr(bar)
+        self._atr.update(bar)
         opened = bar.timestamp.isoformat()
         if self._direction == 0:
             self._direction = 1
@@ -136,9 +117,7 @@ class ZigZag(EventEngine):
             "ext": self._ext,
             "leg": self._leg,
             "chain": self._chain,
-            "prev_close": self._prev_close,
-            "seed": self._seed,
-            "atr": self._atr,
+            "atr": self._atr.dump(),
         }
 
     def set_state(self, state: dict[str, Any]) -> None:
@@ -146,9 +125,7 @@ class ZigZag(EventEngine):
         self._ext = state["ext"]
         self._leg = state["leg"]
         self._chain = state["chain"]
-        self._prev_close = state["prev_close"]
-        self._seed = state["seed"]
-        self._atr = state["atr"]
+        self._atr.load(state["atr"])
 
 
 @register
