@@ -2232,6 +2232,289 @@
         }
       }
     },
+    "/chart-profiles": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Профили графика",
+        "description": "С `root_id` — глобальные и профили этого root; без него — все. Последние применённые первыми.",
+        "operationId": "listChartProfiles",
+        "parameters": [
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Фильтр по root",
+              "title": "Root Id"
+            },
+            "description": "Фильтр по root"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileOut"
+                  },
+                  "title": "Response Listchartprofiles"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Сохранить профиль",
+        "operationId": "createChartProfile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "409": {
+            "description": "Профиль с таким именем уже есть"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chart-profiles/{profile_id}": {
+      "get": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Профиль",
+        "operationId": "getChartProfile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Переименовать или обновить конфигурацию",
+        "operationId": "updateChartProfile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "409": {
+            "description": "Профиль с таким именем уже есть"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Удалить профиль",
+        "operationId": "deleteChartProfile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chart-profiles/{profile_id}/use": {
+      "post": {
+        "tags": [
+          "profiles"
+        ],
+        "summary": "Запомнить как последний применённый",
+        "operationId": "useChartProfile",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3955,6 +4238,187 @@
         ],
         "title": "PresetOut"
       },
+      "ProfileConfig": {
+        "properties": {
+          "chart_timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chart Timeframe",
+            "description": "TF графика при сохранении (необязательно)"
+          },
+          "indicators": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileIndicator"
+            },
+            "type": "array",
+            "title": "Indicators"
+          },
+          "layers": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Layers",
+            "description": "Включённые слои (объём, ролл-маркеры, …)"
+          },
+          "style": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Style"
+          }
+        },
+        "type": "object",
+        "title": "ProfileConfig"
+      },
+      "ProfileIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id",
+            "description": "Пусто — глобальный профиль, иначе для этого root"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ProfileConfig"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "ProfileIn"
+      },
+      "ProfileIndicator": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Имя из `GET /indicators`"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "source_timeframe": {
+            "type": "string",
+            "title": "Source Timeframe",
+            "description": "TF, по свечам которого считается"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "source_timeframe"
+        ],
+        "title": "ProfileIndicator"
+      },
+      "ProfileOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ProfileConfig"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "root_id",
+          "config",
+          "created_at",
+          "updated_at",
+          "last_used_at"
+        ],
+        "title": "ProfileOut"
+      },
+      "ProfilePatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ProfilePatch"
+      },
       "ProviderIdOut": {
         "properties": {
           "provider": {
@@ -4431,6 +4895,10 @@
     {
       "name": "indicators",
       "description": "Индикаторы и MTF-проекция."
+    },
+    {
+      "name": "profiles",
+      "description": "Профили графика (индикаторы, слои)."
     },
     {
       "name": "system",

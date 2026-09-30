@@ -12,6 +12,8 @@ import { TuiButton, TuiInput } from '@taiga-ui/core';
 import { MskPipe } from '../../core/time/msk';
 import { describeBar } from '../chart/chart-data';
 import { IndicatorPanel } from '../chart/indicator-panel';
+import { ProfileBar } from '../chart/profile-bar';
+import { ProfilesStore } from '../chart/profiles.store';
 import { IndicatorsStore } from '../chart/indicators.store';
 import { PriceChart } from '../chart/price-chart';
 import {
@@ -31,10 +33,11 @@ const REFRESH_DELAY_MS = 250;
     IndicatorPanel,
     MskPipe,
     PriceChart,
+    ProfileBar,
     TuiButton,
     TuiInput,
   ],
-  providers: [ReplayStore, IndicatorsStore],
+  providers: [ReplayStore, IndicatorsStore, ProfilesStore],
   template: `
     <h1>Replay</h1>
 
@@ -189,6 +192,11 @@ const REFRESH_DELAY_MS = 250;
       </label>
     </div>
 
+    <app-profile-bar
+      [rootId]="store.rootId()"
+      [chartTimeframe]="store.timeframe()"
+      (timeframeRequested)="onProfileTimeframe($event)"
+    />
     <app-indicator-panel [chartTimeframe]="store.timeframe()" />
 
     <p class="known" aria-live="polite">
@@ -332,6 +340,12 @@ export class Replay implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.refreshTimer !== null) {
       clearTimeout(this.refreshTimer);
+    }
+  }
+
+  protected onProfileTimeframe(timeframe: string): void {
+    if ((REPLAY_TIMEFRAMES as readonly string[]).includes(timeframe)) {
+      this.store.selectTimeframe(timeframe as ReplayTimeframe);
     }
   }
 

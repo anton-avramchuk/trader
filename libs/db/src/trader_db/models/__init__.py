@@ -4,6 +4,7 @@ from trader_db.models.calendars import (
     CalendarRule,
     CalendarSpecialDay,
 )
+from trader_db.models.chart_profiles import ChartProfile
 from trader_db.models.continuous import RollEvent
 from trader_db.models.derived import DerivedBuild, DerivedCandle
 from trader_db.models.instruments import (
@@ -39,6 +40,7 @@ __all__ = [
     "DataProvider",
     "DatasetVersion",
     "DatasetVersionImport",
+    "ChartProfile",
     "RollEvent",
     "DerivedBuild",
     "DerivedCandle",

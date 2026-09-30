@@ -42,7 +42,7 @@ describe('Chart', () => {
   function setup() {
     const client = {
       GET: vi.fn((path: string) => {
-        if (path === '/indicators') {
+        if (path === '/indicators' || path === '/chart-profiles') {
           return ok([]);
         }
         if (path === '/roots') {

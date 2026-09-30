@@ -15,6 +15,7 @@ from trader_api.catalog import router as catalog_router
 from trader_api.imports_api import router as imports_router
 from trader_api.indicators_api import router as indicators_router
 from trader_api.jobs import router as jobs_router
+from trader_api.profiles_api import router as profiles_router
 
 DbCheck = Callable[[], Awaitable[bool]]
 
@@ -76,6 +77,7 @@ def create_app(
                 "description": "Свечи, continuous-серия и snapshot as-of.",
             },
             {"name": "indicators", "description": "Индикаторы и MTF-проекция."},
+            {"name": "profiles", "description": "Профили графика (индикаторы, слои)."},
             {"name": "system", "description": "Служебные проверки."},
         ],
         lifespan=lifespan,
@@ -88,6 +90,7 @@ def create_app(
     app.include_router(imports_router)
     app.include_router(candles_router)
     app.include_router(indicators_router)
+    app.include_router(profiles_router)
 
     @app.get(
         "/health",

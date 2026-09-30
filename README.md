@@ -115,6 +115,10 @@ http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксируе�
 
 Выводится из дневных итогов ISS (ADR-0007) задачей `iss.step_prices` (раз в сутки по расписанию `iss-step-prices-daily`; вручную — кнопка «Обновить шаг» в Instruments или `POST /contracts/{id}/step-prices/refresh`). История — `GET /contracts/{id}/step-prices`, последняя — в карточке контракта.
 
+## Индикаторы и профили графика
+
+Индикаторы — плагины (ADR-0020): `GET /indicators` (каталог с JSON-схемой параметров), `GET /indicator-values` (chart TF, source TF, `as_of`; старший TF проецируется ступенькой, без формирующегося бара). На графике и в Replay: «Индикатор» → тип, параметры, source TF. Профили (`/chart-profiles`) — глобальные или для инструмента; последний применённый открывается сам.
+
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.

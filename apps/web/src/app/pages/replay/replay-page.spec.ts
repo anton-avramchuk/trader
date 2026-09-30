@@ -57,7 +57,7 @@ describe('Replay', () => {
     const client = {
       GET: vi.fn(
         (path: string, request?: { params: { query: { tail?: boolean } } }) => {
-          if (path === '/indicators') {
+          if (path === '/indicators' || path === '/chart-profiles') {
             return ok([]);
           }
           if (path === '/roots') {

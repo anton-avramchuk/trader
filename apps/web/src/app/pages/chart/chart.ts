@@ -10,17 +10,19 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
 import type { Candle } from '@trader/api-client';
-import { describeBar, TIMEFRAMES } from './chart-data';
+import { type ChartTimeframe, describeBar, TIMEFRAMES } from './chart-data';
 import { ChartStore, type Target } from './chart.store';
 import { IndicatorPanel } from './indicator-panel';
+import { ProfileBar } from './profile-bar';
+import { ProfilesStore } from './profiles.store';
 import { IndicatorsStore } from './indicators.store';
 import { PriceChart } from './price-chart';
 
 /** Chart: свечи и объём continuous-серии или контракта, роллы, подгрузка истории. */
 @Component({
   selector: 'app-chart',
-  imports: [FormsModule, IndicatorPanel, PriceChart, TuiButton],
-  providers: [ChartStore, IndicatorsStore],
+  imports: [FormsModule, IndicatorPanel, PriceChart, ProfileBar, TuiButton],
+  providers: [ChartStore, IndicatorsStore, ProfilesStore],
   template: `
     <h1>Chart</h1>
 
@@ -66,6 +68,11 @@ import { PriceChart } from './price-chart';
       }
     </div>
 
+    <app-profile-bar
+      [rootId]="store.rootId()"
+      [chartTimeframe]="store.timeframe()"
+      (timeframeRequested)="onProfileTimeframe($event)"
+    />
     <app-indicator-panel [chartTimeframe]="store.timeframe()" />
 
     <p class="legend">{{ legend() }}</p>
@@ -173,6 +180,12 @@ export class Chart implements OnInit {
   ngOnInit(): void {
     void this.store.loadRoots();
     void this.indicators.loadCatalog();
+  }
+
+  protected onProfileTimeframe(timeframe: string): void {
+    if ((TIMEFRAMES as readonly string[]).includes(timeframe)) {
+      void this.store.selectTimeframe(timeframe as ChartTimeframe);
+    }
   }
 
   protected onTarget(key: string): void {
