@@ -150,6 +150,36 @@ class TestFiles:
         assert not list(import_dir.glob("big.csv*"))
 
 
+class TestPreview:
+    def test_returns_head_and_guesses_delimiter(self, client: TestClient) -> None:
+        body = "<DATE>;<TIME>;<CLOSE>\n20260928;070000;3.1\n20260928;070100;3.2\n"
+        client.put("/import-files/p.csv", content=body.encode())
+
+        preview = client.get("/import-files/p.csv/preview", params={"lines": 2}).json()
+
+        assert preview["lines"] == ["<DATE>;<TIME>;<CLOSE>", "20260928;070000;3.1"]
+        assert preview["delimiter"] == ";"
+        assert preview["encoding"] == "utf-8-sig"
+
+    def test_cp1251_needs_the_right_encoding(self, client: TestClient) -> None:
+        client.put("/import-files/r.csv", content="дата,цена\n1,2\n".encode("cp1251"))
+
+        wrong = client.get("/import-files/r.csv/preview")
+        right = client.get("/import-files/r.csv/preview", params={"encoding": "cp1251"})
+
+        assert wrong.status_code == 422 and "cp1251" in wrong.json()["detail"]
+        assert right.json()["lines"][0] == "дата,цена"
+
+    def test_errors(self, client: TestClient) -> None:
+        client.put("/import-files/x.parquet", content=b"PAR1")
+        client.put("/import-files/a.csv", content=b"a")
+
+        assert client.get("/import-files/none.csv/preview").status_code == 404
+        assert client.get("/import-files/x.parquet/preview").status_code == 422
+        bad = client.get("/import-files/a.csv/preview", params={"encoding": "nope"})
+        assert bad.status_code == 422
+
+
 class TestPresets:
     def test_builtin_presets_and_user_presets(self, client: TestClient) -> None:
         listed = client.get("/import-presets").json()

@@ -1327,6 +1327,68 @@
         }
       }
     },
+    "/import-files/{name}/preview": {
+      "get": {
+        "tags": [
+          "files"
+        ],
+        "summary": "Первые строки загруженного файла",
+        "description": "Для настройки маппинга колонок. Только текстовые форматы (CSV, JSON); кодировка задаётся параметром `encoding`.",
+        "operationId": "previewImportFile",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "encoding",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 32,
+              "default": "utf-8-sig",
+              "title": "Encoding"
+            }
+          },
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Lines"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilePreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Нельзя прочитать как текст"
+          }
+        }
+      }
+    },
     "/import-presets": {
       "get": {
         "tags": [
@@ -2763,6 +2825,51 @@
           "modified_at"
         ],
         "title": "FileOut"
+      },
+      "FilePreview": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "encoding": {
+            "type": "string",
+            "title": "Encoding"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Lines",
+            "description": "Первые строки файла как текст"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter",
+            "description": "Предполагаемый разделитель CSV (`,` `;` таб `|`) или null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "size",
+          "encoding",
+          "lines",
+          "delimiter"
+        ],
+        "title": "FilePreview"
       },
       "HTTPValidationError": {
         "properties": {

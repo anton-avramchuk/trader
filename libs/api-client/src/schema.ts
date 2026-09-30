@@ -383,6 +383,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/import-files/{name}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Первые строки загруженного файла
+         * @description Для настройки маппинга колонок. Только текстовые форматы (CSV, JSON); кодировка задаётся параметром `encoding`.
+         */
+        get: operations["previewImportFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/import-presets": {
         parameters: {
             query?: never;
@@ -877,6 +897,25 @@ export interface components {
              * Format: date-time
              */
             modified_at: string;
+        };
+        /** FilePreview */
+        FilePreview: {
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+            /** Encoding */
+            encoding: string;
+            /**
+             * Lines
+             * @description Первые строки файла как текст
+             */
+            lines: string[];
+            /**
+             * Delimiter
+             * @description Предполагаемый разделитель CSV (`,` `;` таб `|`) или null
+             */
+            delimiter: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2271,6 +2310,45 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    previewImportFile: {
+        parameters: {
+            query?: {
+                encoding?: string;
+                lines?: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FilePreview"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Нельзя прочитать как текст */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

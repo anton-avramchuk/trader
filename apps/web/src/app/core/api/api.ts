@@ -69,6 +69,29 @@ export function describeError(error: unknown, status: number): string {
 export class ApiService {
   /** Типизированный клиент (`client.GET('/roots')` и т. д.). */
   readonly client = inject(API_CLIENT);
+  private readonly baseUrl = inject(API_BASE_URL);
+
+  /** Загрузка файла «как есть» (`PUT`, тело — содержимое); возвращает ответ API. */
+  async upload<T>(path: string, body: Blob): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        body,
+        headers: { 'content-type': 'application/octet-stream' },
+      });
+    } catch {
+      throw new ApiError(0, 'Нет связи с сервером');
+    }
+    const payload: unknown = await response.json().catch(() => undefined);
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        describeError(payload, response.status),
+      );
+    }
+    return payload as T;
+  }
 
   /**
    * Выполняет запрос и возвращает данные; при ошибке бросает `ApiError`

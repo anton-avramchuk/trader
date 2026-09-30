@@ -12,8 +12,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'data/import',
-    loadComponent: placeholder,
-    data: { title: 'Import', note: 'Загрузка истории: ISS и файлы.' },
+    loadComponent: () => import('./pages/import/import').then((m) => m.Import),
   },
   {
     path: 'data/quality',
