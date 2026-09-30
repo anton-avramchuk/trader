@@ -1,10 +1,13 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import type { IndicatorInfo, IndicatorValues } from '@trader/api-client';
+import { lastValueFrom } from 'rxjs';
+import type { IndicatorInfo, IndicatorValues, Job } from '@trader/api-client';
 import { ApiError, ApiService } from '../../core/api/api';
+import { JobsService } from '../../core/jobs/jobs';
 import {
   type ActiveIndicator,
   allowedSourceTimeframes,
   type ChartIndicator,
+  type VerifyResult,
   toChartIndicator,
   type WarmupHint,
   warmupHint,
@@ -26,12 +29,17 @@ const MAX_BARS = 20000;
 @Injectable()
 export class IndicatorsStore {
   private readonly api = inject(ApiService);
+  private readonly jobs = inject(JobsService);
 
   readonly catalog = signal<IndicatorInfo[]>([]);
   readonly active = signal<ActiveIndicator[]>([]);
   readonly values = signal<Record<string, IndicatorValues>>({});
   readonly errors = signal<Record<string, string>>({});
   readonly loading = signal(false);
+  // Проверка online replay (Verify).
+  readonly verifyJob = signal<Job | null>(null);
+  readonly verifyResult = signal<VerifyResult | null>(null);
+  readonly verifyError = signal<string | null>(null);
 
   private context: IndicatorContext | null = null;
   private counter = 0;
@@ -53,6 +61,62 @@ export class IndicatorsStore {
       return hint ? [hint] : [];
     });
   });
+
+  /**
+   * Запускает `verify.indicators` для текущего диапазона графика (в replay — до
+   * момента знания): индикаторы пересчитываются «с нуля» на префиксах и
+   * сравниваются с batch. Без активных индикаторов проверяются все из каталога.
+   */
+  async verify(): Promise<void> {
+    const context = this.context;
+    if (!context) {
+      return;
+    }
+    this.verifyResult.set(null);
+    this.verifyError.set(null);
+    const active = this.active();
+    const job = await this.api.call(
+      this.api.client.POST('/jobs', {
+        body: {
+          type: 'verify.indicators',
+          params: {
+            ...(context.contract_id !== undefined
+              ? { contract_id: context.contract_id }
+              : { root_id: context.root_id }),
+            timeframe: context.chartTimeframe,
+            start: context.start,
+            end: context.asOf ?? context.end,
+            ...(active.length
+              ? {
+                  indicators: active.map((i) => ({
+                    name: i.name,
+                    params: i.params,
+                  })),
+                }
+              : {}),
+          },
+        },
+      }),
+    );
+    this.verifyJob.set(job);
+    let last: Job = job;
+    try {
+      last = await lastValueFrom(this.jobs.watch(job.id), {
+        defaultValue: job,
+      });
+    } catch (error) {
+      this.verifyError.set((error as Error).message);
+      return;
+    }
+    this.verifyJob.set(last);
+    if (last.status !== 'succeeded') {
+      this.verifyError.set(
+        last.error ?? `Проверка завершилась: ${last.status}`,
+      );
+      return;
+    }
+    this.verifyResult.set(last.result as unknown as VerifyResult);
+  }
 
   async loadCatalog(): Promise<void> {
     this.catalog.set(await this.api.call(this.api.client.GET('/indicators')));

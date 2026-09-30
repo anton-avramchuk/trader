@@ -31,6 +31,7 @@ from trader_worker.step_price_jobs import (
     make_step_prices_all_handler,
     make_step_prices_handler,
 )
+from trader_worker.verify_jobs import VERIFY_JOB_TYPE, make_verify_handler
 
 
 def build_registry(
@@ -67,4 +68,5 @@ def build_registry(
     registry.register(STEP_PRICES_ALL_JOB_TYPE)(
         make_step_prices_all_handler(session_factory, today=today)
     )
+    registry.register(VERIFY_JOB_TYPE)(make_verify_handler(session_factory))
     return registry

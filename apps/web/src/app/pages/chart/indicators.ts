@@ -173,3 +173,31 @@ export function warmupHint(
   }
   return null;
 }
+
+/** Отчёт задачи `verify.indicators` (online replay против batch). */
+export interface VerifyMismatch {
+  index: number;
+  timestamp: string;
+  output: string;
+  batch: number | null;
+  online: number | null;
+}
+
+export interface VerifyIndicatorReport {
+  indicator: string;
+  params: Record<string, unknown>;
+  bars: number;
+  positions_checked: number;
+  values_checked: number;
+  mismatch_count: number;
+  ok: boolean;
+  mismatches: VerifyMismatch[];
+}
+
+export interface VerifyResult {
+  timeframe: string;
+  bars: number;
+  range: [string, string];
+  ok: boolean;
+  reports: VerifyIndicatorReport[];
+}

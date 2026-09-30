@@ -27,6 +27,12 @@ from trader_engine.indicators.registry import (
     register,
     unregister,
 )
+from trader_engine.indicators.verify import (
+    Mismatch,
+    VerifyReport,
+    verify_online,
+    verify_registry,
+)
 
 __all__ = [
     "BarInput",
@@ -34,7 +40,9 @@ __all__ = [
     "Indicator",
     "IndicatorCache",
     "IndicatorSeries",
+    "Mismatch",
     "Projection",
+    "VerifyReport",
     "available",
     "create",
     "describe",
@@ -47,6 +55,8 @@ __all__ = [
     "trend",
     "unregister",
     "validate_source_timeframe",
+    "verify_online",
+    "verify_registry",
     "volatility",
     "volume",
 ]

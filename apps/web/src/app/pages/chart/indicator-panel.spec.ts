@@ -144,6 +144,53 @@ describe('IndicatorPanel', () => {
     expect(root.textContent).toContain('EMA(200) · 1h');
   });
 
+  it('Verify показывает отчёт: совпадение и расхождения', async () => {
+    const { fixture, store, root } = await mount();
+    store.verifyResult.set({
+      timeframe: '15m',
+      bars: 50,
+      range: ['2026-09-28T04:00:00Z', '2026-09-28T16:00:00Z'],
+      ok: false,
+      reports: [
+        {
+          indicator: 'sma',
+          params: { period: 5 },
+          bars: 50,
+          positions_checked: 50,
+          values_checked: 50,
+          mismatch_count: 0,
+          ok: true,
+          mismatches: [],
+        },
+        {
+          indicator: 'leaky',
+          params: {},
+          bars: 50,
+          positions_checked: 50,
+          values_checked: 50,
+          mismatch_count: 2,
+          ok: false,
+          mismatches: [
+            {
+              index: 7,
+              timestamp: '2026-09-28T05:45:00Z',
+              output: 'value',
+              batch: 1,
+              online: 2,
+            },
+          ],
+        },
+      ],
+    });
+    await settle(fixture);
+
+    const text = (root.textContent ?? '').replace(/\s+/g, ' ');
+    expect(text).toContain('Найдены расхождения');
+    expect(text).toContain('sma(5): совпало 50 значений в 50 позициях');
+    expect(text).toContain('расхождений 2; первое — бар 7');
+    expect(text).toContain('batch 1 ≠ online 2');
+  });
+
   it('крестик убирает индикатор', async () => {
     const { fixture, store, root } = await mount();
     await store.add(CATALOG[0] as never, { period: 50 }, '15m');
