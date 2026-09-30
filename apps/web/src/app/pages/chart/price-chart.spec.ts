@@ -1,6 +1,7 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Candle, Roll } from '@trader/api-client';
+import type { ChartIndicator } from './indicators';
 import { PriceChart } from './price-chart';
 
 // jsdom не умеет canvas: подменяем библиотеку и проверяем, что обёртка с ней делает.
@@ -16,12 +17,20 @@ const lib = vi.hoisted(() => {
     setVisibleRange: vi.fn(),
   };
   const chart = {
-    addSeries: vi.fn((definition: string) =>
-      definition === 'candles' ? candleSeries : volumeSeries,
-    ),
+    addSeries: vi.fn((...args: [string, unknown?, number?]) => {
+      const definition = args[0];
+      if (definition === 'candles') {
+        return candleSeries;
+      }
+      if (definition === 'volume') {
+        return volumeSeries;
+      }
+      return { setData: vi.fn(), definition };
+    }),
     priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
     timeScale: vi.fn(() => timeScale),
     subscribeCrosshairMove: vi.fn(),
+    removeSeries: vi.fn(),
     remove: vi.fn(),
   };
   return { candleSeries, volumeSeries, markers, timeScale, chart };
@@ -30,6 +39,7 @@ const lib = vi.hoisted(() => {
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: 'candles',
   HistogramSeries: 'volume',
+  LineSeries: 'line',
   createChart: vi.fn(() => lib.chart),
   createSeriesMarkers: vi.fn(() => lib.markers),
 }));
@@ -55,6 +65,7 @@ function candle(timestamp: string): Candle {
     [rolls]="rolls()"
     [labels]="labels"
     [datasetKey]="key"
+    [indicators]="indicators()"
     (needOlder)="older = older + 1"
     (hover)="hovered = $event"
   />`,
@@ -65,6 +76,7 @@ class Host {
     candle('2026-09-28T04:15:00Z'),
   ];
   rolls = signal<Roll[]>([]);
+  indicators = signal<ChartIndicator[]>([]);
   labels = { 1: 'A', 2: 'B' };
   key = 'a';
   older = 0;
@@ -147,6 +159,49 @@ describe('PriceChart', () => {
     );
     listener({});
     expect(fixture.componentInstance.hovered).toBeNull();
+  });
+
+  it('индикаторы: оверлей на цене, панель для отдельных, удаление серий', async () => {
+    const fixture = await mount();
+    const line = (id: string, pane: 'price' | 'separate'): ChartIndicator => ({
+      id,
+      title: id,
+      pane,
+      lines: [
+        {
+          name: 'value',
+          kind: 'line',
+          color: '#fff',
+          data: [
+            { time: 1, value: null },
+            { time: 2, value: 5 },
+          ],
+        },
+      ],
+    });
+
+    fixture.componentInstance.indicators.set([
+      line('a', 'price'),
+      line('b', 'separate'),
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const calls = lib.chart.addSeries.mock.calls.filter(([d]) => d === 'line');
+    expect(calls.map((c) => c[2])).toEqual([0, 1]); // оверлей — панель 0, отдельный — 1
+    const created = lib.chart.addSeries.mock.results
+      .filter((_, i) => lib.chart.addSeries.mock.calls[i][0] === 'line')
+      .map((r) => r.value as { setData: ReturnType<typeof vi.fn> });
+    expect(created[0].setData).toHaveBeenCalledWith([
+      { time: 1 },
+      { time: 2, value: 5 },
+    ]);
+
+    fixture.componentInstance.indicators.set([line('b', 'separate')]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    // 'b' теперь единственный отдельный (панель 1 — как раньше), 'a' убран
+    expect(lib.chart.removeSeries).toHaveBeenCalledTimes(1);
   });
 
   it('уничтожает график при удалении компонента', async () => {

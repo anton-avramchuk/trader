@@ -1,16 +1,26 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
 import type { Candle } from '@trader/api-client';
 import { describeBar, TIMEFRAMES } from './chart-data';
 import { ChartStore, type Target } from './chart.store';
+import { IndicatorPanel } from './indicator-panel';
+import { IndicatorsStore } from './indicators.store';
 import { PriceChart } from './price-chart';
 
 /** Chart: свечи и объём continuous-серии или контракта, роллы, подгрузка истории. */
 @Component({
   selector: 'app-chart',
-  imports: [FormsModule, PriceChart, TuiButton],
-  providers: [ChartStore],
+  imports: [FormsModule, IndicatorPanel, PriceChart, TuiButton],
+  providers: [ChartStore, IndicatorsStore],
   template: `
     <h1>Chart</h1>
 
@@ -56,6 +66,8 @@ import { PriceChart } from './price-chart';
       }
     </div>
 
+    <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+
     <p class="legend">{{ legend() }}</p>
 
     <div class="chart">
@@ -64,6 +76,7 @@ import { PriceChart } from './price-chart';
         [rolls]="store.rolls()"
         [labels]="store.labels()"
         [datasetKey]="store.datasetKey()"
+        [indicators]="indicators.series()"
         (needOlder)="store.loadOlder()"
         (hover)="hovered.set($event)"
       />
@@ -119,6 +132,7 @@ import { PriceChart } from './price-chart';
 })
 export class Chart implements OnInit {
   protected readonly store = inject(ChartStore);
+  protected readonly indicators = inject(IndicatorsStore);
   protected readonly timeframes = TIMEFRAMES;
   protected readonly hovered = signal<Candle | null>(null);
 
@@ -133,8 +147,32 @@ export class Chart implements OnInit {
     return candle ? describeBar(candle, this.store.labels()) : '';
   });
 
+  constructor() {
+    // Индикаторы пересчитываются при смене серии/TF и подгрузке истории.
+    effect(() => {
+      const candles = this.store.candles();
+      const timeframe = this.store.timeframe();
+      const target = this.store.target();
+      const rootId = this.store.rootId();
+      const first = candles[0];
+      if (!first || rootId === null) {
+        return;
+      }
+      untracked(() =>
+        this.indicators.refresh({
+          ...(target.kind === 'contract'
+            ? { contract_id: target.id }
+            : { root_id: rootId }),
+          chartTimeframe: timeframe,
+          start: first.timestamp,
+        }),
+      );
+    });
+  }
+
   ngOnInit(): void {
     void this.store.loadRoots();
+    void this.indicators.loadCatalog();
   }
 
   protected onTarget(key: string): void {
