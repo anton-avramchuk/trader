@@ -128,18 +128,24 @@ def update_rolls(
     return events
 
 
-def load_rolls(session: Session, root_id: int) -> list[RollEvent]:
-    return list(
-        session.scalars(
-            select(RollEvent)
-            .where(RollEvent.root_id == root_id)
-            .order_by(RollEvent.rolled_at)
-        )
-    )
+def load_rolls(
+    session: Session, root_id: int, as_of: datetime | None = None
+) -> list[RollEvent]:
+    """События ролла по возрастанию времени; ``as_of`` — только уже известные."""
+    query = select(RollEvent).where(RollEvent.root_id == root_id)
+    if as_of is not None:
+        query = query.where(RollEvent.available_at <= as_of)
+    return list(session.scalars(query.order_by(RollEvent.rolled_at)))
 
 
-def load_segments(session: Session, root_id: int) -> list[Segment]:
-    """Сегменты continuous-серии по сохранённым событиям ролла."""
+def load_segments(
+    session: Session, root_id: int, as_of: datetime | None = None
+) -> list[Segment]:
+    """Сегменты continuous-серии по сохранённым событиям ролла.
+
+    С ``as_of`` учитываются только роллы, известные к этому моменту: масштаб цен
+    такой же, каким его видел бы наблюдатель в момент ``as_of``.
+    """
     order = [c.id for c in participating_contracts(session, root_id)]
     applied = [
         (
@@ -151,7 +157,7 @@ def load_segments(session: Session, root_id: int) -> list[Segment]:
             ),
             event.ratio,
         )
-        for event in load_rolls(session, root_id)
+        for event in load_rolls(session, root_id, as_of)
     ]
     return build_segments(order, applied)
 
@@ -162,16 +168,37 @@ def read_continuous(
     timeframe: str,
     start: datetime | None = None,
     end: datetime | None = None,
+    *,
+    as_of: datetime | None = None,
+    limit: int | None = None,
+    tail: bool = False,
 ) -> list[ContinuousBar]:
-    """Бары continuous-серии ``[start, end)`` в масштабе текущего контракта."""
+    """Бары continuous-серии ``[start, end)`` в масштабе текущего контракта.
+
+    ``as_of`` — срез знания: только закрытые к этому моменту бары и известные к
+    нему роллы. ``limit`` ограничивает число баров (с начала диапазона или, при
+    ``tail``, последние); результат всегда по возрастанию времени.
+    """
+    segments = load_segments(session, root_id, as_of)
     result: list[ContinuousBar] = []
-    for segment in load_segments(session, root_id):
+    for segment in reversed(segments) if tail else segments:
         first = max((m for m in (start, segment.start) if m is not None), default=None)
         last = min((m for m in (end, segment.end) if m is not None), default=None)
         if first is not None and last is not None and first >= last:
             continue
-        result.extend(
-            adjust_bar(bar, segment)
-            for bar in read_bars(session, segment.contract_id, timeframe, first, last)
+        remaining = None if limit is None else limit - len(result)
+        if remaining is not None and remaining <= 0:
+            break
+        bars = read_bars(
+            session,
+            segment.contract_id,
+            timeframe,
+            first,
+            last,
+            closed_until=as_of,
+            limit=remaining,
+            tail=tail,
         )
+        part = [adjust_bar(bar, segment) for bar in bars]
+        result = part + result if tail else result + part
     return result

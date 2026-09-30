@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from trader_db import check_connection, make_async_engine, upgrade_head
 
+from trader_api.candles_api import router as candles_router
 from trader_api.catalog import router as catalog_router
 from trader_api.imports_api import router as imports_router
 from trader_api.jobs import router as jobs_router
@@ -67,6 +68,10 @@ def create_app(
                 "name": "conflicts",
                 "description": "Расхождения импорта с уже загруженными данными.",
             },
+            {
+                "name": "candles",
+                "description": "Свечи, continuous-серия и snapshot as-of.",
+            },
             {"name": "system", "description": "Служебные проверки."},
         ],
         lifespan=lifespan,
@@ -75,6 +80,7 @@ def create_app(
     app.include_router(jobs_router)
     app.include_router(catalog_router)
     app.include_router(imports_router)
+    app.include_router(candles_router)
 
     @app.get(
         "/health",

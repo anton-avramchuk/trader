@@ -1,7 +1,7 @@
 """Continuous-серия в БД: события ролла и склеенные бары (нужен TRADER_DATABASE_URL)."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
@@ -192,3 +192,37 @@ def test_changed_roll_days_drop_the_stale_event(
 def test_unknown_root_is_an_error(session: Session) -> None:
     with pytest.raises(LookupError):
         update_rolls(session, 999_999, CALENDAR)
+
+
+def test_as_of_hides_bars_not_yet_closed_and_rolls_not_yet_known(
+    session: Session, two_contracts: tuple[int, int, int]
+) -> None:
+    root_id, a, _ = two_contracts
+    update_rolls(session, root_id, CALENDAR)
+    assert ROLL_AT is not None
+    moment = ROLL_AT[0] - timedelta(minutes=1)
+
+    early = read_continuous(session, root_id, "15m", as_of=moment)
+    late = read_continuous(session, root_id, "15m")
+
+    assert early and all(item.bar.close_time <= moment for item in early)
+    assert {(item.contract_id, item.factor) for item in early} == {(a, Decimal(1))}
+    assert any(item.factor == FACTOR for item in late)  # в полной серии A масштабирован
+
+
+def test_limit_and_tail_keep_ascending_order_across_segments(
+    session: Session, two_contracts: tuple[int, int, int]
+) -> None:
+    root_id, *_ = two_contracts
+    update_rolls(session, root_id, CALENDAR)
+    everything = read_continuous(session, root_id, "15m")
+
+    head = read_continuous(session, root_id, "15m", limit=5)
+    last = read_continuous(session, root_id, "15m", limit=5, tail=True)
+    across = read_continuous(session, root_id, "1d", limit=3, tail=True)
+
+    assert head == everything[:5]
+    assert last == everything[-5:]
+    full_daily = read_continuous(session, root_id, "1d")
+    assert across == full_daily[-3:]
+    assert len({item.contract_id for item in across}) == 2  # захватил оба сегмента
