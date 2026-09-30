@@ -111,6 +111,10 @@ TS-клиент — `libs/api-client` (`@trader/api-client`, типы генер
 
 http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксирует `/api` (REST и WebSocket) на API, адрес — переменная `API_URL` (в Compose `http://api:8000`, локально по умолчанию `http://127.0.0.1:8000`). Разделы: Data (Instruments, Import, Quality), Chart, Research, Backtest. Время в UI — МСК.
 
+## Стоимость шага цены
+
+Выводится из дневных итогов ISS (ADR-0007) задачей `iss.step_prices` (раз в сутки по расписанию `iss-step-prices-daily`; вручную — кнопка «Обновить шаг» в Instruments или `POST /contracts/{id}/step-prices/refresh`). История — `GET /contracts/{id}/step-prices`, последняя — в карточке контракта.
+
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.

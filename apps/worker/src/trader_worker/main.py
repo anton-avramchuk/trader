@@ -8,11 +8,12 @@ import trader_engine
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
-from trader_db import make_engine
+from trader_db import ensure_schedule, make_engine
 
 from trader_worker.file_sources import ImportSettings
 from trader_worker.registry import build_registry
 from trader_worker.runner import Worker, WorkerConfig
+from trader_worker.step_price_jobs import STEP_PRICES_ALL_JOB_TYPE
 
 
 class WorkerSettings(BaseSettings):
@@ -47,10 +48,17 @@ def main() -> None:
         "trader-worker: engine %s, database ok", trader_engine.__version__
     )
 
+    session_factory = sessionmaker(engine, expire_on_commit=False)
+    with session_factory() as session:
+        # Стоимость шага цены обновляется раз в сутки (ADR-0007).
+        ensure_schedule(
+            session, "iss-step-prices-daily", STEP_PRICES_ALL_JOB_TYPE, 86_400
+        )
+        session.commit()
+
     stop = Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
-    session_factory = sessionmaker(engine, expire_on_commit=False)
     worker = Worker(
         session_factory,
         build_registry(session_factory, ImportSettings().import_dir),

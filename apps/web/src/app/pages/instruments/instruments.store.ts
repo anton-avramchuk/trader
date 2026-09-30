@@ -50,6 +50,8 @@ export class InstrumentsStore {
   readonly issJob = signal<Job | null>(null);
   readonly issCandidates = signal<IssCandidate[]>([]);
   readonly issError = signal<string | null>(null);
+  // Обновление стоимости шага цены.
+  readonly stepJob = signal<Job | null>(null);
 
   readonly issSelectedCount = computed(
     () => this.issCandidates().filter((c) => c.selected).length,
@@ -159,6 +161,32 @@ export class InstrumentsStore {
       }),
     );
     await this.reloadContracts();
+  }
+
+  /** Обновляет стоимость шага цены из ISS: ставит задачу, ждёт её и перечитывает контракты. */
+  async refreshStepPrices(contractId: number): Promise<Job> {
+    const job = await this.api.call(
+      this.api.client.POST('/contracts/{contract_id}/step-prices/refresh', {
+        params: { path: { contract_id: contractId } },
+      }),
+    );
+    this.stepJob.set(job);
+    let last = job;
+    try {
+      last = await lastValueFrom(this.jobs.watch(job.id), {
+        defaultValue: job,
+      });
+    } catch (error) {
+      this.stepJob.set({
+        ...job,
+        status: 'failed',
+        error: (error as Error).message,
+      });
+      return this.stepJob() ?? job;
+    }
+    this.stepJob.set(last);
+    await this.reloadContracts();
+    return last;
   }
 
   private async reloadContracts(): Promise<void> {

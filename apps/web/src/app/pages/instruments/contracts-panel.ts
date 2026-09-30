@@ -16,6 +16,7 @@ import { InstrumentsStore } from './instruments.store';
           <th>Экспирация</th>
           <th>Последний день торгов</th>
           <th>SECID</th>
+          <th>Шаг цены, ₽</th>
           <th>Коды у поставщиков</th>
           <th></th>
         </tr>
@@ -27,11 +28,31 @@ import { InstrumentsStore } from './instruments.store';
             <td>{{ c.last_trade_date ?? '—' }}</td>
             <td>{{ c.secid ?? '—' }}</td>
             <td>
+              @if (c.step_price; as sp) {
+                {{ +sp.step_price }}
+                <span class="hint">на {{ sp.date }}</span>
+              } @else {
+                —
+              }
+            </td>
+            <td>
               @for (p of c.provider_ids; track p.provider + p.id_type) {
                 <span class="tag">{{ p.provider }}: {{ p.external_id }}</span>
               }
             </td>
             <td class="row-actions">
+              @if (hasIssId(c)) {
+                <button
+                  tuiButton
+                  size="xs"
+                  appearance="flat"
+                  type="button"
+                  [disabled]="updatingStep()"
+                  (click)="refreshStep(c)"
+                >
+                  Обновить шаг
+                </button>
+              }
               <button
                 tuiButton
                 size="xs"
@@ -54,7 +75,7 @@ import { InstrumentsStore } from './instruments.store';
           </tr>
         } @empty {
           <tr>
-            <td colspan="5" class="empty">
+            <td colspan="6" class="empty">
               Контрактов нет: запросите из ISS или добавьте вручную.
             </td>
           </tr>
@@ -84,6 +105,15 @@ import { InstrumentsStore } from './instruments.store';
           Отмена
         </button>
       </form>
+    }
+
+    @if (store.stepJob(); as job) {
+      <p class="hint" [class.error]="job.status === 'failed'">
+        Обновление шага цены: {{ job.status }}
+        @if (job.error) {
+          — {{ job.error }}
+        }
+      </p>
     }
 
     <form class="inline" (ngSubmit)="add()" #f="ngForm">
@@ -218,6 +248,20 @@ export class ContractsPanel {
   protected fromYear = new Date().getFullYear() - 1;
   protected enqueueImports = true;
   protected readonly requesting = signal(false);
+  protected readonly updatingStep = signal(false);
+
+  protected hasIssId(contract: Contract): boolean {
+    return contract.provider_ids.some((p) => p.provider === 'moex_iss');
+  }
+
+  protected async refreshStep(contract: Contract): Promise<void> {
+    this.updatingStep.set(true);
+    try {
+      await this.store.refreshStepPrices(contract.id);
+    } finally {
+      this.updatingStep.set(false);
+    }
+  }
 
   protected startEdit(contract: Contract): void {
     this.editing.set(contract);

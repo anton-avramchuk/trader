@@ -315,6 +315,23 @@ class TestDailyHistory:
             (date(2020, 11, 5), 2250216, 194206),
         ]
 
+    def test_turnover_and_average_price_for_step_price(self) -> None:
+        fake = FakeIss()
+        fake.daily["NGH6"] = [
+            ["2026-03-10", 1706416, 181223, 41886672738.78, 3.117],
+            ["2026-03-11", 10, 1],  # без оборота и цены
+        ]
+
+        first, second = make_client(fake).daily_history(
+            "NGH6", date(2026, 3, 1), date(2026, 3, 31)
+        )
+
+        assert (first.value, first.waprice) == (
+            Decimal("41886672738.78"),
+            Decimal("3.117"),
+        )
+        assert (second.value, second.waprice) == (None, None)
+
     def test_range_is_inclusive_and_paginated_by_100(self) -> None:
         fake = FakeIss()
         start = date(2020, 1, 1)
