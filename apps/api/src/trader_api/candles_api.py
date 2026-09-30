@@ -161,7 +161,7 @@ async def _fetch(
                 volume=item.bar.volume,
                 trade_count=item.bar.trade_count,
                 is_partial=item.bar.is_partial,
-                trading_day=None,
+                trading_day=item.bar.trading_day,
                 contract_id=item.contract_id,
                 price_factor=item.factor,
             )

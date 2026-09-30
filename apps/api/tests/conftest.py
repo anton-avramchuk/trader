@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from trader_db.testing import temporary_database
 
+from tests.seeding import Seed, seed_database
 from trader_api.main import create_app
 
 
@@ -25,3 +26,9 @@ def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestC
     monkeypatch.setenv("TRADER_DATABASE_URL", database_url)
     with TestClient(create_app(job_poll_interval=0.02)) as client:
         yield client
+
+
+@pytest.fixture
+def seed(client: TestClient, database_url: str) -> Seed:
+    """Root с двумя контрактами, барами всех TF и роллом (см. tests/seeding.py)."""
+    return seed_database(client, database_url)

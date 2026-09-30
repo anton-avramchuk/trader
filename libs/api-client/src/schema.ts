@@ -561,6 +561,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/indicators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Каталог индикаторов
+         * @description Плагины с JSON-схемой параметров и значениями по умолчанию.
+         */
+        get: operations["listIndicators"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/indicator-values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Значения индикатора на баре графика
+         * @description Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары и роллы, известные к нему (масштаб continuous как тогда). Значения до конца прогрева — `valid = false`.
+         */
+        get: operations["getIndicatorValues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1015,6 +1055,103 @@ export interface components {
             created_at: string;
             /** Finished At */
             finished_at: string | null;
+        };
+        /** IndicatorInfo */
+        IndicatorInfo: {
+            /** Name */
+            name: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+            /**
+             * Pane
+             * @description `price` — поверх цены, `separate` — отдельная панель
+             */
+            pane: string;
+            /** Outputs */
+            outputs: string[];
+            /**
+             * Warmup Bars
+             * @description Баров source TF до первого валидного значения
+             */
+            warmup_bars: number;
+            /**
+             * Params Schema
+             * @description JSON-схема параметров (для формы)
+             */
+            params_schema: {
+                [key: string]: unknown;
+            };
+            /** Defaults */
+            defaults: {
+                [key: string]: unknown;
+            };
+        };
+        /** IndicatorPoint */
+        IndicatorPoint: {
+            /**
+             * Timestamp
+             * Format: date-time
+             * @description Open time бара графика
+             */
+            timestamp: string;
+            /** Values */
+            values: {
+                [key: string]: number | null;
+            };
+            /**
+             * Valid
+             * @description Прогрев source-серии завершён
+             */
+            valid: boolean;
+            /**
+             * Source Timestamp
+             * @description Open time source-бара, давшего значение
+             */
+            source_timestamp: string | null;
+            /**
+             * Available At
+             * @description Когда значение стало известно (закрытие source-бара)
+             */
+            available_at: string | null;
+        };
+        /** IndicatorValuesOut */
+        IndicatorValuesOut: {
+            /** Indicator */
+            indicator: string;
+            /** Version */
+            version: number;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Params Hash */
+            params_hash: string;
+            /** Pane */
+            pane: string;
+            /** Outputs */
+            outputs: string[];
+            /** Chart Timeframe */
+            chart_timeframe: string;
+            /** Source Timeframe */
+            source_timeframe: string;
+            /** Warmup Bars */
+            warmup_bars: number;
+            /**
+             * Source Bar Count
+             * @description Баров source TF использовано в расчёте
+             */
+            source_bar_count: number;
+            /**
+             * Source Truncated
+             * @description История source TF длиннее лимита: прогрев начат не с начала данных
+             */
+            source_truncated: boolean;
+            /** As Of */
+            as_of: string | null;
+            /** Points */
+            points: components["schemas"]["IndicatorPoint"][];
         };
         /**
          * IssContractIn
@@ -2763,6 +2900,75 @@ export interface operations {
                 content?: never;
             };
             /** @description Нужен ровно один из root_id / contract_id; неверный TF */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listIndicators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndicatorInfo"][];
+                };
+            };
+        };
+    };
+    getIndicatorValues: {
+        parameters: {
+            query: {
+                /** @description Имя из `GET /indicators` */
+                indicator: string;
+                /** @description 15m, 1h, 4h, 1d, 1w */
+                chart_timeframe: string;
+                root_id?: number | null;
+                contract_id?: number | null;
+                /** @description По умолчанию равен chart_timeframe */
+                source_timeframe?: string | null;
+                /** @description Параметры индикатора JSON-объектом */
+                params?: string;
+                start?: string | null;
+                end?: string | null;
+                as_of?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndicatorValuesOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры индикатора, выбор root/контракта или таймфреймы (source TF младше chart TF запрещён) */
             422: {
                 headers: {
                     [name: string]: unknown;
