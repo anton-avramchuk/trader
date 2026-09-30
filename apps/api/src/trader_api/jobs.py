@@ -26,16 +26,54 @@ from trader_db.models import Job
 
 router = APIRouter(tags=["jobs"])
 
+NOT_FOUND: dict[int | str, dict[str, Any]] = {404: {"description": "Задача не найдена"}}
+
 TERMINAL_STATUSES = {"succeeded", "failed", "cancelled"}
 
 
 class JobCreate(BaseModel):
-    type: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_.-]+$")
-    params: dict[str, Any] = Field(default_factory=dict)
-    max_attempts: int = Field(default=3, ge=1, le=10)
+    """Новая фоновая задача."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {"type": "aggregate.contract", "params": {"contract_id": 12}},
+                {
+                    "type": "import.iss",
+                    "params": {
+                        "contract_id": 12,
+                        "from": "2020-11-01",
+                        "till": "2020-11-30",
+                    },
+                },
+            ]
+        }
+    )
+
+    type: str = Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z0-9_.-]+$",
+        description=(
+            "Тип задачи: `import.file`, `iss.sync_root`, `import.iss`, "
+            "`aggregate.contract`, `demo.sleep`. "
+            "Неизвестный тип worker завершит ошибкой."
+        ),
+    )
+    params: dict[str, Any] = Field(
+        default_factory=dict, description="Параметры, зависят от типа задачи."
+    )
+    max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Сколько раз повторять при сбое worker'а.",
+    )
 
 
 class JobOut(BaseModel):
+    """Состояние задачи. Статусы: queued, running, succeeded, failed, cancelled."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -66,7 +104,16 @@ async def _find(session: AsyncSession, job_id: int) -> Job | None:
     return (await session.scalars(get_job_statement(job_id))).one_or_none()
 
 
-@router.post("/jobs", response_model=JobOut, status_code=201)
+@router.post(
+    "/jobs",
+    response_model=JobOut,
+    status_code=201,
+    operation_id="createJob",
+    summary="Поставить задачу в очередь",
+    description=(
+        "Задачу подхватит worker; ход выполнения — `GET /jobs/{id}` или WebSocket."
+    ),
+)
 async def create_job(body: JobCreate, session: Session) -> Job:
     job = (
         await session.scalars(
@@ -77,7 +124,13 @@ async def create_job(body: JobCreate, session: Session) -> Job:
     return job
 
 
-@router.get("/jobs", response_model=list[JobOut])
+@router.get(
+    "/jobs",
+    response_model=list[JobOut],
+    operation_id="listJobs",
+    summary="Список задач",
+    description="Новые задачи первыми; фильтры по статусу и типу.",
+)
 async def list_jobs(
     session: Session,
     status: str | None = None,
@@ -88,7 +141,13 @@ async def list_jobs(
     return list((await session.scalars(query)).all())
 
 
-@router.get("/jobs/{job_id}", response_model=JobOut)
+@router.get(
+    "/jobs/{job_id}",
+    response_model=JobOut,
+    operation_id="getJob",
+    summary="Состояние задачи",
+    responses=NOT_FOUND,
+)
 async def get_job(job_id: int, session: Session) -> Job:
     job = await _find(session, job_id)
     if job is None:
@@ -96,7 +155,16 @@ async def get_job(job_id: int, session: Session) -> Job:
     return job
 
 
-@router.post("/jobs/{job_id}/cancel", response_model=JobOut)
+@router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=JobOut,
+    operation_id="cancelJob",
+    summary="Отменить задачу",
+    description=(
+        "Ожидающая отменяется сразу, выполняющаяся — при ближайшей проверке worker'а."
+    ),
+    responses={**NOT_FOUND, 409: {"description": "Задача уже завершена"}},
+)
 async def cancel_job(job_id: int, session: Session) -> Job:
     if await _find(session, job_id) is None:
         raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -107,10 +175,11 @@ async def cancel_job(job_id: int, session: Session) -> Job:
     return job
 
 
-@router.websocket("/ws/jobs/{job_id}")
+@router.websocket("/ws/jobs/{job_id}", name="watch_job")
 async def watch_job(websocket: WebSocket, job_id: int) -> None:
     """Шлёт состояние задачи при каждом изменении и закрывается по завершении.
 
+    WebSocket не входит в OpenAPI; формат сообщения — схема `JobOut` (JSON).
     Код закрытия 4404 — задачи нет.
     """
     await websocket.accept()
