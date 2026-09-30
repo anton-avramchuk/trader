@@ -146,11 +146,24 @@ class TestStatistics:
     def test_baseline_is_attached_when_regimes_are_known(self) -> None:
         items = [i for i in items_for() if i.regime is not None]
 
-        result = compute_statistics(items, horizons=(3,), seed=1)
+        result = compute_statistics(items, horizons=(3,), seed=1, min_baseline=1)
 
         stats = result.buckets[0].horizons[0]
         assert stats.baseline_n > 0
         assert stats.edge is not None
+
+        strict = compute_statistics(items, horizons=(3,), seed=1, min_baseline=10_000)
+        assert strict.buckets[0].horizons[0].edge is None
+        assert "small_baseline" in strict.buckets[0].horizons[0].warnings
+
+    def test_long_horizon_does_not_starve_the_short_one_of_baseline(self) -> None:
+        items = [i for i in items_for() if i.regime is not None]
+
+        result = compute_statistics(items, horizons=(2, 200), seed=1)
+
+        short, long = result.buckets[0].horizons
+        assert short.baseline_n > 0  # окно исключения — свой горизонт, а не 200
+        assert long.baseline_n == 0
 
     def test_two_series_are_counted_separately(self) -> None:
         one = items_for(key="A")

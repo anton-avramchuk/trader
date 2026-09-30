@@ -170,6 +170,42 @@ class TestBaseline:
         assert [p.for_entry for p in points].count(0) == 0
         assert len([p for p in points if p.for_entry == 1]) == 2
 
+    def test_a_bar_is_used_once_per_direction_and_the_pool_is_not_exceeded(
+        self,
+    ) -> None:
+        regimes = make_regimes()
+        requests = [BaselineRequest(10 + 2 * i, "bullish") for i in range(10)]
+
+        points = sample_baseline(regimes, requests, exclusion=1, per_event=8, seed=4)
+
+        pairs = [(p.index, p.direction) for p in points]
+        assert len(pairs) == len(set(pairs))
+        same_regime = {p.regime for p in points}
+        assert len(same_regime) == 1
+        pool = [
+            i
+            for i, r in enumerate(regimes)
+            if r in same_regime and all(abs(i - q.entry) > 1 for q in requests)
+        ]
+        assert len(points) <= len(pool)
+
+    def test_same_bar_may_serve_both_directions(self) -> None:
+        regimes: list[Regime | None] = [Regime("range", "mid")] * 6
+
+        points = sample_baseline(
+            regimes,
+            [BaselineRequest(0, "bullish"), BaselineRequest(0, "bearish")],
+            exclusion=0,
+            per_event=9,
+            seed=1,
+        )
+
+        by_direction = {
+            d: {p.index for p in points if p.direction == d}
+            for d in ("bullish", "bearish")
+        }
+        assert by_direction["bullish"] == by_direction["bearish"] == {1, 2, 3, 4, 5}
+
     def test_order_of_requests_does_not_change_the_sample(self) -> None:
         regimes = make_regimes()
         a, b = BaselineRequest(10, "bullish"), BaselineRequest(11, "bearish")

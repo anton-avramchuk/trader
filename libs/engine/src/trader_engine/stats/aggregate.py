@@ -18,6 +18,7 @@ from trader_engine.stats.outcomes import HorizonOutcome
 Unit = Literal["atr", "pct"]
 
 MIN_EFFECTIVE = 30
+MIN_BASELINE = 20
 N_BOOT = 1000
 CI_LEVEL = 0.95
 
@@ -175,6 +176,7 @@ def summarize(
     seed: int = 0,
     n_boot: int = N_BOOT,
     min_effective: int = MIN_EFFECTIVE,
+    min_baseline: int = MIN_BASELINE,
 ) -> HorizonStats:
     """Статистика на горизонте: прореживание, агрегаты, CI, сравнение с baseline."""
     ready = [o for o in observations if not o.outcome.censored]
@@ -202,11 +204,12 @@ def summarize(
         if not o.outcome.censored and (v := get_ret(o.outcome)) is not None
     ]
     edge = edge_ci = None
-    if returns and base_returns:
+    if returns and len(base_returns) >= min_baseline:
         edge = mean(returns) - mean(base_returns)
         edge_ci = bootstrap_diff_ci(returns, base_returns, n_boot=n_boot, seed=seed)
     elif returns:
-        warnings.append("no_baseline")
+        # мало случайных точек — сравнение ничего не стоит, даже с узким CI
+        warnings.append("small_baseline" if base_returns else "no_baseline")
     total = len(outcomes)
     return HorizonStats(
         horizon=horizon,

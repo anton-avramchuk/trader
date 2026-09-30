@@ -12,6 +12,7 @@ from datetime import datetime
 from trader_engine.events import create, run_engine
 from trader_engine.indicators.base import BarInput
 from trader_engine.stats.aggregate import (
+    MIN_BASELINE,
     HorizonStats,
     Observation,
     Unit,
@@ -200,6 +201,7 @@ def compute_statistics(
     baseline: bool = True,
     per_event: int = DEFAULT_PER_EVENT,
     seed: int = 0,
+    min_baseline: int = MIN_BASELINE,
 ) -> StatsResult:
     """Статистика по отфильтрованным вхождениям, по горизонтам, с baseline."""
     active = filters or Filters()
@@ -225,6 +227,7 @@ def compute_statistics(
                 horizon=horizon,
                 unit=unit,
                 seed=seed,
+                min_baseline=min_baseline,
             )
             if not baseline and "no_baseline" in horizon_stats.warnings:
                 horizon_stats.warnings.remove("no_baseline")  # не запрашивали
@@ -287,15 +290,17 @@ def _baseline(
             for item in group
             if item.entry_index is not None
         ]
-        points = sample_baseline(
-            series.regimes,
-            requests,
-            exclusion=max(horizons),
-            per_event=per_event,
-            seed=seed,
-        )
-        for point in points:
-            for horizon in horizons:
+        for horizon in horizons:
+            # окно исключения — этот же горизонт: у плотных событий (уровни) окно
+            # наибольшего горизонта закрыло бы весь ряд
+            points = sample_baseline(
+                series.regimes,
+                requests,
+                exclusion=horizon,
+                per_event=per_event,
+                seed=seed,
+            )
+            for point in points:
                 outcome = compute_outcomes(
                     series.bars,
                     point.index,
