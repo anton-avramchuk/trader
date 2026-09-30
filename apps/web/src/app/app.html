@@ -13,7 +13,7 @@
   </header>
   <div class="layout">
     <aside [tuiNavigationAside]="expanded()">
-      <nav tuiNavigationNav>
+      <nav tuiNavigationNav class="nav">
         @for (entry of entries; track entry.key) { @if (entry.kind === 'title')
         {
         <div class="group">{{ entry.title }}</div>

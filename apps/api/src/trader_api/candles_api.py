@@ -287,7 +287,9 @@ def _next_start(candles: list[CandleOut], timeframe: str) -> datetime:
         "датасета, по умолчанию последней). `root_id` — continuous-серия: цены "
         "приведены к масштабу текущего контракта, у каждого бара указан контракт и "
         "`price_factor`, в ответе — роллы диапазона. Выдача по возрастанию времени, "
-        "не более `limit`; при `truncated` продолжайте с `next_start`."
+        "не более `limit`; при `truncated` продолжайте с `next_start`. С "
+        "`tail=true` — последние `limit` баров диапазона (при `truncated` "
+        "слева есть более ранние)."
     ),
     responses={
         **NOT_FOUND,
@@ -306,6 +308,10 @@ async def get_candles(
         int | None, Query(description="Только 1m; по умолчанию последняя версия")
     ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    tail: Annotated[
+        bool,
+        Query(description="Последние `limit` баров диапазона (для подгрузки истории)"),
+    ] = False,
 ) -> CandlesOut:
     return await _fetch(
         session,
@@ -316,7 +322,7 @@ async def get_candles(
         end=end,
         as_of=None,
         limit=limit,
-        tail=False,
+        tail=tail,
         dataset_version_id=dataset_version_id,
     )
 

@@ -1,17 +1,19 @@
-import { ErrorHandler, inject, Injectable } from '@angular/core';
+import { ErrorHandler, inject, Injectable, Injector } from '@angular/core';
 import { TuiAlertService } from '@taiga-ui/core';
 import { ApiError } from './api';
 
 /** Ошибки API показываются уведомлением, остальные — ещё и в консоль. */
 @Injectable()
 export class AppErrorHandler implements ErrorHandler {
-  private readonly alerts = inject(TuiAlertService);
+  // Лениво: ErrorHandler создаётся при старте приложения, раньше корня Taiga.
+  private readonly injector = inject(Injector);
 
   handleError(error: unknown): void {
     const cause = error instanceof Error ? error.cause : undefined;
     const apiError = [error, cause].find((e) => e instanceof ApiError);
     if (apiError) {
-      this.alerts
+      this.injector
+        .get(TuiAlertService)
         .open(apiError.message, {
           label: apiError.isNetwork ? 'Нет связи' : 'Ошибка запроса',
           appearance: 'negative',
@@ -20,7 +22,8 @@ export class AppErrorHandler implements ErrorHandler {
       return;
     }
     console.error(error);
-    this.alerts
+    this.injector
+      .get(TuiAlertService)
       .open('Что-то пошло не так. Подробности в консоли.', {
         label: 'Ошибка',
         appearance: 'negative',

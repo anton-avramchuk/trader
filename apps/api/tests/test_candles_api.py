@@ -156,6 +156,28 @@ class TestCandles:
             start = page["next_start"]
         assert collected == full["candles"]
 
+    def test_tail_returns_the_latest_bars_and_signals_older_ones(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        full = get(client, "/candles", contract_id=seed.a, timeframe="15m")
+
+        latest = get(
+            client, "/candles", contract_id=seed.a, timeframe="15m", limit=4, tail=True
+        )
+        older = get(
+            client,
+            "/candles",
+            contract_id=seed.a,
+            timeframe="15m",
+            limit=4,
+            tail=True,
+            end=latest["candles"][0]["timestamp"],
+        )
+
+        assert latest["candles"] == full["candles"][-4:]
+        assert latest["truncated"] is True and latest["next_start"] is None
+        assert older["candles"] == full["candles"][-8:-4]
+
     def test_range_filter(self, client: TestClient, seed: Seed) -> None:
         body = get(
             client,
