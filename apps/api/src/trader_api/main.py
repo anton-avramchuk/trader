@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from trader_db import check_connection, make_async_engine, upgrade_head
 
+from trader_api.catalog import router as catalog_router
+from trader_api.imports_api import router as imports_router
 from trader_api.jobs import router as jobs_router
 
 DbCheck = Callable[[], Awaitable[bool]]
@@ -50,12 +52,29 @@ def create_app(
                 "name": "jobs",
                 "description": "Фоновые задачи: импорт, загрузка ISS, сборка баров.",
             },
+            {"name": "roots", "description": "Базовые активы (NG, BR, GOLD…)."},
+            {
+                "name": "contracts",
+                "description": "Серии фьючерсов и их загрузка из ISS.",
+            },
+            {"name": "calendars", "description": "Торговые календари (только чтение)."},
+            {
+                "name": "imports",
+                "description": "Запуск импортов, отчёты, отклонённые строки.",
+            },
+            {"name": "files", "description": "Загруженные файлы и пресеты маппинга."},
+            {
+                "name": "conflicts",
+                "description": "Расхождения импорта с уже загруженными данными.",
+            },
             {"name": "system", "description": "Служебные проверки."},
         ],
         lifespan=lifespan,
     )
     app.state.job_poll_interval = job_poll_interval
     app.include_router(jobs_router)
+    app.include_router(catalog_router)
+    app.include_router(imports_router)
 
     @app.get(
         "/health",

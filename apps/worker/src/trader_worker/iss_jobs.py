@@ -72,7 +72,9 @@ def make_sync_root_handler(
 
     Параметры: ``root_id``; ``from_year`` (по умолчанию 2020); ``to_year`` (по
     умолчанию следующий год); ``secid_prefix`` (иначе определяется по действующим
-    сериям); ``enqueue_imports`` (по умолчанию ``true``).
+    сериям); ``enqueue_imports`` (по умолчанию ``true``); ``dry_run`` — только
+    найти контракты и вернуть их (для подтверждения пользователем), ничего не
+    создавая и не ставя.
     """
 
     def run(context: JobContext) -> dict[str, Any]:
@@ -105,6 +107,25 @@ def make_sync_root_handler(
         finally:
             provider.close()
 
+        found_list = [
+            {
+                "secid": c.provider_id,
+                "expiration_date": c.expiration_date.isoformat(),
+                "last_trade_date": (
+                    c.last_trade_date.isoformat() if c.last_trade_date else None
+                ),
+            }
+            for c in contracts
+        ]
+        if params.get("dry_run"):
+            context.report_progress(1.0, "готово")
+            return {
+                "root": asset_code,
+                "dry_run": True,
+                "contracts_found": len(contracts),
+                "contracts": found_list,
+            }
+
         created = enqueued = 0
         with session_factory() as session:
             for found in contracts:
@@ -130,10 +151,7 @@ def make_sync_root_handler(
             "contracts_found": len(contracts),
             "contracts_created": created,
             "imports_enqueued": enqueued,
-            "contracts": [
-                {"secid": c.provider_id, "expiration": c.expiration_date.isoformat()}
-                for c in contracts
-            ],
+            "contracts": found_list,
         }
 
     def handler(context: JobContext) -> dict[str, Any]:

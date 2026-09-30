@@ -47,6 +47,27 @@ def contract_id_of(factory: sessionmaker[Session], secid: str) -> int:
 
 
 class TestSyncRoot:
+    def test_dry_run_only_lists_contracts(
+        self,
+        iss_worker: Worker,
+        session_factory: sessionmaker[Session],
+        root_id: int,
+    ) -> None:
+        job = run_job(
+            iss_worker, session_factory, "iss.sync_root", root_id=root_id, dry_run=True
+        )
+
+        assert job.status == "succeeded", job.error
+        assert job.result["dry_run"] is True
+        assert [
+            (c["secid"], c["expiration_date"]) for c in job.result["contracts"]
+        ] == [
+            ("BRX6", "2026-11-02"),
+            ("BRZ6", "2026-12-01"),
+        ]
+        assert count(session_factory, Contract) == 0
+        assert count(session_factory, Job) == 1  # только сама задача
+
     def test_contracts_are_created_with_iss_codes_and_imports_enqueued(
         self,
         iss_worker: Worker,

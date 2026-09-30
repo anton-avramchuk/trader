@@ -11,7 +11,17 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Executable, Float, bindparam, case, func, insert, select, update
+from sqlalchemy import (
+    Executable,
+    Float,
+    bindparam,
+    case,
+    exists,
+    func,
+    insert,
+    select,
+    update,
+)
 from sqlalchemy.orm import Session
 
 from trader_db.models import Job
@@ -38,6 +48,21 @@ def enqueue_statement(
     if run_after is not None:
         values["run_after"] = run_after
     return insert(Job).values(**values).returning(Job)
+
+
+def has_active_contract_job(session: Session, job_type: str, contract_id: int) -> bool:
+    """Есть ли ожидающая или выполняющаяся задача типа ``job_type`` по контракту."""
+    return bool(
+        session.scalar(
+            select(
+                exists().where(
+                    Job.type == job_type,
+                    Job.params["contract_id"].as_integer() == contract_id,
+                    Job.status.in_(ACTIVE_STATUSES),
+                )
+            )
+        )
+    )
 
 
 def cancel_statement(job_id: int) -> Executable:
