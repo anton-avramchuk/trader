@@ -2515,6 +2515,307 @@
         }
       }
     },
+    "/engines": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Каталог движков событий",
+        "description": "Зарегистрированные движки с JSON-схемой параметров и умолчаниями.",
+        "operationId": "listEngines",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EngineInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Listengines"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engine-runs": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Прогоны движков",
+        "description": "Новые сверху. Фильтры по движку, ряду и таймфрейму.",
+        "operationId": "listEngineRuns",
+        "parameters": [
+          {
+            "name": "engine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Имя движка",
+              "title": "Engine"
+            },
+            "description": "Имя движка"
+          },
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
+          },
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Continuous-серия",
+              "title": "Root Id"
+            },
+            "description": "Continuous-серия"
+          },
+          {
+            "name": "timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timeframe"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EngineRunOut"
+                  },
+                  "title": "Response Listengineruns"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engine-runs/{run_id}": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Прогон движка",
+        "operationId": "getEngineRun",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EngineRunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Прогон не найден"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/engine-runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "События прогона (в том числе as-of)",
+        "description": "`as_of` — срез знания: только события с `available_at <= as_of`. `view=history` — все события по порядку (включая пересмотры и отмены), `view=current` — актуальная картина на `as_of`: последняя версия каждой цепочки, отменённые исключены. `after_seq` — только события после этого номера (для догрузки).",
+        "operationId": "listEngineEvents",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Типы событий",
+              "title": "Kind"
+            },
+            "description": "Типы событий"
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "history",
+                "current"
+              ],
+              "type": "string",
+              "default": "history",
+              "title": "View"
+            }
+          },
+          {
+            "name": "after_seq",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Seq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EngineEventOut"
+                  },
+                  "title": "Response Listengineevents"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Прогон не найден"
+          },
+          "422": {
+            "description": "Слишком много событий: сузьте выборку"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3200,6 +3501,229 @@
         ],
         "title": "DatetimeSpec",
         "description": "Откуда брать время свечи: одна колонка или две (дата и время) + формат."
+      },
+      "EngineEventOut": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "detected",
+              "confirmed",
+              "revised",
+              "invalidated"
+            ],
+            "title": "Status"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "detected_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Detected At"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "available_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Available At",
+            "description": "С какого момента событие известно"
+          },
+          "revises": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revises",
+            "description": "seq пересматриваемого события"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "kind",
+          "status",
+          "payload",
+          "detected_at",
+          "confirmed_at",
+          "available_at",
+          "revises"
+        ],
+        "title": "EngineEventOut"
+      },
+      "EngineInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version",
+            "description": "Версия алгоритма (смена — новый прогон)"
+          },
+          "params_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params Schema",
+            "description": "JSON-схема параметров"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defaults"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "version",
+          "params_schema",
+          "defaults"
+        ],
+        "title": "EngineInfo"
+      },
+      "EngineRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "algorithm_version": {
+            "type": "integer",
+            "title": "Algorithm Version"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "params_hash": {
+            "type": "string",
+            "title": "Params Hash"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id",
+            "description": "Continuous-серия root (или контракт)"
+          },
+          "timeframe": {
+            "type": "string",
+            "title": "Timeframe"
+          },
+          "dataset_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Version Id",
+            "description": "Версия минутных данных контракта (у continuous пусто)"
+          },
+          "bars_processed": {
+            "type": "integer",
+            "title": "Bars Processed"
+          },
+          "last_close_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Close Time"
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "engine",
+          "algorithm_version",
+          "params",
+          "params_hash",
+          "contract_id",
+          "root_id",
+          "timeframe",
+          "dataset_version_id",
+          "bars_processed",
+          "last_close_time",
+          "event_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EngineRunOut"
       },
       "FileImportIn": {
         "properties": {
@@ -4899,6 +5423,10 @@
     {
       "name": "profiles",
       "description": "Профили графика (индикаторы, слои)."
+    },
+    {
+      "name": "engines",
+      "description": "Движки событий: прогоны и неизменяемый лог событий."
     },
     {
       "name": "system",

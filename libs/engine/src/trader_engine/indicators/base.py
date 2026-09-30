@@ -17,6 +17,8 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
+from trader_engine.aggregation import Bar
+
 
 @dataclass(frozen=True, slots=True)
 class BarInput:
@@ -30,6 +32,20 @@ class BarInput:
     close: float
     volume: float
     trading_day: date
+
+    @classmethod
+    def from_bar(cls, bar: Bar) -> "BarInput":
+        """Бар из агрегации (цены ``Decimal``) в форму для расчётов."""
+        return cls(
+            timestamp=bar.timestamp,
+            close_time=bar.close_time,
+            open=float(bar.open),
+            high=float(bar.high),
+            low=float(bar.low),
+            close=float(bar.close),
+            volume=float(bar.volume),
+            trading_day=bar.trading_day,
+        )
 
 
 Pane = Literal["price", "separate"]

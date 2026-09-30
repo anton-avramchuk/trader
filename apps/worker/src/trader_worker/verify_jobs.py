@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 from trader_db import read_bars, read_continuous
 from trader_db.models import Contract, Root
-from trader_engine.aggregation import TIMEFRAMES, Bar
+from trader_engine.aggregation import TIMEFRAMES
 from trader_engine.indicators import (
     BarInput,
     available,
@@ -40,19 +40,6 @@ def _time_param(params: dict[str, Any], key: str) -> datetime | None:
     if moment.tzinfo is None:
         raise JobFailed(f"Параметр {key}: время должно быть с часовым поясом")
     return moment
-
-
-def _bar_input(bar: Bar) -> BarInput:
-    return BarInput(
-        timestamp=bar.timestamp,
-        close_time=bar.close_time,
-        open=float(bar.open),
-        high=float(bar.high),
-        low=float(bar.low),
-        close=float(bar.close),
-        volume=float(bar.volume),
-        trading_day=bar.trading_day,
-    )
 
 
 def make_verify_handler(session_factory: sessionmaker[Session]) -> Handler:
@@ -109,7 +96,7 @@ def make_verify_handler(session_factory: sessionmaker[Session]) -> Handler:
                     limit=MAX_BARS,
                     tail=True,
                 )
-        inputs = [_bar_input(bar) for bar in bars]
+        inputs = [BarInput.from_bar(bar) for bar in bars]
         if not inputs:
             raise JobFailed("В выбранном диапазоне нет баров")
 

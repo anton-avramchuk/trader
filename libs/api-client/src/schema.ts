@@ -658,6 +658,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/engines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Каталог движков событий
+         * @description Зарегистрированные движки с JSON-схемой параметров и умолчаниями.
+         */
+        get: operations["listEngines"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engine-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Прогоны движков
+         * @description Новые сверху. Фильтры по движку, ряду и таймфрейму.
+         */
+        get: operations["listEngineRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engine-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Прогон движка */
+        get: operations["getEngineRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/engine-runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * События прогона (в том числе as-of)
+         * @description `as_of` — срез знания: только события с `available_at <= as_of`. `view=history` — все события по порядку (включая пересмотры и отмены), `view=current` — актуальная картина на `as_of`: последняя версия каждой цепочки, отменённые исключены. `after_seq` — только события после этого номера (для догрузки).
+         */
+        get: operations["listEngineEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -929,6 +1006,108 @@ export interface components {
             columns: (string | number)[];
             /** Format */
             format: string;
+        };
+        /** EngineEventOut */
+        EngineEventOut: {
+            /** Seq */
+            seq: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "detected" | "confirmed" | "revised" | "invalidated";
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Detected At
+             * Format: date-time
+             */
+            detected_at: string;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /**
+             * Available At
+             * Format: date-time
+             * @description С какого момента событие известно
+             */
+            available_at: string;
+            /**
+             * Revises
+             * @description seq пересматриваемого события
+             */
+            revises: number | null;
+        };
+        /** EngineInfo */
+        EngineInfo: {
+            /** Name */
+            name: string;
+            /** Title */
+            title: string;
+            /**
+             * Version
+             * @description Версия алгоритма (смена — новый прогон)
+             */
+            version: number;
+            /**
+             * Params Schema
+             * @description JSON-схема параметров
+             */
+            params_schema: {
+                [key: string]: unknown;
+            };
+            /** Defaults */
+            defaults: {
+                [key: string]: unknown;
+            };
+        };
+        /** EngineRunOut */
+        EngineRunOut: {
+            /** Id */
+            id: number;
+            /** Engine */
+            engine: string;
+            /** Algorithm Version */
+            algorithm_version: number;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Params Hash */
+            params_hash: string;
+            /** Contract Id */
+            contract_id: number | null;
+            /**
+             * Root Id
+             * @description Continuous-серия root (или контракт)
+             */
+            root_id: number | null;
+            /** Timeframe */
+            timeframe: string;
+            /**
+             * Dataset Version Id
+             * @description Версия минутных данных контракта (у continuous пусто)
+             */
+            dataset_version_id: number | null;
+            /** Bars Processed */
+            bars_processed: number;
+            /** Last Close Time */
+            last_close_time: string | null;
+            /** Event Count */
+            event_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * FileImportIn
@@ -3348,6 +3527,143 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    listEngines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineInfo"][];
+                };
+            };
+        };
+    };
+    listEngineRuns: {
+        parameters: {
+            query?: {
+                /** @description Имя движка */
+                engine?: string | null;
+                contract_id?: number | null;
+                /** @description Continuous-серия */
+                root_id?: number | null;
+                timeframe?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getEngineRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineRunOut"];
+                };
+            };
+            /** @description Прогон не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listEngineEvents: {
+        parameters: {
+            query?: {
+                as_of?: string | null;
+                /** @description Типы событий */
+                kind?: string[] | null;
+                view?: "history" | "current";
+                after_seq?: number | null;
+            };
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EngineEventOut"][];
+                };
+            };
+            /** @description Прогон не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Слишком много событий: сузьте выборку */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -13,6 +13,7 @@ from trader_worker.aggregate_jobs import (
     make_aggregate_handler,
     utc_now,
 )
+from trader_worker.engine_jobs import ENGINE_RUN_JOB_TYPE, make_engine_run_handler
 from trader_worker.file_sources import file_source
 from trader_worker.handlers import HandlerRegistry, default_registry
 from trader_worker.import_jobs import register_import_job
@@ -69,4 +70,5 @@ def build_registry(
         make_step_prices_all_handler(session_factory, today=today)
     )
     registry.register(VERIFY_JOB_TYPE)(make_verify_handler(session_factory))
+    registry.register(ENGINE_RUN_JOB_TYPE)(make_engine_run_handler(session_factory))
     return registry
