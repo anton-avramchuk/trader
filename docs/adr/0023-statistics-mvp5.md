@@ -45,3 +45,9 @@
 5. API `/stats/outcomes` и `/stats/occurrence`: выборка событий из лога, кэш, фильтры.
 6. UI: блок «Исторически» по клику на паттерн/уровень.
 7. Тесты: leakage, синтетика, регрессия, интеграция.
+
+## Ядро outcomes (#105)
+- `trader_engine/stats/outcomes.py`: `compute_outcomes(bars, entry, direction, atr, target, invalidated_at, roll_times, horizons)` → `HorizonOutcome` на каждый горизонт; `entry_index` (бар, закрывшийся в `available_at`), `atr_series` (ATR Уайлдера, период 14).
+- Отмена берётся из цепочки событий (момент события `invalidated`), а не из уровня в payload: так учтены и слом геометрии, и `expired`, и ложный пробой. Отмена до входа к исходу не относится. Цель — цена из payload.
+- `mfe`/`mae` неотрицательны, `ret` со знаком; без ATR (нет прогрева или 0) остаются только проценты.
+- Флаги: `crosses_session_gap` — пауза между соседними барами окна; `crosses_weekend` — смена ISO-недели по `trading_day`; `crosses_roll` — ролл строго после входа и не позже последнего бара окна.
