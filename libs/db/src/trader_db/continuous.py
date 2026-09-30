@@ -182,20 +182,21 @@ def read_continuous(
     segments = load_segments(session, root_id, as_of)
     result: list[ContinuousBar] = []
     for segment in reversed(segments) if tail else segments:
-        first = max((m for m in (start, segment.start) if m is not None), default=None)
-        last = min((m for m in (end, segment.end) if m is not None), default=None)
-        if first is not None and last is not None and first >= last:
-            continue
         remaining = None if limit is None else limit - len(result)
         if remaining is not None and remaining <= 0:
             break
+        # Границы сегмента — по времени закрытия: бар сетки может начаться чуть
+        # раньше ролла (например 4h с 16:00 при старте недели в 16:05), но целиком
+        # относится к новому контракту.
+        until = min((m for m in (as_of, segment.end) if m is not None), default=None)
         bars = read_bars(
             session,
             segment.contract_id,
             timeframe,
-            first,
-            last,
-            closed_until=as_of,
+            start,
+            end,
+            closed_until=until,
+            closes_after=segment.start,
             limit=remaining,
             tail=tail,
         )

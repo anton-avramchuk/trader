@@ -103,6 +103,10 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '
 
 TS-клиент — `libs/api-client` (`@trader/api-client`, типы генерируются из OpenAPI: `npx nx run api-client:generate`; `nx test api-client` падает, если закоммиченный клиент устарел).
 
+## Регрессионный датасет
+
+`tests/fixtures/ng_2026_03.csv.gz` — реальные минуты NGH6/NGJ6 с ISS (09–31.03.2026: ролл и смена режима сессий 23.03). Тест `apps/api/tests/test_regression_dataset.py` прогоняет импорт → бары → ролл → API и сверяет с `ng_2026_03.expected.json`. Осознанное обновление: `UPDATE_REGRESSION=1 pytest tests/test_regression_dataset.py`; перезагрузка данных — `scripts/build_regression_fixture.py`.
+
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.

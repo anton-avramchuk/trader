@@ -273,13 +273,15 @@ def read_bars(
     end: datetime | None = None,
     *,
     closed_until: datetime | None = None,
+    closes_after: datetime | None = None,
     limit: int | None = None,
     tail: bool = False,
 ) -> list[Bar]:
     """Бары контракта по возрастанию времени; ``[start, end)`` — фильтр.
 
     ``closed_until`` оставляет только бары, закрытые к этому моменту
-    (``close_time <= closed_until``). ``limit`` ограничивает число баров: с начала
+    (``close_time <= closed_until``), ``closes_after`` — только закрывающиеся позже
+    этого момента (``close_time > closes_after``). ``limit`` ограничивает число баров: с начала
     диапазона, а при ``tail`` — последние ``limit`` (порядок всё равно по возрастанию).
     """
     query = select(DerivedCandle).where(
@@ -292,6 +294,8 @@ def read_bars(
         query = query.where(DerivedCandle.timestamp < end)
     if closed_until is not None:
         query = query.where(DerivedCandle.close_time <= closed_until)
+    if closes_after is not None:
+        query = query.where(DerivedCandle.close_time > closes_after)
     query = query.order_by(
         DerivedCandle.timestamp.desc() if tail else DerivedCandle.timestamp
     )
