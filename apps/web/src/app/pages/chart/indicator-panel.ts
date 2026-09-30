@@ -92,6 +92,55 @@ import { IndicatorsStore } from './indicators.store';
         }
       </ul>
     }
+    <div class="verify">
+      <button
+        tuiButton
+        type="button"
+        size="xs"
+        appearance="flat"
+        [disabled]="verifying()"
+        (click)="verify()"
+      >
+        Verify: проверить на look-ahead
+      </button>
+      @if (store.verifyJob(); as job) {
+        @if (verifying()) {
+          <span class="hint"
+            >{{ job.status }} · {{ job.progress_message ?? '' }}</span
+          >
+        }
+      }
+      @if (store.verifyError(); as error) {
+        <span class="error">{{ error }}</span>
+      }
+    </div>
+    @if (store.verifyResult(); as result) {
+      <div class="report" role="status">
+        <strong [class.good]="result.ok" [class.bad]="!result.ok">
+          {{ result.ok ? 'Look-ahead не найден' : 'Найдены расхождения' }}
+        </strong>
+        <span class="hint">
+          — {{ result.bars }} баров {{ result.timeframe }}, индикаторов:
+          {{ result.reports.length }}
+        </span>
+        <ul>
+          @for (r of result.reports; track r.indicator + $index) {
+            <li [class.bad]="!r.ok">
+              {{ r.indicator }}{{ params(r.params) }}:
+              @if (r.ok) {
+                совпало {{ r.values_checked }} значений в
+                {{ r.positions_checked }} позициях
+              } @else {
+                расхождений {{ r.mismatch_count }}; первое — бар
+                {{ r.mismatches[0].index }}, {{ r.mismatches[0].output }}: batch
+                {{ r.mismatches[0].batch }} ≠ online
+                {{ r.mismatches[0].online }}
+              }
+            </li>
+          }
+        </ul>
+      </div>
+    }
     @for (hint of store.hints(); track hint.id) {
       <p class="hint" role="note">{{ hint.text }}</p>
     }
@@ -140,6 +189,26 @@ import { IndicatorsStore } from './indicators.store';
       color: var(--tui-text-negative);
       font-size: 0.8rem;
     }
+    .verify {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      margin: 0.25rem 0;
+    }
+    .report {
+      font-size: 0.8rem;
+      margin-bottom: 0.4rem;
+    }
+    .report ul {
+      margin: 0.2rem 0 0;
+      padding-left: 1.2rem;
+    }
+    .good {
+      color: #2e7d32;
+    }
+    .bad {
+      color: var(--tui-text-negative);
+    }
     .hint {
       margin: 0.1rem 0;
       opacity: 0.75;
@@ -152,6 +221,7 @@ export class IndicatorPanel {
   readonly chartTimeframe = input.required<string>();
 
   protected readonly selectedName = signal('');
+  protected readonly verifying = signal(false);
   protected readonly fields = signal<ParamField[]>([]);
   protected sourceTf = '';
 
@@ -186,6 +256,15 @@ export class IndicatorPanel {
     await this.store.add(info, collectParams(this.fields()), this.sourceTf);
     this.selectedName.set('');
     this.fields.set([]);
+  }
+
+  protected async verify(): Promise<void> {
+    this.verifying.set(true);
+    try {
+      await this.store.verify();
+    } finally {
+      this.verifying.set(false);
+    }
   }
 
   protected shortTitle(title: string): string {

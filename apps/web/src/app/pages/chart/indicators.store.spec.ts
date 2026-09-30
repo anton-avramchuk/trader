@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import type { IndicatorInfo, IndicatorValues } from '@trader/api-client';
+import type { IndicatorInfo, IndicatorValues, Job } from '@trader/api-client';
+import { Observable, of, throwError } from 'rxjs';
 import { API_CLIENT } from '../../core/api/api';
+import { JobsService } from '../../core/jobs/jobs';
 import { IndicatorsStore } from './indicators.store';
 
 const ok = <T>(data: T) => Promise.resolve({ data, response: { status: 200 } });
@@ -208,5 +210,142 @@ describe('IndicatorsStore', () => {
       params: { period: 200 },
       title: EMA.title,
     });
+  });
+});
+
+describe('IndicatorsStore.verify', () => {
+  const REPORT = {
+    timeframe: '15m',
+    bars: 100,
+    range: ['2026-09-28T04:00:00Z', '2026-09-29T04:00:00Z'],
+    ok: true,
+    reports: [
+      {
+        indicator: 'ema',
+        params: { period: 20 },
+        bars: 100,
+        positions_checked: 100,
+        values_checked: 100,
+        mismatch_count: 0,
+        ok: true,
+        mismatches: [],
+      },
+    ],
+  };
+
+  function job(overrides: Partial<Job> = {}): Job {
+    return {
+      id: 5,
+      type: 'verify.indicators',
+      params: {},
+      status: 'succeeded',
+      progress: 1,
+      progress_message: null,
+      result: REPORT as unknown as Job['result'],
+      error: null,
+      attempts: 1,
+      max_attempts: 3,
+      cancel_requested: false,
+      created_at: '2026-09-30T00:00:00Z',
+      started_at: null,
+      finished_at: null,
+      ...overrides,
+    };
+  }
+
+  function setupVerify(watch: () => Observable<Job>) {
+    const client = {
+      GET: vi.fn(() => ok({})),
+      POST: vi.fn(() => ok(job({ status: 'queued', result: null }))),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        IndicatorsStore,
+        { provide: API_CLIENT, useValue: client },
+        { provide: JobsService, useValue: { watch: vi.fn(watch) } },
+      ],
+    });
+    return { client, store: TestBed.inject(IndicatorsStore) };
+  }
+
+  it('без контекста графика ничего не запускает', async () => {
+    const { store, client } = setupVerify(() => of(job()));
+
+    await store.verify();
+
+    expect(client.POST).not.toHaveBeenCalled();
+  });
+
+  it('ставит задачу для диапазона графика с активными индикаторами и разбирает отчёт', async () => {
+    const { store, client } = setupVerify(() => of(job()));
+    await store.add(EMA, { period: 20 }, '15m');
+    store.refresh({
+      root_id: 3,
+      chartTimeframe: '15m',
+      start: '2026-09-28T04:00:00Z',
+    });
+
+    await store.verify();
+
+    const [path, request] = client.POST.mock.calls.at(-1) as unknown as [
+      string,
+      { body: { type: string; params: Record<string, unknown> } },
+    ];
+    expect(path).toBe('/jobs');
+    expect(request.body.type).toBe('verify.indicators');
+    expect(request.body.params).toMatchObject({
+      root_id: 3,
+      timeframe: '15m',
+      start: '2026-09-28T04:00:00Z',
+      indicators: [{ name: 'ema', params: { period: 20 } }],
+    });
+    expect(store.verifyResult()?.ok).toBe(true);
+    expect(store.verifyError()).toBeNull();
+  });
+
+  it('без активных индикаторов проверяются все (список не передаётся); в replay конец — as_of', async () => {
+    const { store, client } = setupVerify(() => of(job()));
+    store.refresh({
+      contract_id: 8,
+      chartTimeframe: '1h',
+      start: '2026-09-28T04:00:00Z',
+      asOf: '2026-09-28T12:00:00Z',
+    });
+
+    await store.verify();
+
+    const [, request] = client.POST.mock.calls.at(-1) as unknown as [
+      string,
+      { body: { params: Record<string, unknown> } },
+    ];
+    expect(request.body.params).not.toHaveProperty('indicators');
+    expect(request.body.params).toMatchObject({
+      contract_id: 8,
+      end: '2026-09-28T12:00:00Z',
+    });
+  });
+
+  it('упавшая задача показывает причину, обрыв связи — сообщение', async () => {
+    const failed = setupVerify(() =>
+      of(
+        job({
+          status: 'failed',
+          error: 'В выбранном диапазоне нет баров',
+          result: null,
+        }),
+      ),
+    );
+    failed.store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    await failed.store.verify();
+    expect(failed.store.verifyError()).toBe('В выбранном диапазоне нет баров');
+    expect(failed.store.verifyResult()).toBeNull();
+
+    TestBed.resetTestingModule();
+    const dropped = setupVerify(() =>
+      throwError(() => new Error('Соединение с сервером прервано')),
+    );
+    dropped.store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    await dropped.store.verify();
+    expect(dropped.store.verifyError()).toContain('прервано');
   });
 });
