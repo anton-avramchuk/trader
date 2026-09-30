@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session
-from trader_engine.events import known_at
+from trader_engine.events import Event, known_at
 from trader_engine.indicators import BarInput
+from trader_engine.stats.pipeline import build_series, collect, compute_statistics
 
 from trader_db import advance_run, load_events
 
@@ -114,3 +115,51 @@ def test_stored_events_as_of_do_not_depend_on_later_bars(
     known = load_events(session, real.run_id, as_of=moment)
     assert known == load_events(session, changed.run_id, as_of=moment)
     assert known == known_at(load_events(session, real.run_id), moment)
+
+
+STATS_ENGINES = [
+    "levels",
+    "double_triple",
+    "head_shoulders",
+    "trendlines",
+    "range_breakout",
+]
+
+
+def stored_statistics(
+    session: Session, contract_id: int, data: list[BarInput], moment: datetime | None
+) -> Any:
+    """Статистика по событиям, прочитанным из БД (прогоны всех движков MVP-3/4)."""
+    logs: list[tuple[str, list[Event]]] = []
+    for engine, params in CONFIGS:
+        if engine not in STATS_ENGINES:
+            continue
+        run = advance_run(session, engine, params, data, "15m", contract_id=contract_id)
+        logs.append((engine, load_events(session, run.run_id, as_of=moment)))
+    series = build_series("db:15m", data, as_of=moment, atr_period=5)
+    items = collect(series, logs)
+    return items, compute_statistics(
+        items, horizons=(3, 8), group_by="group", seed=1, min_baseline=5
+    )
+
+
+def test_statistics_from_stored_events_and_as_of(
+    session: Session, contract_id: int
+) -> None:
+    data = bars()
+    items, full = stored_statistics(session, contract_id, data, None)
+
+    assert full.matched > 0 and len(items) >= full.matched
+    assert all(item.entry_index is not None for item in items)
+
+    cut = 100
+    moment = data[cut - 1].close_time
+    other = [
+        *data[:cut],
+        *[replace(b, open=1.0, high=500.0, low=0.5, close=250.0) for b in data[cut:]],
+    ]
+    _, early = stored_statistics(session, contract_id, data, moment)
+    _, early_changed = stored_statistics(session, contract_id, other, moment)
+
+    assert early == early_changed  # будущее не влияет на статистику в момент as_of
+    assert early.matched < full.matched
