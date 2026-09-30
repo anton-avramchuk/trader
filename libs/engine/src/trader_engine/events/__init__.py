@@ -6,6 +6,7 @@ from trader_engine.events.base import (
     EventStatus,
     run_engine,
 )
+from trader_engine.events.pivot import Pivot  # noqa: E402
 from trader_engine.events.registry import (
     available,
     create,
@@ -25,6 +26,7 @@ __all__ = [
     "EventStatus",
     "FixedWindow",
     "MarketStructure",
+    "Pivot",
     "ZigZag",
     "available",
     "create",

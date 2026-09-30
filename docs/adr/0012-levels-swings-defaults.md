@@ -16,3 +16,7 @@
 
 ## Реализация market structure (#35)
 - Движок `market_structure` (параметры как у `zigzag`) строится поверх подтверждённых точек ZigZag. `structure_point` — метка HH/LH/HL/LL относительно предыдущей точки того же типа; `trend_state` — смена состояния: uptrend (HH+HL), downtrend (LH+LL), иначе range. BOS/CHoCH не входят в MVP.
+
+## Реализация pivot (#36)
+- Движок `pivot` (`formula`: classic/fibonacci/woodie/camarilla, флаги `daily`/`weekly`). Периоды — торговый день (`trading_day`) и ISO-неделя торгового дня. Событие `pivot` с предыдущими High/Low/Close и PP, R1–R3, S1–S3; `applies_to` — первый торговый день нового периода.
+- Движок узнаёт о завершении периода по первому бару следующего, поэтому `available_at` — закрытие этого бара (не позже), а не закрытие последнего бара периода: раньше знать нельзя без календаря будущих баров.
