@@ -47,6 +47,7 @@ def test_zones_cover_active_levels(
     members = [m for z in body["zones"] for m in z["members"]]
     assert {m["family"] for m in members} <= {"pivot", "prev"}
     assert all(m["source_timeframe"] == "15m" for m in members)
+    assert all(m["created_at"] for m in members)
     lows = [z["low"] for z in body["zones"]]
     assert lows == sorted(lows)
     for zone in body["zones"]:

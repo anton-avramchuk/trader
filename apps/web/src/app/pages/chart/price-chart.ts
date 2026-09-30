@@ -26,6 +26,8 @@ import {
 import { formatMsk } from '../../core/time/msk';
 import { rollMarkers, toChartData, toChartTime } from './chart-data';
 import type { ChartIndicator } from './indicators';
+import { EMPTY_OVERLAY, type Overlay } from './structure';
+import { StructurePrimitive } from './structure-primitive';
 
 /** Порог (в барах) у левого края, с которого просим более раннюю историю. */
 const LOAD_MORE_THRESHOLD = 30;
@@ -62,11 +64,15 @@ export class PriceChart {
   readonly follow = input(false);
   /** Индикаторы: оверлеи на цене и отдельные панели. */
   readonly indicators = input<ChartIndicator[]>([]);
+  /** Слои структуры: маркеры, линии и зоны. */
+  readonly overlay = input<Overlay>(EMPTY_OVERLAY);
 
   /** Пользователь докрутил до левого края: нужна более ранняя история. */
   readonly needOlder = output<void>();
   /** Бар под курсором (null — курсор ушёл с графика). */
   readonly hover = output<Candle | null>();
+  /** Клик по графику: время бара (с) и цена под курсором (ручная сетка Fibonacci). */
+  readonly pointPicked = output<{ time: number; price: number }>();
 
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
 
@@ -74,6 +80,7 @@ export class PriceChart {
   private candleSeries: ISeriesApi<'Candlestick'> | null = null;
   private volumeSeries: ISeriesApi<'Histogram'> | null = null;
   private markers: ISeriesMarkersPluginApi<Time> | null = null;
+  private readonly structure = new StructurePrimitive();
   private lastFirstTime: number | null = null;
   private lastKey: string | null = null;
   private readonly indicatorSeries = new Map<
@@ -89,6 +96,14 @@ export class PriceChart {
     });
     effect(() => {
       this.syncIndicators(this.indicators());
+    });
+    effect(() => {
+      this.syncOverlay(
+        this.candles(),
+        this.rolls(),
+        this.labels(),
+        this.overlay(),
+      );
     });
   }
 
@@ -122,6 +137,7 @@ export class PriceChart {
       .priceScale('volume')
       .applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     this.markers = createSeriesMarkers(this.candleSeries, []);
+    this.candleSeries.attachPrimitive(this.structure);
 
     chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
       if (range && range.from < LOAD_MORE_THRESHOLD) {
@@ -135,8 +151,45 @@ export class PriceChart {
         : undefined;
       this.hover.emit(found ?? null);
     });
+    chart.subscribeClick((param) => {
+      const series = this.candleSeries;
+      if (!series || param.time === undefined || !param.point) {
+        return;
+      }
+      const price = series.coordinateToPrice(param.point.y);
+      if (price !== null) {
+        this.pointPicked.emit({ time: param.time as number, price });
+      }
+    });
     this.render(this.candles(), this.rolls(), this.labels());
     this.syncIndicators(this.indicators());
+    this.syncOverlay(
+      this.candles(),
+      this.rolls(),
+      this.labels(),
+      this.overlay(),
+    );
+  }
+
+  /** Маркеры (роллы + слои структуры) и линии/зоны слоёв; свечи не перерисовываются. */
+  private syncOverlay(
+    candles: Candle[],
+    rolls: Roll[],
+    labels: Record<number, string>,
+    overlay: Overlay,
+  ): void {
+    if (!this.chart) {
+      return;
+    }
+    this.markers?.setMarkers(
+      [...rollMarkers(rolls, candles, labels), ...overlay.markers]
+        .sort((a, b) => a.time - b.time)
+        .map((m) => ({ ...m, time: asTime(m.time) })),
+    );
+    this.structure.set(
+      overlay,
+      candles.map((c) => toChartTime(c.timestamp)),
+    );
   }
 
   /** Приводит серии индикаторов на графике к заданному набору. */
@@ -227,12 +280,7 @@ export class PriceChart {
     this.volumeSeries.setData(
       data.volume.map((p) => ({ ...p, time: asTime(p.time) })),
     );
-    this.markers?.setMarkers(
-      rollMarkers(rolls, candles, labels).map((m) => ({
-        ...m,
-        time: asTime(m.time),
-      })),
-    );
+    this.syncOverlay(candles, rolls, labels, this.overlay());
     if (visible) {
       this.chart.timeScale().setVisibleRange(visible);
     } else if (this.lastFirstTime === null && first !== null) {

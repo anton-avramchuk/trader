@@ -17,12 +17,21 @@ import { ProfileBar } from './profile-bar';
 import { ProfilesStore } from './profiles.store';
 import { IndicatorsStore } from './indicators.store';
 import { PriceChart } from './price-chart';
+import { StructurePanel } from './structure-panel';
+import { StructureStore } from './structure.store';
 
 /** Chart: свечи и объём continuous-серии или контракта, роллы, подгрузка истории. */
 @Component({
   selector: 'app-chart',
-  imports: [FormsModule, IndicatorPanel, PriceChart, ProfileBar, TuiButton],
-  providers: [ChartStore, IndicatorsStore, ProfilesStore],
+  imports: [
+    FormsModule,
+    IndicatorPanel,
+    PriceChart,
+    ProfileBar,
+    StructurePanel,
+    TuiButton,
+  ],
+  providers: [ChartStore, IndicatorsStore, ProfilesStore, StructureStore],
   template: `
     <h1>Chart</h1>
 
@@ -74,6 +83,7 @@ import { PriceChart } from './price-chart';
       (timeframeRequested)="onProfileTimeframe($event)"
     />
     <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+    <app-structure-panel [chartTimeframe]="store.timeframe()" />
 
     <p class="legend">{{ legend() }}</p>
 
@@ -84,6 +94,8 @@ import { PriceChart } from './price-chart';
         [labels]="store.labels()"
         [datasetKey]="store.datasetKey()"
         [indicators]="indicators.series()"
+        [overlay]="structure.overlay()"
+        (pointPicked)="structure.pickPoint($event)"
         (needOlder)="store.loadOlder()"
         (hover)="hovered.set($event)"
       />
@@ -140,6 +152,7 @@ import { PriceChart } from './price-chart';
 export class Chart implements OnInit {
   protected readonly store = inject(ChartStore);
   protected readonly indicators = inject(IndicatorsStore);
+  protected readonly structure = inject(StructureStore);
   protected readonly timeframes = TIMEFRAMES;
   protected readonly hovered = signal<Candle | null>(null);
 
@@ -165,15 +178,18 @@ export class Chart implements OnInit {
       if (!first || rootId === null) {
         return;
       }
-      untracked(() =>
-        this.indicators.refresh({
-          ...(target.kind === 'contract'
-            ? { contract_id: target.id }
-            : { root_id: rootId }),
+      const series =
+        target.kind === 'contract'
+          ? { contract_id: target.id }
+          : { root_id: rootId };
+      untracked(() => {
+        void this.indicators.refresh({
+          ...series,
           chartTimeframe: timeframe,
           start: first.timestamp,
-        }),
-      );
+        });
+        void this.structure.refresh({ ...series, chartTimeframe: timeframe });
+      });
     });
   }
 

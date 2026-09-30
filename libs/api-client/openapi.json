@@ -5911,6 +5911,11 @@
             "type": "string",
             "title": "Source Timeframe"
           },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "Когда уровень появился (ISO)"
+          },
           "distance_atr": {
             "type": "number",
             "title": "Distance Atr",
@@ -5926,6 +5931,7 @@
           "role",
           "strength",
           "source_timeframe",
+          "created_at",
           "distance_atr"
         ],
         "title": "ZoneMember"

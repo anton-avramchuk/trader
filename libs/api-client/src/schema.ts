@@ -1935,6 +1935,11 @@ export interface components {
             /** Source Timeframe */
             source_timeframe: string;
             /**
+             * Created At
+             * @description Когда уровень появился (ISO)
+             */
+            created_at: string;
+            /**
              * Distance Atr
              * @description Расстояние до центра зоны в ATR
              */
