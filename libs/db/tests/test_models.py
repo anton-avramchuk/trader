@@ -25,6 +25,7 @@ EXPECTED_TABLES = {
     "import_presets",
     "derived_candles",
     "derived_builds",
+    "roll_events",
 }
 
 

@@ -91,6 +91,10 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '
 
 Встроенные пресеты: `finam`, `finam_no_header`, `iso_utc`. Свой формат — `mapping` вместо `preset`, поправка пресета — `overrides` (например, `{"timezone": "UTC", "encoding": "cp1251"}`). Форматы: CSV, JSON (массив или NDJSON), Parquet. Отчёт (вставлено, дубликаты, конфликты, ошибки строк, пропуски, диапазон, min/max цена) — в результате задачи. Подробности — ADR-0015 и ADR-0016.
 
+## Continuous-серия
+
+Ролл происходит в начале торговой недели за N торговых дней до экспирации, склейка ratio (ADR-0019). События `roll_events` пересчитываются в конце задачи `aggregate.contract`; склеенные бары строятся при чтении (`trader_db.read_continuous`).
+
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.

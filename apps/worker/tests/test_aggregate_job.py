@@ -44,6 +44,7 @@ def test_import_enqueues_one_aggregation_and_job_builds_all_timeframes(
     assert job.result is not None
     builds: list[dict[str, Any]] = job.result["builds"]
     assert [b["timeframe"] for b in builds] == ["15m", "1h", "4h", "1d", "1w"]
+    assert job.result["rolls"] == 0  # один контракт — роллов нет
     assert {b["mode"] for b in builds} == {"full"}
     written = {b["timeframe"]: b["rows_written"] for b in builds}
     assert written["15m"] > 0 and written["1d"] > 0
