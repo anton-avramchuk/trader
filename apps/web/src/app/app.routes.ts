@@ -24,6 +24,11 @@ export const appRoutes: Route[] = [
     loadComponent: () => import('./pages/chart/chart').then((m) => m.Chart),
   },
   {
+    path: 'replay',
+    loadComponent: () =>
+      import('./pages/replay/replay-page').then((m) => m.Replay),
+  },
+  {
     path: 'research',
     loadComponent: placeholder,
     data: {
