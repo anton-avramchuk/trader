@@ -42,3 +42,7 @@ export type EngineEvent = components['schemas']['EngineEventOut'];
 export type LevelZones = components['schemas']['ZonesOut'];
 export type LevelZone = components['schemas']['ZoneOut'];
 export type FibGrid = components['schemas']['FibGridOut'];
+export type OutcomeStats = components['schemas']['StatsOut'];
+export type OutcomeBucket = components['schemas']['BucketOut'];
+export type HorizonStats = components['schemas']['HorizonStatsOut'];
+export type OccurrenceOutcomes = components['schemas']['OccurrenceDetailOut'];

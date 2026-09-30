@@ -3146,6 +3146,434 @@
         }
       }
     },
+    "/stats/outcomes": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Статистика исходов вхождений",
+        "description": "Forward outcomes (доходность, MFE, MAE) вхождений паттернов и событий уровней из логов указанных прогонов. Вход — close бара `available_at` события; горизонты в барах торгового времени. Выборка прореживается окном = горизонту (эффективный N), CI — block bootstrap, baseline — случайные точки того же режима (тренд × волатильность). `as_of` отсекает события и бары. Результат кэшируется.",
+        "operationId": "getOutcomeStats",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Прогоны движков",
+              "title": "Run Id"
+            },
+            "description": "Прогоны движков"
+          },
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Горизонты, баров",
+              "title": "Horizon"
+            },
+            "description": "Горизонты, баров"
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "atr",
+                "pct"
+              ],
+              "type": "string",
+              "default": "atr",
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "none",
+                "group",
+                "direction",
+                "regime"
+              ],
+              "type": "string",
+              "default": "none",
+              "title": "Group By"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Тип паттерна/события",
+              "title": "Group"
+            },
+            "description": "Тип паттерна/события"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "bullish",
+                    "bearish"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Direction"
+            }
+          },
+          {
+            "name": "final_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "confirmed, candidate, invalidated, touch, break",
+              "title": "Final State"
+            },
+            "description": "confirmed, candidate, invalidated, touch, break"
+          },
+          {
+            "name": "include_candidates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Candidates"
+            }
+          },
+          {
+            "name": "false_breakout",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "False Breakout"
+            }
+          },
+          {
+            "name": "quality_min",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quality Min"
+            }
+          },
+          {
+            "name": "quality_max",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100,
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quality Max"
+            }
+          },
+          {
+            "name": "trend",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trend"
+            }
+          },
+          {
+            "name": "volatility",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Volatility"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "name": "baseline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Baseline"
+            }
+          },
+          {
+            "name": "per_event",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 5,
+              "title": "Per Event"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Seed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      }
+    },
+    "/stats/occurrence": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Исходы одного вхождения",
+        "description": "Исходы вхождения по горизонтам: доходность, MFE, MAE в ATR и процентах, что раньше — цель или отмена, флаги пересечений и режим на входе. `key` — ключ вхождения из лога прогона: `движок:id` у паттерна, `движок:id уровня:seq` у касания и пробоя.",
+        "operationId": "getOccurrenceOutcomes",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ключ вхождения",
+              "title": "Key"
+            },
+            "description": "Ключ вхождения"
+          },
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Горизонты, баров",
+              "title": "Horizon"
+            },
+            "description": "Горизонты, баров"
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OccurrenceDetailOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3172,6 +3600,32 @@
   },
   "components": {
     "schemas": {
+      "BucketOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "n_occurrences": {
+            "type": "integer",
+            "title": "N Occurrences"
+          },
+          "horizons": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonStatsOut"
+            },
+            "type": "array",
+            "title": "Horizons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "n_occurrences",
+          "horizons"
+        ],
+        "title": "BucketOut"
+      },
       "CalendarDays": {
         "properties": {
           "holidays": {
@@ -3831,6 +4285,24 @@
         ],
         "title": "DatetimeSpec",
         "description": "Откуда брать время свечи: одна колонка или две (дата и время) + формат."
+      },
+      "DistOut": {
+        "properties": {
+          "mean": {
+            "type": "number",
+            "title": "Mean"
+          },
+          "median": {
+            "type": "number",
+            "title": "Median"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mean",
+          "median"
+        ],
+        "title": "DistOut"
       },
       "EngineEventOut": {
         "properties": {
@@ -4525,6 +4997,316 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HorizonOutcomeOut": {
+        "properties": {
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon"
+          },
+          "censored": {
+            "type": "boolean",
+            "title": "Censored"
+          },
+          "ret_atr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ret Atr"
+          },
+          "ret_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ret Pct"
+          },
+          "mfe_atr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe Atr"
+          },
+          "mfe_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe Pct"
+          },
+          "mae_atr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae Atr"
+          },
+          "mae_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae Pct"
+          },
+          "first_hit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "target",
+                  "invalidated"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Hit"
+          },
+          "ambiguous_bar": {
+            "type": "boolean",
+            "title": "Ambiguous Bar"
+          },
+          "crosses_session_gap": {
+            "type": "boolean",
+            "title": "Crosses Session Gap"
+          },
+          "crosses_weekend": {
+            "type": "boolean",
+            "title": "Crosses Weekend"
+          },
+          "crosses_roll": {
+            "type": "boolean",
+            "title": "Crosses Roll"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horizon",
+          "censored",
+          "ret_atr",
+          "ret_pct",
+          "mfe_atr",
+          "mfe_pct",
+          "mae_atr",
+          "mae_pct",
+          "first_hit",
+          "ambiguous_bar",
+          "crosses_session_gap",
+          "crosses_weekend",
+          "crosses_roll"
+        ],
+        "title": "HorizonOutcomeOut"
+      },
+      "HorizonStatsOut": {
+        "properties": {
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon",
+            "description": "Горизонт, баров торгового времени TF ряда"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "n_raw": {
+            "type": "integer",
+            "title": "N Raw",
+            "description": "Вхождения с известным исходом до прореживания"
+          },
+          "n_effective": {
+            "type": "integer",
+            "title": "N Effective",
+            "description": "После de-overlap (окно = горизонт)"
+          },
+          "censored": {
+            "type": "integer",
+            "title": "Censored",
+            "description": "Горизонт выходит за данные — не считаются"
+          },
+          "missing_atr": {
+            "type": "integer",
+            "title": "Missing Atr",
+            "description": "Без ATR на входе (исключены из ATR-оценок)"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          },
+          "ret": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mfe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mae": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ret_ci": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "95% CI среднего, block bootstrap"
+          },
+          "target_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Rate"
+          },
+          "invalidated_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidated Rate"
+          },
+          "baseline_n": {
+            "type": "integer",
+            "title": "Baseline N"
+          },
+          "baseline_ret": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DistOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "edge": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edge",
+            "description": "Среднее события минус среднее baseline"
+          },
+          "edge_ci": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "flags": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Flags"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horizon",
+          "unit",
+          "n_raw",
+          "n_effective",
+          "censored",
+          "missing_atr",
+          "win_rate",
+          "ret",
+          "mfe",
+          "mae",
+          "ret_ci",
+          "target_rate",
+          "invalidated_rate",
+          "baseline_n",
+          "baseline_ret",
+          "edge",
+          "edge_ci",
+          "flags",
+          "warnings"
+        ],
+        "title": "HorizonStatsOut"
+      },
       "ImportErrorOut": {
         "properties": {
           "row_number": {
@@ -4879,6 +5661,24 @@
         ],
         "title": "IndicatorValuesOut"
       },
+      "IntervalOut": {
+        "properties": {
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          }
+        },
+        "type": "object",
+        "required": [
+          "low",
+          "high"
+        ],
+        "title": "IntervalOut"
+      },
       "IssContractIn": {
         "properties": {
           "secid": {
@@ -5203,6 +6003,162 @@
         ],
         "title": "JobOut",
         "description": "Состояние задачи. Статусы: queued, running, succeeded, failed, cancelled."
+      },
+      "OccurrenceDetailOut": {
+        "properties": {
+          "occurrence": {
+            "$ref": "#/components/schemas/OccurrenceOut"
+          },
+          "regime": {
+            "type": "string",
+            "title": "Regime",
+            "description": "Режим на входе: тренд/волатильность или unknown"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonOutcomeOut"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurrence",
+          "regime",
+          "outcomes"
+        ],
+        "title": "OccurrenceDetailOut"
+      },
+      "OccurrenceOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pattern",
+              "level"
+            ],
+            "title": "Kind"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "bullish",
+              "bearish"
+            ],
+            "title": "Direction"
+          },
+          "entry": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "candidate",
+              "touch",
+              "break"
+            ],
+            "title": "Entry"
+          },
+          "available_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Available At"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "invalidated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalidated At"
+          },
+          "final_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final State"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "false_breakout": {
+            "type": "boolean",
+            "title": "False Breakout"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "meta": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Meta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "engine",
+          "kind",
+          "group",
+          "direction",
+          "entry",
+          "available_at",
+          "target",
+          "invalidated_at",
+          "final_state",
+          "reason",
+          "false_breakout",
+          "quality",
+          "meta"
+        ],
+        "title": "OccurrenceOut"
       },
       "PresetIn": {
         "properties": {
@@ -5819,6 +6775,51 @@
         },
         "type": "object",
         "title": "RootPatch"
+      },
+      "StatsOut": {
+        "properties": {
+          "matched": {
+            "type": "integer",
+            "title": "Matched",
+            "description": "Вхождений после фильтров"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/BucketOut"
+            },
+            "type": "array",
+            "title": "Buckets"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "description": "Вхождений без бара входа в данных ряда",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "matched",
+          "unit",
+          "buckets",
+          "warnings"
+        ],
+        "title": "StatsOut"
       },
       "StepPriceOut": {
         "properties": {
