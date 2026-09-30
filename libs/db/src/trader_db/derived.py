@@ -271,8 +271,17 @@ def read_bars(
     timeframe: str,
     start: datetime | None = None,
     end: datetime | None = None,
+    *,
+    closed_until: datetime | None = None,
+    limit: int | None = None,
+    tail: bool = False,
 ) -> list[Bar]:
-    """Бары контракта по возрастанию времени; ``[start, end)`` — фильтр."""
+    """Бары контракта по возрастанию времени; ``[start, end)`` — фильтр.
+
+    ``closed_until`` оставляет только бары, закрытые к этому моменту
+    (``close_time <= closed_until``). ``limit`` ограничивает число баров: с начала
+    диапазона, а при ``tail`` — последние ``limit`` (порядок всё равно по возрастанию).
+    """
     query = select(DerivedCandle).where(
         DerivedCandle.contract_id == contract_id,
         DerivedCandle.timeframe_code == timeframe,
@@ -281,6 +290,16 @@ def read_bars(
         query = query.where(DerivedCandle.timestamp >= start)
     if end is not None:
         query = query.where(DerivedCandle.timestamp < end)
+    if closed_until is not None:
+        query = query.where(DerivedCandle.close_time <= closed_until)
+    query = query.order_by(
+        DerivedCandle.timestamp.desc() if tail else DerivedCandle.timestamp
+    )
+    if limit is not None:
+        query = query.limit(limit)
+    rows = list(session.scalars(query))
+    if tail:
+        rows.reverse()
     return [
         Bar(
             timeframe=row.timeframe_code,
@@ -296,7 +315,7 @@ def read_bars(
             is_partial=row.is_partial,
             trading_day=row.trading_day,
         )
-        for row in session.scalars(query.order_by(DerivedCandle.timestamp))
+        for row in rows
     ]
 
 

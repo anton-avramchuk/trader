@@ -160,8 +160,13 @@ def read_candles(
     *,
     start: datetime | None = None,
     end: datetime | None = None,
+    limit: int | None = None,
+    tail: bool = False,
 ) -> list[Candle1m]:
-    """Свечи версии по возрастанию времени; ``[start, end)`` — необязательный фильтр."""
+    """Свечи версии по возрастанию времени; ``[start, end)`` — необязательный фильтр.
+
+    ``limit`` ограничивает число свечей: с начала диапазона, при ``tail`` — последние.
+    """
     version = session.get(DatasetVersion, dataset_version_id)
     if version is None:
         raise LookupError(f"Dataset version {dataset_version_id} не найдена")
@@ -172,6 +177,14 @@ def read_candles(
         query = query.where(RawCandle1m.timestamp >= start)
     if end is not None:
         query = query.where(RawCandle1m.timestamp < end)
+    query = query.order_by(
+        RawCandle1m.timestamp.desc() if tail else RawCandle1m.timestamp
+    )
+    if limit is not None:
+        query = query.limit(limit)
+    rows = list(session.scalars(query))
+    if tail:
+        rows.reverse()
     return [
         Candle1m(
             timestamp=row.timestamp,
@@ -183,5 +196,5 @@ def read_candles(
             trade_count=row.trade_count,
             quote_volume=row.quote_volume,
         )
-        for row in session.scalars(query.order_by(RawCandle1m.timestamp))
+        for row in rows
     ]
