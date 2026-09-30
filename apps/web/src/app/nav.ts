@@ -23,6 +23,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Analysis',
     items: [
       { path: '/chart', title: 'Chart', icon: '@tui.chart-candlestick' },
+      { path: '/replay', title: 'Replay', icon: '@tui.play' },
       { path: '/research', title: 'Research', icon: '@tui.flask-conical' },
       { path: '/backtest', title: 'Backtest', icon: '@tui.history' },
     ],

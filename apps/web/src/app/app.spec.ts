@@ -35,6 +35,7 @@ describe('App', () => {
       'Import',
       'Quality',
       'Chart',
+      'Replay',
       'Research',
       'Backtest',
     ]) {

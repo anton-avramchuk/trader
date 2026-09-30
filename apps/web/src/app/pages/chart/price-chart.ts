@@ -56,6 +56,8 @@ export class PriceChart {
   readonly labels = input<Record<number, string>>({});
   /** Идентификатор набора данных (инструмент+TF): при смене график начинается заново. */
   readonly datasetKey = input('');
+  /** Держать правый край на последнем баре (режим replay). */
+  readonly follow = input(false);
 
   /** Пользователь докрутил до левого края: нужна более ранняя история. */
   readonly needOlder = output<void>();
@@ -163,6 +165,9 @@ export class PriceChart {
       this.chart.timeScale().setVisibleRange(visible);
     } else if (this.lastFirstTime === null && first !== null) {
       this.chart.timeScale().fitContent();
+    }
+    if (this.follow() && first !== null) {
+      this.chart.timeScale().scrollToRealTime();
     }
     this.lastFirstTime = first;
   }

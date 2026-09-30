@@ -11,6 +11,7 @@ const lib = vi.hoisted(() => {
   const timeScale = {
     subscribeVisibleLogicalRangeChange: vi.fn(),
     fitContent: vi.fn(),
+    scrollToRealTime: vi.fn(),
     getVisibleRange: vi.fn(() => ({ from: 1, to: 2 })),
     setVisibleRange: vi.fn(),
   };

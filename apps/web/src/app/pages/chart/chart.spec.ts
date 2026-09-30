@@ -9,6 +9,7 @@ vi.mock('lightweight-charts', () => {
   const timeScale = {
     subscribeVisibleLogicalRangeChange: vi.fn(),
     fitContent: vi.fn(),
+    scrollToRealTime: vi.fn(),
     getVisibleRange: vi.fn(),
     setVisibleRange: vi.fn(),
   };
