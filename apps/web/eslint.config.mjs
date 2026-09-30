@@ -27,8 +27,10 @@ export default [
     },
   },
   {
-    files: ['**/*.html'],
-    // Override or add rules here
-    rules: {},
+    files: ['**/*.html', '**/*.ts'],
+    rules: {
+      // <label tuiLabel> связывается с полем самим tui-textfield (проекция).
+      '@angular-eslint/template/label-has-associated-control': 'off',
+    },
   },
 ];

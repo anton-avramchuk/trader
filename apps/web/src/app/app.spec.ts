@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { provideTaiga } from '@taiga-ui/core';
 import { provideEventPlugins } from '@taiga-ui/event-plugins';
+import { API_CLIENT } from './core/api/api';
 import { App } from './app';
 import { appRoutes } from './app.routes';
 
@@ -13,6 +14,12 @@ describe('App', () => {
         provideEventPlugins(),
         provideTaiga(),
         provideRouter(appRoutes),
+        {
+          provide: API_CLIENT,
+          useValue: {
+            GET: () => Promise.resolve({ data: [], response: { status: 200 } }),
+          },
+        },
       ],
     }).compileComponents();
   });

@@ -294,6 +294,51 @@
         }
       }
     },
+    "/calendars/{code}/days": {
+      "get": {
+        "tags": [
+          "calendars"
+        ],
+        "summary": "Праздники и особые дни календаря",
+        "operationId": "getCalendarDays",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarDays"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/roots": {
       "get": {
         "tags": [
@@ -1828,6 +1873,34 @@
   },
   "components": {
     "schemas": {
+      "CalendarDays": {
+        "properties": {
+          "holidays": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Holidays",
+            "description": "Будние дни без торгов"
+          },
+          "special_days": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "title": "Special Days",
+            "description": "Выходные, торгуемые как обычный день (рабочие субботы-переносы)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "holidays",
+          "special_days"
+        ],
+        "title": "CalendarDays"
+      },
       "CalendarDetail": {
         "properties": {
           "code": {

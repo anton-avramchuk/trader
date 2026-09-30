@@ -18,7 +18,7 @@
         "export-schema"
       ],
       "options": {
-        "command": "npx openapi-typescript libs/api-client/openapi.json -o libs/api-client/src/schema.ts",
+        "command": "npx openapi-typescript libs/api-client/openapi.json -o libs/api-client/src/schema.ts --default-non-nullable false",
         "cwd": "{workspaceRoot}"
       }
     },

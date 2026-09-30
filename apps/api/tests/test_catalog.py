@@ -32,6 +32,15 @@ class TestCalendars:
 
     def test_unknown_calendar_is_404(self, client: TestClient) -> None:
         assert client.get("/calendars/nope").status_code == 404
+        assert client.get("/calendars/nope/days").status_code == 404
+
+    def test_holidays_and_special_days(self, client: TestClient) -> None:
+        days = client.get("/calendars/moex_forts/days").json()
+        detail = client.get("/calendars/moex_forts").json()
+
+        assert len(days["holidays"]) == detail["holidays"] > 50
+        assert days["holidays"] == sorted(days["holidays"])
+        assert "2025-11-01" in days["special_days"]  # рабочая суббота
 
 
 class TestRoots:
