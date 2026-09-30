@@ -1,4 +1,36 @@
 <tui-root>
-  <h1>Trader</h1>
-  <router-outlet />
+  <header tuiNavigationHeader>
+    <button
+      type="button"
+      class="toggle"
+      aria-label="Свернуть или развернуть меню"
+      (click)="expanded.set(!expanded())"
+    >
+      ☰
+    </button>
+    <span tuiNavigationLogo>Trader</span>
+    <span class="tz">Время: МСК</span>
+  </header>
+  <div class="layout">
+    <aside [tuiNavigationAside]="expanded()">
+      <nav tuiNavigationNav>
+        @for (entry of entries; track entry.key) { @if (entry.kind === 'title')
+        {
+        <div class="group">{{ entry.title }}</div>
+        } @else {
+        <a
+          tuiAsideItem
+          [routerLink]="entry.path"
+          routerLinkActive="active"
+          [iconStart]="entry.icon"
+        >
+          {{ entry.title }}
+        </a>
+        } }
+      </nav>
+    </aside>
+    <main tuiNavigationMain>
+      <router-outlet />
+    </main>
+  </div>
 </tui-root>

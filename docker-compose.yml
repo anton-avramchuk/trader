@@ -90,6 +90,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
     ports:
       - "127.0.0.1:4200:4200"
 

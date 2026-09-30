@@ -4,7 +4,6 @@
   "projectType": "library",
   "sourceRoot": "libs/api-client/src",
   "tags": [],
-  "implicitDependencies": ["api"],
   "targets": {
     "export-schema": {
       "executor": "nx:run-commands",
@@ -15,7 +14,9 @@
     },
     "generate": {
       "executor": "nx:run-commands",
-      "dependsOn": ["export-schema"],
+      "dependsOn": [
+        "export-schema"
+      ],
       "options": {
         "command": "npx openapi-typescript libs/api-client/openapi.json -o libs/api-client/src/schema.ts",
         "cwd": "{workspaceRoot}"
@@ -25,14 +26,6 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "npx tsc --noEmit -p libs/api-client/tsconfig.json",
-        "cwd": "{workspaceRoot}"
-      }
-    },
-    "test": {
-      "executor": "nx:run-commands",
-      "dependsOn": ["generate"],
-      "options": {
-        "command": "git diff --exit-code -- libs/api-client",
         "cwd": "{workspaceRoot}"
       }
     }

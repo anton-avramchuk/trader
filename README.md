@@ -45,7 +45,7 @@ cp .env.example .env        # необязательно: значения по 
 docker compose up -d --build
 ```
 
-| Сервис | Адрес |
+
 |---|---|
 | PostgreSQL 18 | `127.0.0.1:5432` (данные в томе `pgdata`) |
 | pgAdmin | http://127.0.0.1:5050 — без входа, сервер «trader» уже добавлен и подключается без пароля |
@@ -101,11 +101,15 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '
 
 Свечи: `GET /candles` (контракт или continuous по `root_id`, TF `1m/15m/1h/4h/1d/1w`, диапазон, `limit` + `next_start`) и `GET /snapshot?as_of=…` — только бары, закрытые к моменту, и только известные к нему роллы (масштаб такой, каким его видел бы наблюдатель тогда).
 
-TS-клиент — `libs/api-client` (`@trader/api-client`, типы генерируются из OpenAPI: `npx nx run api-client:generate`; `nx test api-client` падает, если закоммиченный клиент устарел).
+TS-клиент — `libs/api-client` (`@trader/api-client`, типы генерируются из OpenAPI: `npx nx run api-client:generate`; тест API падает, если закоммиченная схема устарела).
 
 ## Регрессионный датасет
 
 `tests/fixtures/ng_2026_03.csv.gz` — реальные минуты NGH6/NGJ6 с ISS (09–31.03.2026: ролл и смена режима сессий 23.03). Тест `apps/api/tests/test_regression_dataset.py` прогоняет импорт → бары → ролл → API и сверяет с `ng_2026_03.expected.json`. Осознанное обновление: `UPDATE_REGRESSION=1 pytest tests/test_regression_dataset.py`; перезагрузка данных — `scripts/build_regression_fixture.py`.
+
+## Веб-интерфейс
+
+http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксирует `/api` (REST и WebSocket) на API, адрес — переменная `API_URL` (в Compose `http://api:8000`, локально по умолчанию `http://127.0.0.1:8000`). Разделы: Data (Instruments, Import, Quality), Chart, Research, Backtest. Время в UI — МСК.
 
 ## Документация API (Swagger)
 
