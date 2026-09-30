@@ -1,6 +1,11 @@
 """Индикаторы: плагины, реестр, кэш (ADR-0003, ADR-0010)."""
 
-from trader_engine.indicators import trend  # регистрация встроенных плагинов
+from trader_engine.indicators import (  # регистрация встроенных плагинов
+    momentum,
+    trend,
+    volatility,
+    volume,
+)
 from trader_engine.indicators.base import (
     BarInput,
     Indicator,
@@ -29,8 +34,11 @@ __all__ = [
     "describe",
     "get",
     "params_hash",
+    "momentum",
     "register",
     "run",
     "trend",
     "unregister",
+    "volatility",
+    "volume",
 ]
