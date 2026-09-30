@@ -770,6 +770,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/level-zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Confluence-зоны уровней
+         * @description Активные уровни (не пробитые, не отменённые) прогонов `levels` по `source_timeframes`, известные к `as_of`, объединяются в зоны: соседние уровни ближе `threshold_atr` × ATR попадают в одну зону.
+         */
+        get: operations["getLevelZones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1897,6 +1917,78 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** ZoneMember */
+        ZoneMember: {
+            /** Id */
+            id: number;
+            /** Price */
+            price: number;
+            /** Source */
+            source: string;
+            /** Family */
+            family: string;
+            /** Role */
+            role: string;
+            /** Strength */
+            strength: number;
+            /** Source Timeframe */
+            source_timeframe: string;
+            /**
+             * Distance Atr
+             * @description Расстояние до центра зоны в ATR
+             */
+            distance_atr: number;
+        };
+        /** ZoneOut */
+        ZoneOut: {
+            /** Low */
+            low: number;
+            /** High */
+            high: number;
+            /** Center */
+            center: number;
+            /** Width Atr */
+            width_atr: number;
+            /**
+             * Role
+             * @description Роль сильнейшего уровня зоны
+             */
+            role: string;
+            /**
+             * Strength
+             * @description Сила зоны: max силы членов + бонус за семейства
+             */
+            strength: number;
+            /** Families */
+            families: string[];
+            /** Members */
+            members: components["schemas"]["ZoneMember"][];
+        };
+        /** ZonesOut */
+        ZonesOut: {
+            /** Chart Timeframe */
+            chart_timeframe: string;
+            /** Source Timeframes */
+            source_timeframes: string[];
+            /** Atr Timeframe */
+            atr_timeframe: string;
+            /**
+             * Atr
+             * @description ATR на момент `as_of`; пусто — нет данных
+             */
+            atr: number | null;
+            /** Threshold Atr */
+            threshold_atr: number;
+            /** As Of */
+            as_of: string | null;
+            /**
+             * Missing Timeframes
+             * @description Source TF, по которым нет прогона levels (уровней нет)
+             */
+            missing_timeframes: string[];
+            /** Zones */
+            zones: components["schemas"]["ZoneOut"][];
         };
     };
     responses: never;
@@ -3870,6 +3962,54 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    getLevelZones: {
+        parameters: {
+            query: {
+                /** @description 15m, 1h, 4h, 1d, 1w */
+                chart_timeframe: string;
+                root_id?: number | null;
+                contract_id?: number | null;
+                /** @description По умолчанию — chart TF */
+                source_timeframes?: string[] | null;
+                /** @description TF для ATR; по умолчанию — chart TF */
+                atr_timeframe?: string | null;
+                atr_period?: number;
+                threshold_atr?: number;
+                /** @description Параметры движка levels JSON-объектом */
+                levels_params?: string;
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZonesOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Некорректные параметры или source TF младше chart TF */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
