@@ -735,6 +735,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/fib-grids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ручные сетки Фибоначчи */
+        get: operations["listFibGrids"];
+        put?: never;
+        /** Сохранить ручную сетку */
+        post: operations["createFibGrid"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fib-grids/{grid_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить ручную сетку */
+        delete: operations["deleteFibGrid"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1108,6 +1143,68 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** FibGridIn */
+        FibGridIn: {
+            /** Contract Id */
+            contract_id?: number | null;
+            /**
+             * Root Id
+             * @description Continuous-серия root
+             */
+            root_id?: number | null;
+            /** Timeframe */
+            timeframe: string;
+            start: components["schemas"]["FibPoint"];
+            end: components["schemas"]["FibPoint"];
+            /** Label */
+            label?: string | null;
+        };
+        /** FibGridOut */
+        FibGridOut: {
+            /** Id */
+            id: number;
+            /** Contract Id */
+            contract_id: number | null;
+            /** Root Id */
+            root_id: number | null;
+            /** Timeframe */
+            timeframe: string;
+            start: components["schemas"]["FibPoint"];
+            end: components["schemas"]["FibPoint"];
+            /** Label */
+            label: string | null;
+            /** Direction */
+            direction: string;
+            /** Retracement */
+            retracement: {
+                [key: string]: number;
+            };
+            /** Extension */
+            extension: {
+                [key: string]: number;
+            };
+            /**
+             * Manual
+             * @description Ручная сетка (не в статистике)
+             * @default true
+             */
+            manual?: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** FibPoint */
+        FibPoint: {
+            /**
+             * Time
+             * Format: date-time
+             */
+            time: string;
+            /** Price */
+            price: number;
         };
         /**
          * FileImportIn
@@ -3664,6 +3761,115 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listFibGrids: {
+        parameters: {
+            query?: {
+                contract_id?: number | null;
+                root_id?: number | null;
+                timeframe?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FibGridOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createFibGrid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FibGridIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FibGridOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deleteFibGrid: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grid_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

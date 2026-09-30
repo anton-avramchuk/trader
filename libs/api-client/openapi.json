@@ -2816,6 +2816,171 @@
         }
       }
     },
+    "/fib-grids": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Ручные сетки Фибоначчи",
+        "operationId": "listFibGrids",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
+          },
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          },
+          {
+            "name": "timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timeframe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FibGridOut"
+                  },
+                  "title": "Response Listfibgrids"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Сохранить ручную сетку",
+        "operationId": "createFibGrid",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FibGridIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FibGridOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fib-grids/{grid_id}": {
+      "delete": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Удалить ручную сетку",
+        "operationId": "deleteFibGrid",
+        "parameters": [
+          {
+            "name": "grid_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Grid Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3724,6 +3889,176 @@
           "updated_at"
         ],
         "title": "EngineRunOut"
+      },
+      "FibGridIn": {
+        "properties": {
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id",
+            "description": "Continuous-серия root"
+          },
+          "timeframe": {
+            "type": "string",
+            "title": "Timeframe"
+          },
+          "start": {
+            "$ref": "#/components/schemas/FibPoint"
+          },
+          "end": {
+            "$ref": "#/components/schemas/FibPoint"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timeframe",
+          "start",
+          "end"
+        ],
+        "title": "FibGridIn"
+      },
+      "FibGridOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          },
+          "timeframe": {
+            "type": "string",
+            "title": "Timeframe"
+          },
+          "start": {
+            "$ref": "#/components/schemas/FibPoint"
+          },
+          "end": {
+            "$ref": "#/components/schemas/FibPoint"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "retracement": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Retracement"
+          },
+          "extension": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Extension"
+          },
+          "manual": {
+            "type": "boolean",
+            "title": "Manual",
+            "description": "Ручная сетка (не в статистике)",
+            "default": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "contract_id",
+          "root_id",
+          "timeframe",
+          "start",
+          "end",
+          "label",
+          "direction",
+          "retracement",
+          "extension",
+          "created_at"
+        ],
+        "title": "FibGridOut"
+      },
+      "FibPoint": {
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Time"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          }
+        },
+        "type": "object",
+        "required": [
+          "time",
+          "price"
+        ],
+        "title": "FibPoint"
       },
       "FileImportIn": {
         "properties": {

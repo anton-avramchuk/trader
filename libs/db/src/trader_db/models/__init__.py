@@ -18,6 +18,7 @@ from trader_db.models.instruments import (
     TradingCalendar,
 )
 from trader_db.models.jobs import Job, JobSchedule
+from trader_db.models.manual_fib import ManualFibGrid
 from trader_db.models.presets import ImportPreset
 from trader_db.models.raw import (
     DataImport,
@@ -48,6 +49,7 @@ __all__ = [
     "EngineEvent",
     "EngineRun",
     "ImportConflict",
+    "ManualFibGrid",
     "ImportPreset",
     "Job",
     "JobSchedule",

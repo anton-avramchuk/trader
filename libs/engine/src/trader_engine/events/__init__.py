@@ -6,6 +6,7 @@ from trader_engine.events.base import (
     EventStatus,
     run_engine,
 )
+from trader_engine.events.fibonacci import Fibonacci  # noqa: E402
 from trader_engine.events.pivot import Pivot  # noqa: E402
 from trader_engine.events.registry import (
     available,
@@ -24,6 +25,7 @@ __all__ = [
     "Event",
     "EventEngine",
     "EventStatus",
+    "Fibonacci",
     "FixedWindow",
     "MarketStructure",
     "Pivot",
