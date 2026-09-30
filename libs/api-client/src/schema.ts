@@ -790,6 +790,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stats/outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Статистика исходов вхождений
+         * @description Forward outcomes (доходность, MFE, MAE) вхождений паттернов и событий уровней из логов указанных прогонов. Вход — close бара `available_at` события; горизонты в барах торгового времени. Выборка прореживается окном = горизонту (эффективный N), CI — block bootstrap, baseline — случайные точки того же режима (тренд × волатильность). `as_of` отсекает события и бары. Результат кэшируется.
+         */
+        get: operations["getOutcomeStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/occurrence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Исходы одного вхождения
+         * @description Исходы вхождения по горизонтам: доходность, MFE, MAE в ATR и процентах, что раньше — цель или отмена, флаги пересечений и режим на входе. `key` — ключ вхождения из лога прогона: `движок:id` у паттерна, `движок:id уровня:seq` у касания и пробоя.
+         */
+        get: operations["getOccurrenceOutcomes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -814,6 +854,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BucketOut */
+        BucketOut: {
+            /** Key */
+            key: string;
+            /** N Occurrences */
+            n_occurrences: number;
+            /** Horizons */
+            horizons: components["schemas"]["HorizonStatsOut"][];
+        };
         /** CalendarDays */
         CalendarDays: {
             /**
@@ -1061,6 +1110,13 @@ export interface components {
             columns: (string | number)[];
             /** Format */
             format: string;
+        };
+        /** DistOut */
+        DistOut: {
+            /** Mean */
+            mean: number;
+            /** Median */
+            median: number;
         };
         /** EngineEventOut */
         EngineEventOut: {
@@ -1357,6 +1413,94 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HorizonOutcomeOut */
+        HorizonOutcomeOut: {
+            /** Horizon */
+            horizon: number;
+            /** Censored */
+            censored: boolean;
+            /** Ret Atr */
+            ret_atr: number | null;
+            /** Ret Pct */
+            ret_pct: number | null;
+            /** Mfe Atr */
+            mfe_atr: number | null;
+            /** Mfe Pct */
+            mfe_pct: number | null;
+            /** Mae Atr */
+            mae_atr: number | null;
+            /** Mae Pct */
+            mae_pct: number | null;
+            /** First Hit */
+            first_hit: ("target" | "invalidated") | null;
+            /** Ambiguous Bar */
+            ambiguous_bar: boolean;
+            /** Crosses Session Gap */
+            crosses_session_gap: boolean;
+            /** Crosses Weekend */
+            crosses_weekend: boolean;
+            /** Crosses Roll */
+            crosses_roll: boolean;
+        };
+        /** HorizonStatsOut */
+        HorizonStatsOut: {
+            /**
+             * Horizon
+             * @description Горизонт, баров торгового времени TF ряда
+             */
+            horizon: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /**
+             * N Raw
+             * @description Вхождения с известным исходом до прореживания
+             */
+            n_raw: number;
+            /**
+             * N Effective
+             * @description После de-overlap (окно = горизонт)
+             */
+            n_effective: number;
+            /**
+             * Censored
+             * @description Горизонт выходит за данные — не считаются
+             */
+            censored: number;
+            /**
+             * Missing Atr
+             * @description Без ATR на входе (исключены из ATR-оценок)
+             */
+            missing_atr: number;
+            /** Win Rate */
+            win_rate: number | null;
+            ret: components["schemas"]["DistOut"] | null;
+            mfe: components["schemas"]["DistOut"] | null;
+            mae: components["schemas"]["DistOut"] | null;
+            /** @description 95% CI среднего, block bootstrap */
+            ret_ci: components["schemas"]["IntervalOut"] | null;
+            /** Target Rate */
+            target_rate: number | null;
+            /** Invalidated Rate */
+            invalidated_rate: number | null;
+            /** Baseline N */
+            baseline_n: number;
+            baseline_ret: components["schemas"]["DistOut"] | null;
+            /**
+             * Edge
+             * @description Среднее события минус среднее baseline
+             */
+            edge: number | null;
+            edge_ci: components["schemas"]["IntervalOut"] | null;
+            /** Flags */
+            flags: {
+                [key: string]: number;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
         /** ImportErrorOut */
         ImportErrorOut: {
             /** Row Number */
@@ -1506,6 +1650,13 @@ export interface components {
             /** Points */
             points: components["schemas"]["IndicatorPoint"][];
         };
+        /** IntervalOut */
+        IntervalOut: {
+            /** Low */
+            low: number;
+            /** High */
+            high: number;
+        };
         /**
          * IssContractIn
          * @description Серия ISS, подтверждённая пользователем.
@@ -1650,6 +1801,62 @@ export interface components {
             started_at: string | null;
             /** Finished At */
             finished_at: string | null;
+        };
+        /** OccurrenceDetailOut */
+        OccurrenceDetailOut: {
+            occurrence: components["schemas"]["OccurrenceOut"];
+            /**
+             * Regime
+             * @description Режим на входе: тренд/волатильность или unknown
+             */
+            regime: string;
+            /** Outcomes */
+            outcomes: components["schemas"]["HorizonOutcomeOut"][];
+        };
+        /** OccurrenceOut */
+        OccurrenceOut: {
+            /** Key */
+            key: string;
+            /** Engine */
+            engine: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "pattern" | "level";
+            /** Group */
+            group: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "bullish" | "bearish";
+            /**
+             * Entry
+             * @enum {string}
+             */
+            entry: "confirmed" | "candidate" | "touch" | "break";
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Target */
+            target: number | null;
+            /** Invalidated At */
+            invalidated_at: string | null;
+            /** Final State */
+            final_state: string | null;
+            /** Reason */
+            reason: string | null;
+            /** False Breakout */
+            false_breakout: boolean;
+            /** Quality */
+            quality: number | null;
+            /** Meta */
+            meta: {
+                [key: string]: unknown;
+            };
         };
         /** PresetIn */
         PresetIn: {
@@ -1891,6 +2098,29 @@ export interface components {
             roll_trading_days?: number | null;
             /** Include Weekend Sessions */
             include_weekend_sessions?: boolean | null;
+        };
+        /** StatsOut */
+        StatsOut: {
+            /**
+             * Matched
+             * @description Вхождений после фильтров
+             */
+            matched: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /** Buckets */
+            buckets: components["schemas"]["BucketOut"][];
+            /** Warnings */
+            warnings: string[];
+            /**
+             * Skipped
+             * @description Вхождений без бара входа в данных ряда
+             * @default 0
+             */
+            skipped?: number;
         };
         /** StepPriceOut */
         StepPriceOut: {
@@ -4010,6 +4240,105 @@ export interface operations {
                 content?: never;
             };
             /** @description Некорректные параметры или source TF младше chart TF */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getOutcomeStats: {
+        parameters: {
+            query: {
+                /** @description Прогоны движков */
+                run_id: number[];
+                /** @description Горизонты, баров */
+                horizon?: number[] | null;
+                unit?: "atr" | "pct";
+                group_by?: "none" | "group" | "direction" | "regime";
+                /** @description Тип паттерна/события */
+                group?: string[] | null;
+                direction?: ("bullish" | "bearish") | null;
+                /** @description confirmed, candidate, invalidated, touch, break */
+                final_state?: string[] | null;
+                include_candidates?: boolean;
+                false_breakout?: boolean | null;
+                quality_min?: number | null;
+                quality_max?: number | null;
+                trend?: string[] | null;
+                volatility?: string[] | null;
+                since?: string | null;
+                until?: string | null;
+                as_of?: string | null;
+                baseline?: boolean;
+                per_event?: number;
+                seed?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getOccurrenceOutcomes: {
+        parameters: {
+            query: {
+                run_id: number;
+                /** @description Ключ вхождения */
+                key: string;
+                /** @description Горизонты, баров */
+                horizon?: number[] | null;
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OccurrenceDetailOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
             422: {
                 headers: {
                     [name: string]: unknown;

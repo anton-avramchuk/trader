@@ -18,6 +18,7 @@ from trader_api.imports_api import router as imports_router
 from trader_api.indicators_api import router as indicators_router
 from trader_api.jobs import router as jobs_router
 from trader_api.profiles_api import router as profiles_router
+from trader_api.stats_api import router as stats_router
 from trader_api.zones_api import router as zones_router
 
 DbCheck = Callable[[], Awaitable[bool]]
@@ -101,6 +102,7 @@ def create_app(
     app.include_router(engines_router)
     app.include_router(fib_grids_router)
     app.include_router(zones_router)
+    app.include_router(stats_router)
 
     @app.get(
         "/health",
