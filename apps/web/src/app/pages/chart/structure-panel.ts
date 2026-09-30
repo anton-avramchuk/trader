@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
 import { MskPipe } from '../../core/time/msk';
 import { allowedSourceTimeframes } from './indicators';
+import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
+import { PatternGallery } from './pattern-gallery';
 import { LAYER_TITLES, LAYERS } from './structure';
 import { StructureStore } from './structure.store';
 
@@ -18,13 +20,22 @@ const COMPONENT_TITLES: Record<string, string> = {
   rejection: 'отбой, ATR',
   confluence: 'независимые источники рядом',
   age: 'возраст, баров',
+  precision: 'точность',
+  symmetry: 'симметрия',
+  height: 'высота',
+  duration: 'ширина',
 };
 const LEVELS_SHOWN = 8;
+const REASONS: Record<string, string> = {
+  broken: 'слом геометрии',
+  expired: 'истёк срок',
+  false_breakout: 'ложный пробой',
+};
 
 /** Слои структуры и уровней: переключатели, зоны по TF, детали уровня, ручная Fibonacci. */
 @Component({
   selector: 'app-structure-panel',
-  imports: [DecimalPipe, FormsModule, MskPipe, TuiButton],
+  imports: [DecimalPipe, FormsModule, MskPipe, PatternGallery, TuiButton],
   template: `
     <div class="layers" role="group" aria-label="Слои структуры">
       @for (layer of layers; track layer) {
@@ -109,6 +120,66 @@ const LEVELS_SHOWN = 8;
           }
         </ul>
       </div>
+    }
+
+    @if (store.layers().patterns) {
+      <div class="row">
+        <label class="check">
+          <input
+            type="checkbox"
+            [ngModel]="store.showCancelled()"
+            (ngModelChange)="store.setShowCancelled($event)"
+          />
+          Показывать отменённые
+        </label>
+        @if (!store.shownPatterns().length) {
+          <span class="hint">Паттернов на этом участке нет</span>
+        }
+      </div>
+      <div class="levels" role="list" aria-label="Паттерны">
+        @for (info of store.shownPatterns(); track info.key) {
+          <button
+            type="button"
+            role="listitem"
+            class="level"
+            [class.selected]="info.key === store.selectedPattern()"
+            [class.broken]="info.state === 'invalidated'"
+            (click)="store.selectPattern(info.key)"
+          >
+            {{ name(info) }} {{ info.direction === 'bullish' ? '↑' : '↓' }} ·
+            {{ stateTitle(info) }} · {{ info.score }}
+          </button>
+        }
+      </div>
+    }
+    @if (store.layers().patterns && store.selectedPatternInfo(); as info) {
+      <div class="details" role="region" aria-label="Детали паттерна">
+        <strong>{{ name(info) }}</strong>
+        ({{ short(info) }}) —
+        {{ info.direction === 'bullish' ? 'бычий' : 'медвежий' }},
+        {{ stateTitle(info) }}; замечен
+        {{ info.detectedAt | msk: 'datetime' }} МСК.
+        @if (info.target !== null) {
+          <div>
+            Цель: <strong>{{ info.target | number: '1.0-6' }}</strong
+            >, высота {{ info.height | number: '1.0-6' }}
+          </div>
+        }
+        <div>
+          Качество v1: <strong>{{ info.score }}</strong> из 100
+        </div>
+        <ul>
+          @for (item of components(info.components); track item.name) {
+            <li>{{ item.title }}: {{ item.value }}</li>
+          }
+          @for (point of info.points; track point.index) {
+            <li>{{ point.role }}: {{ point.price | number: '1.0-6' }}</li>
+          }
+        </ul>
+      </div>
+    }
+    @if (store.layers().patterns) {
+      <app-pattern-gallery />
     }
 
     @if (store.layers().fibonacci) {
@@ -243,6 +314,24 @@ export class StructurePanel {
         ? [...new Set([...current, timeframe])]
         : current.filter((tf) => tf !== timeframe),
     );
+  }
+
+  protected name(info: PatternInfo): string {
+    return PATTERN_TITLES[info.pattern] ?? info.pattern;
+  }
+
+  protected short(info: PatternInfo): string {
+    return shortName(info.pattern);
+  }
+
+  protected stateTitle(info: PatternInfo): string {
+    if (info.state === 'candidate') {
+      return 'кандидат';
+    }
+    if (info.state === 'confirmed') {
+      return 'подтверждён';
+    }
+    return `отменён (${REASONS[info.reason ?? ''] ?? info.reason ?? '—'})`;
   }
 
   protected components(

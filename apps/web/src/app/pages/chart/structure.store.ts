@@ -21,10 +21,18 @@ import {
   pivotSegments,
   structureMarkers,
   swingMarkers,
+  PATTERN_ENGINES,
   zigzagSegments,
   zoneRects,
 } from './structure';
 import { toChartTime } from './chart-data';
+import {
+  chartPatterns,
+  type PatternInfo,
+  patternInfos,
+  patternMarkers,
+  patternSegments,
+} from './pattern-layer';
 
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
 export interface StructureContext {
@@ -55,6 +63,9 @@ export class StructureStore {
   readonly zones = signal<LevelZone[]>([]);
   readonly manual = signal<FibGrid[]>([]);
   readonly selectedLevel = signal<number | null>(null);
+  /** Ключ выбранного паттерна (`движок:id`) и показ отменённых. */
+  readonly selectedPattern = signal<string | null>(null);
+  readonly showCancelled = signal(false);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   /** Режим рисования ручной сетки: первая и вторая точки. */
@@ -76,6 +87,24 @@ export class StructureStore {
     () => this.levels().find((l) => l.id === this.selectedLevel()) ?? null,
   );
 
+  /** Все вхождения паттернов (последнее состояние каждой цепочки). */
+  readonly patterns = computed<PatternInfo[]>(() =>
+    PATTERN_ENGINES.flatMap((engine) =>
+      patternInfos(engine, this.events()[engine] ?? []),
+    ),
+  );
+  /** Вхождения на графике и в списке: новые, без отменённых (если не просили). */
+  readonly shownPatterns = computed(() =>
+    chartPatterns(
+      this.patterns(),
+      this.showCancelled(),
+      this.selectedPattern(),
+    ),
+  );
+  readonly selectedPatternInfo = computed(
+    () => this.patterns().find((p) => p.key === this.selectedPattern()) ?? null,
+  );
+
   readonly overlay = computed<Overlay>(() => {
     const layers = this.layers();
     const events = this.events();
@@ -88,6 +117,7 @@ export class StructureStore {
       ...(layers.structure
         ? structureMarkers(events['market_structure'] ?? [])
         : []),
+      ...(layers.patterns ? patternMarkers(this.shownPatterns()) : []),
     ].sort((a, b) => a.time - b.time);
     return {
       markers,
@@ -97,6 +127,9 @@ export class StructureStore {
           ? levelSegments(this.levels(), this.selectedLevel())
           : []),
         ...(layers.pivot ? pivotSegments(events['pivot'] ?? []) : []),
+        ...(layers.patterns
+          ? patternSegments(this.shownPatterns(), this.selectedPattern())
+          : []),
         ...(layers.fibonacci
           ? [
               ...fibonacciSegments(events['fibonacci'] ?? []),
@@ -132,6 +165,14 @@ export class StructureStore {
   setZoneSources(timeframes: string[]): Promise<void> {
     this.zoneSources.set(timeframes);
     return this.refresh();
+  }
+
+  selectPattern(key: string | null): void {
+    this.selectedPattern.set(key === this.selectedPattern() ? null : key);
+  }
+
+  setShowCancelled(show: boolean): void {
+    this.showCancelled.set(show);
   }
 
   selectLevel(id: number | null): void {
@@ -185,7 +226,11 @@ export class StructureStore {
       await Promise.all(
         [...engines].map(async (engine) => {
           const runId = await this.ensureRun(engine, current.chartTimeframe);
-          events[engine] = await this.loadEvents(runId, current.asOf);
+          events[engine] = await this.loadEvents(
+            runId,
+            current.asOf,
+            PATTERN_ENGINES.includes(engine) ? 'history' : 'current',
+          );
         }),
       );
       const zones = layers.zones ? await this.loadZones(current) : [];
@@ -240,12 +285,16 @@ export class StructureStore {
     return runId;
   }
 
-  private loadEvents(runId: number, asOf?: string): Promise<EngineEvent[]> {
+  private loadEvents(
+    runId: number,
+    asOf: string | undefined,
+    view: 'history' | 'current',
+  ): Promise<EngineEvent[]> {
     return this.api.call(
       this.api.client.GET('/engine-runs/{run_id}/events', {
         params: {
           path: { run_id: runId },
-          query: { view: 'current', as_of: asOf },
+          query: { view, as_of: asOf },
         },
       }),
     );

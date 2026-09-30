@@ -220,4 +220,70 @@ describe('StructureStore', () => {
     store.selectLevel(3);
     expect(store.selectedLevel()).toBeNull();
   });
+
+  it('паттерны: история событий четырёх движков, выбор и показ отменённых', async () => {
+    const { store, client } = setup();
+    const pattern = (id: number, state: string, at: string): EngineEvent => ({
+      seq: id,
+      kind: 'pattern',
+      status: state === 'candidate' ? 'detected' : 'invalidated',
+      payload: {
+        id,
+        pattern: 'double_top',
+        direction: 'bearish',
+        state,
+        reason: state === 'invalidated' ? 'broken' : undefined,
+        end: at,
+        points: [{ role: 'top1', price: 10, ts: at, index: 1 }],
+        line: { p1: 9, p2: 9, t1: at, t2: at },
+        height: 1,
+        target: null,
+        features: {},
+        quality: { score: 50, components: {} },
+      },
+      detected_at: at,
+      confirmed_at: null,
+      available_at: at,
+      revises: null,
+    });
+    client.GET.mockImplementation((path: string) =>
+      ok(
+        path === '/engine-runs/{run_id}/events'
+          ? [
+              pattern(1, 'candidate', '2026-09-28T04:00:00Z'),
+              pattern(2, 'invalidated', '2026-09-28T05:00:00Z'),
+            ]
+          : [],
+      ),
+    );
+    await store.refresh(CONTEXT);
+
+    await store.setLayer('patterns', true);
+
+    const engines = calls(client.POST).map(([, r]) => r?.body?.params?.engine);
+    expect(engines.sort()).toEqual([
+      'double_triple',
+      'head_shoulders',
+      'range_breakout',
+      'trendlines',
+    ]);
+    const queries = calls(client.GET)
+      .filter(([path]) => path === '/engine-runs/{run_id}/events')
+      .map(([, r]) => r?.params?.query);
+    expect(queries.every((q) => q?.['view'] === 'history')).toBe(true);
+    expect(store.patterns()).toHaveLength(8); // по два в каждом из четырёх движков
+    expect(store.shownPatterns().every((p) => p.state !== 'invalidated')).toBe(
+      true,
+    );
+    expect(store.overlay().markers.length).toBeGreaterThan(0);
+
+    store.setShowCancelled(true);
+    expect(store.shownPatterns().some((p) => p.state === 'invalidated')).toBe(
+      true,
+    );
+    store.selectPattern('double_triple:1');
+    expect(store.selectedPatternInfo()?.id).toBe(1);
+    store.selectPattern('double_triple:1');
+    expect(store.selectedPattern()).toBeNull();
+  });
 });
