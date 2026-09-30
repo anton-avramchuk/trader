@@ -24,7 +24,7 @@ def pattern_events(values: list[float], **params: Any) -> tuple[list[Event], lis
 
 class TestPatternOccurrences:
     def test_confirmed_pattern_enters_at_confirmation_with_target(self) -> None:
-        events, bars = pattern_events([*DOUBLE, 99.0])
+        events, _ = pattern_events([*DOUBLE, 99.0])
 
         [top] = [
             o

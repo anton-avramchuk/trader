@@ -29,11 +29,20 @@ _SUPPORT, _RESISTANCE = "support", "resistance"
 class EventLike(Protocol):
     """Минимум от события: подходит и ``trader_engine.events.Event``, и строка лога."""
 
-    seq: int
-    kind: str
-    status: str
-    payload: dict[str, Any]
-    available_at: datetime
+    @property
+    def seq(self) -> int: ...
+
+    @property
+    def kind(self) -> str: ...
+
+    @property
+    def status(self) -> str: ...
+
+    @property
+    def payload(self) -> dict[str, Any]: ...
+
+    @property
+    def available_at(self) -> datetime: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +67,7 @@ class Occurrence:
     reason: str | None = None
     false_breakout: bool = False
     quality: float | None = None
-    meta: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict[str, Any])
 
 
 def pattern_occurrences(
@@ -129,7 +138,7 @@ def level_occurrences(engine: str, events: Iterable[EventLike]) -> list[Occurren
             direction = "bullish" if role == _RESISTANCE else "bearish"
         else:
             continue
-        strength = payload.get("strength") or {}
+        strength: dict[str, Any] = payload.get("strength") or {}
         found.append(
             Occurrence(
                 key=f"{engine}:{payload['id']}:{event.seq}",
