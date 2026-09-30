@@ -95,6 +95,10 @@ curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '
 
 Ролл происходит в начале торговой недели за N торговых дней до экспирации, склейка ratio (ADR-0019). События `roll_events` пересчитываются в конце задачи `aggregate.contract`; склеенные бары строятся при чтении (`trader_db.read_continuous`).
 
+## Что умеет API
+
+Справочники: `/roots`, `/roots/{id}/contracts`, `/calendars`. Контракты ISS: `POST /roots/{id}/iss-preview` (задача `dry_run`, результат — список для подтверждения), затем `POST /roots/{id}/contracts/from-iss`. Импорты: `POST /contracts/{id}/imports/iss|file`, файлы — `PUT /import-files/{name}` (тело — содержимое файла), пресеты — `/import-presets`, отчёты — `/imports`, конфликты — `/imports/{id}/conflicts` и `.../resolve`. Полный список — в Swagger.
+
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.

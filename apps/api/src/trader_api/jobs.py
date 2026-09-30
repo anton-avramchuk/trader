@@ -1,16 +1,13 @@
 """REST и WebSocket для очереди задач (ADR-0002)."""
 
 import asyncio
-from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import (
     APIRouter,
-    Depends,
     HTTPException,
     Query,
-    Request,
     WebSocket,
     WebSocketDisconnect,
 )
@@ -23,6 +20,8 @@ from trader_db import (
     list_jobs_statement,
 )
 from trader_db.models import Job
+
+from trader_api.deps import DbSession
 
 router = APIRouter(tags=["jobs"])
 
@@ -92,14 +91,6 @@ class JobOut(BaseModel):
     finished_at: datetime | None
 
 
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
-    async with request.app.state.sessions() as session:
-        yield session
-
-
-Session = Annotated[AsyncSession, Depends(get_session)]
-
-
 async def _find(session: AsyncSession, job_id: int) -> Job | None:
     return (await session.scalars(get_job_statement(job_id))).one_or_none()
 
@@ -114,7 +105,7 @@ async def _find(session: AsyncSession, job_id: int) -> Job | None:
         "Задачу подхватит worker; ход выполнения — `GET /jobs/{id}` или WebSocket."
     ),
 )
-async def create_job(body: JobCreate, session: Session) -> Job:
+async def create_job(body: JobCreate, session: DbSession) -> Job:
     job = (
         await session.scalars(
             enqueue_statement(body.type, body.params, max_attempts=body.max_attempts)
@@ -132,7 +123,7 @@ async def create_job(body: JobCreate, session: Session) -> Job:
     description="Новые задачи первыми; фильтры по статусу и типу.",
 )
 async def list_jobs(
-    session: Session,
+    session: DbSession,
     status: str | None = None,
     type: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -148,7 +139,7 @@ async def list_jobs(
     summary="Состояние задачи",
     responses=NOT_FOUND,
 )
-async def get_job(job_id: int, session: Session) -> Job:
+async def get_job(job_id: int, session: DbSession) -> Job:
     job = await _find(session, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -165,7 +156,7 @@ async def get_job(job_id: int, session: Session) -> Job:
     ),
     responses={**NOT_FOUND, 409: {"description": "Задача уже завершена"}},
 )
-async def cancel_job(job_id: int, session: Session) -> Job:
+async def cancel_job(job_id: int, session: DbSession) -> Job:
     if await _find(session, job_id) is None:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     job = (await session.scalars(cancel_statement(job_id))).one_or_none()
