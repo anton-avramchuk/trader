@@ -17,6 +17,7 @@ import {
   createSeriesMarkers,
   HistogramSeries,
   type IChartApi,
+  LineSeries,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
   type Time,
@@ -24,6 +25,7 @@ import {
 } from 'lightweight-charts';
 import { formatMsk } from '../../core/time/msk';
 import { rollMarkers, toChartData, toChartTime } from './chart-data';
+import type { ChartIndicator } from './indicators';
 
 /** Порог (в барах) у левого края, с которого просим более раннюю историю. */
 const LOAD_MORE_THRESHOLD = 30;
@@ -58,6 +60,8 @@ export class PriceChart {
   readonly datasetKey = input('');
   /** Держать правый край на последнем баре (режим replay). */
   readonly follow = input(false);
+  /** Индикаторы: оверлеи на цене и отдельные панели. */
+  readonly indicators = input<ChartIndicator[]>([]);
 
   /** Пользователь докрутил до левого края: нужна более ранняя история. */
   readonly needOlder = output<void>();
@@ -72,12 +76,19 @@ export class PriceChart {
   private markers: ISeriesMarkersPluginApi<Time> | null = null;
   private lastFirstTime: number | null = null;
   private lastKey: string | null = null;
+  private readonly indicatorSeries = new Map<
+    string,
+    ISeriesApi<'Line'> | ISeriesApi<'Histogram'>
+  >();
 
   constructor() {
     afterNextRender(() => this.create());
     inject(DestroyRef).onDestroy(() => this.chart?.remove());
     effect(() => {
       this.render(this.candles(), this.rolls(), this.labels());
+    });
+    effect(() => {
+      this.syncIndicators(this.indicators());
     });
   }
 
@@ -125,6 +136,67 @@ export class PriceChart {
       this.hover.emit(found ?? null);
     });
     this.render(this.candles(), this.rolls(), this.labels());
+    this.syncIndicators(this.indicators());
+  }
+
+  /** Приводит серии индикаторов на графике к заданному набору. */
+  private syncIndicators(indicators: ChartIndicator[]): void {
+    const chart = this.chart;
+    if (!chart) {
+      return;
+    }
+    const wanted = new Set<string>();
+    let separate = 0;
+    for (const indicator of indicators) {
+      const pane = indicator.pane === 'price' ? 0 : ++separate;
+      for (const line of indicator.lines) {
+        // Панель входит в ключ: при смене порядка панелей серия пересоздаётся.
+        const key = `${indicator.id}:${line.name}:${pane}`;
+        wanted.add(key);
+        let series = this.indicatorSeries.get(key);
+        if (!series) {
+          series =
+            line.kind === 'histogram'
+              ? chart.addSeries(
+                  HistogramSeries,
+                  {
+                    color: line.color,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                  },
+                  pane,
+                )
+              : chart.addSeries(
+                  LineSeries,
+                  {
+                    color: line.color,
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                    title:
+                      line.name === 'value'
+                        ? indicator.title
+                        : `${indicator.title} ${line.name}`,
+                  },
+                  pane,
+                );
+          this.indicatorSeries.set(key, series);
+        }
+        series.setData(
+          line.data.map((p) =>
+            p.value === null
+              ? { time: asTime(p.time) }
+              : { time: asTime(p.time), value: p.value },
+          ),
+        );
+      }
+    }
+    for (const [key, series] of this.indicatorSeries) {
+      if (!wanted.has(key)) {
+        chart.removeSeries(series);
+        this.indicatorSeries.delete(key);
+      }
+    }
   }
 
   private render(

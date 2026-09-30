@@ -1,8 +1,18 @@
-import { Component, computed, inject, OnInit } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnDestroy,
+  OnInit,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TuiButton, TuiInput } from '@taiga-ui/core';
 import { MskPipe } from '../../core/time/msk';
 import { describeBar } from '../chart/chart-data';
+import { IndicatorPanel } from '../chart/indicator-panel';
+import { IndicatorsStore } from '../chart/indicators.store';
 import { PriceChart } from '../chart/price-chart';
 import {
   REPLAY_TIMEFRAMES,
@@ -11,11 +21,20 @@ import {
   SPEEDS,
 } from './replay.store';
 
+const REFRESH_DELAY_MS = 250;
+
 /** Visual replay: по одной свече или ускоренно; будущее скрыто, видно только известное на момент. */
 @Component({
   selector: 'app-replay',
-  imports: [FormsModule, MskPipe, PriceChart, TuiButton, TuiInput],
-  providers: [ReplayStore],
+  imports: [
+    FormsModule,
+    IndicatorPanel,
+    MskPipe,
+    PriceChart,
+    TuiButton,
+    TuiInput,
+  ],
+  providers: [ReplayStore, IndicatorsStore],
   template: `
     <h1>Replay</h1>
 
@@ -170,6 +189,8 @@ import {
       </label>
     </div>
 
+    <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+
     <p class="known" aria-live="polite">
       @if (store.asOf(); as t) {
         <strong>Система знает на {{ t | msk: 'full' }} МСК:</strong>
@@ -192,6 +213,7 @@ import {
         [labels]="store.labels()"
         [datasetKey]="store.datasetKey()"
         [follow]="true"
+        [indicators]="indicators.series()"
       />
     </div>
 
@@ -252,8 +274,10 @@ import {
     }
   `,
 })
-export class Replay implements OnInit {
+export class Replay implements OnInit, OnDestroy {
   protected readonly store = inject(ReplayStore);
+  protected readonly indicators = inject(IndicatorsStore);
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly timeframes: readonly ReplayTimeframe[] = REPLAY_TIMEFRAMES;
   protected readonly speeds = SPEEDS;
   protected date = '';
@@ -270,8 +294,45 @@ export class Replay implements OnInit {
     return candle ? describeBar(candle, this.store.labels()) : '';
   });
 
+  constructor() {
+    // Индикаторы считаются «на момент знания» (as_of) — без заглядывания в будущее;
+    // при быстром воспроизведении запросы склеиваются (последний выигрывает).
+    effect(() => {
+      const asOf = this.store.asOf();
+      const first = this.store.visible()[0];
+      const target = this.store.target();
+      const rootId = this.store.rootId();
+      const timeframe = this.store.timeframe();
+      if (!asOf || !first || rootId === null) {
+        return;
+      }
+      untracked(() => {
+        if (this.refreshTimer !== null) {
+          clearTimeout(this.refreshTimer);
+        }
+        this.refreshTimer = setTimeout(() => {
+          void this.indicators.refresh({
+            ...(target.kind === 'contract'
+              ? { contract_id: target.id }
+              : { root_id: rootId }),
+            chartTimeframe: timeframe,
+            start: first.timestamp,
+            asOf,
+          });
+        }, REFRESH_DELAY_MS);
+      });
+    });
+  }
+
   ngOnInit(): void {
     void this.store.loadRoots();
+    void this.indicators.loadCatalog();
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer !== null) {
+      clearTimeout(this.refreshTimer);
+    }
   }
 
   protected onTarget(key: string): void {

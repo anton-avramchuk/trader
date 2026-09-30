@@ -16,11 +16,13 @@ vi.mock('lightweight-charts', () => {
   return {
     CandlestickSeries: 'candles',
     HistogramSeries: 'volume',
+    LineSeries: 'line',
     createChart: vi.fn(() => ({
       addSeries: vi.fn(() => series),
       priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
       timeScale: vi.fn(() => timeScale),
       subscribeCrosshairMove: vi.fn(),
+      removeSeries: vi.fn(),
       remove: vi.fn(),
     })),
     createSeriesMarkers: vi.fn(() => ({ setMarkers: vi.fn() })),
@@ -40,6 +42,9 @@ describe('Chart', () => {
   function setup() {
     const client = {
       GET: vi.fn((path: string) => {
+        if (path === '/indicators') {
+          return ok([]);
+        }
         if (path === '/roots') {
           return ok([{ id: 1, code: 'NG', name: 'Gas' }]);
         }

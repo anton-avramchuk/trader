@@ -1,0 +1,158 @@
+import { Component, signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideTaiga } from '@taiga-ui/core';
+import { provideEventPlugins } from '@taiga-ui/event-plugins';
+import { API_CLIENT } from '../../core/api/api';
+import { IndicatorPanel } from './indicator-panel';
+import { IndicatorsStore } from './indicators.store';
+
+const ok = <T>(data: T) => Promise.resolve({ data, response: { status: 200 } });
+
+const CATALOG = [
+  {
+    name: 'ema',
+    title: 'EMA — экспоненциальная скользящая средняя',
+    version: 1,
+    pane: 'price',
+    outputs: ['value'],
+    warmup_bars: 20,
+    params_schema: {
+      properties: {
+        period: { type: 'integer', minimum: 1, description: 'Период, баров' },
+      },
+    },
+    defaults: { period: 20 },
+  },
+];
+
+@Component({
+  imports: [IndicatorPanel],
+  providers: [IndicatorsStore],
+  template: `<app-indicator-panel [chartTimeframe]="tf()" />`,
+})
+class Host {
+  tf = signal('15m');
+}
+
+async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
+  for (let i = 0; i < 4; i++) {
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+  }
+}
+
+describe('IndicatorPanel', () => {
+  async function mount() {
+    const client = {
+      GET: vi.fn((path: string) => {
+        if (path === '/indicators') {
+          return ok(CATALOG);
+        }
+        return Promise.resolve({
+          error: { detail: 'нет данных' },
+          response: { status: 404 },
+        });
+      }),
+    };
+    TestBed.configureTestingModule({
+      imports: [Host],
+      providers: [
+        provideEventPlugins(),
+        provideTaiga(),
+        { provide: API_CLIENT, useValue: client },
+      ],
+    });
+    const fixture = TestBed.createComponent(Host);
+    fixture.detectChanges();
+    const store =
+      fixture.debugElement.children[0].injector.get(IndicatorsStore);
+    await store.loadCatalog();
+    await settle(fixture);
+    return { fixture, store, root: fixture.nativeElement as HTMLElement };
+  }
+
+  function select(root: HTMLElement, label: string): HTMLSelectElement {
+    return root.querySelector(
+      `select[aria-label="${label}"]`,
+    ) as HTMLSelectElement;
+  }
+
+  it('после выбора типа показывает форму параметров и source TF не младше графика', async () => {
+    const { fixture, root } = await mount();
+
+    const type = select(root, 'Тип индикатора');
+    type.value = 'ema';
+    type.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    expect(root.textContent).toContain('Период, баров');
+    const period = root.querySelector(
+      'input[type="number"]',
+    ) as HTMLInputElement;
+    expect(period.value).toBe('20');
+    const options = Array.from(select(root, 'Source TF').options).map(
+      (o) => o.value,
+    );
+    expect(options).toEqual(['15m', '1h', '4h', '1d', '1w']);
+  });
+
+  it('на старшем графике младшие source TF недоступны', async () => {
+    const { fixture, root } = await mount();
+    fixture.componentInstance.tf.set('4h');
+    fixture.detectChanges();
+    const type = select(root, 'Тип индикатора');
+    type.value = 'ema';
+    type.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    const options = Array.from(select(root, 'Source TF').options).map(
+      (o) => o.value,
+    );
+
+    expect(options).toEqual(['4h', '1d', '1w']);
+  });
+
+  it('«Добавить» кладёт индикатор с введёнными параметрами и source TF', async () => {
+    const { fixture, store, root } = await mount();
+    const type = select(root, 'Тип индикатора');
+    type.value = 'ema';
+    type.dispatchEvent(new Event('change'));
+    await settle(fixture);
+    const period = root.querySelector(
+      'input[type="number"]',
+    ) as HTMLInputElement;
+    period.value = '200';
+    period.dispatchEvent(new Event('input'));
+    const source = select(root, 'Source TF');
+    source.value = '1h';
+    source.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    (
+      Array.from(root.querySelectorAll('button')).find(
+        (b) => b.textContent?.trim() === 'Добавить',
+      ) as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+
+    expect(store.active()).toHaveLength(1);
+    expect(store.active()[0]).toMatchObject({
+      name: 'ema',
+      params: { period: 200 },
+      sourceTimeframe: '1h',
+    });
+    expect(root.textContent).toContain('EMA(200) · 1h');
+  });
+
+  it('крестик убирает индикатор', async () => {
+    const { fixture, store, root } = await mount();
+    await store.add(CATALOG[0] as never, { period: 50 }, '15m');
+    await settle(fixture);
+
+    (root.querySelector('button.remove') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(store.active()).toEqual([]);
+    expect(root.querySelector('.chip')).toBeNull();
+  });
+});
