@@ -5,6 +5,7 @@
 или WebSocket.
 """
 
+import codecs
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -364,6 +365,72 @@ async def upload_import_file(
     finally:
         partial.unlink(missing_ok=True)
     return _file_out(target)
+
+
+class FilePreview(BaseModel):
+    name: str
+    size: int
+    encoding: str
+    lines: list[str] = Field(description="Первые строки файла как текст")
+    delimiter: str | None = Field(
+        description="Предполагаемый разделитель CSV (`,` `;` таб `|`) или null"
+    )
+
+
+def _guess_delimiter(lines: list[str]) -> str | None:
+    sample = next((line for line in lines if line.strip()), "")
+    counts = {d: sample.count(d) for d in (",", ";", "\t", "|")}
+    best = max(counts, key=lambda d: counts[d])
+    return best if counts[best] else None
+
+
+@router.get(
+    "/import-files/{name}/preview",
+    response_model=FilePreview,
+    tags=["files"],
+    operation_id="previewImportFile",
+    summary="Первые строки загруженного файла",
+    description=(
+        "Для настройки маппинга колонок. Только текстовые форматы (CSV, JSON); "
+        "кодировка задаётся параметром `encoding`."
+    ),
+    responses={**NOT_FOUND, 422: {"description": "Нельзя прочитать как текст"}},
+)
+async def preview_import_file(
+    name: str,
+    settings: Settings,
+    encoding: str = Query(default="utf-8-sig", max_length=32),
+    lines: int = Query(default=20, ge=1, le=200),
+) -> FilePreview:
+    target = _safe_path(settings.import_dir, name)
+    if not target.is_file():
+        raise HTTPException(404, "Файл не найден")
+    try:
+        codecs.lookup(encoding)
+    except LookupError as error:
+        raise HTTPException(422, f"Неизвестная кодировка {encoding!r}") from error
+    if target.suffix.lower() == ".parquet":
+        raise HTTPException(422, "Предпросмотр доступен только для текстовых файлов")
+    head: list[str] = []
+    try:
+        with target.open("r", encoding=encoding, newline="") as handle:
+            for line in handle:
+                head.append(line.rstrip("\r\n")[:2000])
+                if len(head) >= lines:
+                    break
+    except UnicodeDecodeError as error:
+        raise HTTPException(
+            422,
+            f"Файл не читается в кодировке {encoding}: {error.reason}. "
+            "Попробуйте cp1251.",
+        ) from error
+    return FilePreview(
+        name=target.name,
+        size=target.stat().st_size,
+        encoding=encoding,
+        lines=head,
+        delimiter=_guess_delimiter(head),
+    )
 
 
 @router.delete(
