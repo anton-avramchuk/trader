@@ -12,6 +12,7 @@ from trader_engine.events.head_shoulders import HeadShoulders  # noqa: E402
 from trader_engine.events.levels import Levels  # noqa: E402
 from trader_engine.events.patterns import PatternBase, PatternParams
 from trader_engine.events.pivot import Pivot  # noqa: E402
+from trader_engine.events.ranges import RangeBreakout  # noqa: E402
 from trader_engine.events.registry import (
     available,
     create,
@@ -40,6 +41,7 @@ __all__ = [
     "MarketStructure",
     "PatternBase",
     "PatternParams",
+    "RangeBreakout",
     "Pivot",
     "Trendlines",
     "ZigZag",
