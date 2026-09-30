@@ -16,6 +16,8 @@ import { ProfileBar } from '../chart/profile-bar';
 import { ProfilesStore } from '../chart/profiles.store';
 import { IndicatorsStore } from '../chart/indicators.store';
 import { PriceChart } from '../chart/price-chart';
+import { StructurePanel } from '../chart/structure-panel';
+import { StructureStore } from '../chart/structure.store';
 import {
   REPLAY_TIMEFRAMES,
   type ReplayTimeframe,
@@ -34,10 +36,11 @@ const REFRESH_DELAY_MS = 250;
     MskPipe,
     PriceChart,
     ProfileBar,
+    StructurePanel,
     TuiButton,
     TuiInput,
   ],
-  providers: [ReplayStore, IndicatorsStore, ProfilesStore],
+  providers: [ReplayStore, IndicatorsStore, ProfilesStore, StructureStore],
   template: `
     <h1>Replay</h1>
 
@@ -198,6 +201,7 @@ const REFRESH_DELAY_MS = 250;
       (timeframeRequested)="onProfileTimeframe($event)"
     />
     <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+    <app-structure-panel [chartTimeframe]="store.timeframe()" />
 
     <p class="known" aria-live="polite">
       @if (store.asOf(); as t) {
@@ -222,6 +226,7 @@ const REFRESH_DELAY_MS = 250;
         [datasetKey]="store.datasetKey()"
         [follow]="true"
         [indicators]="indicators.series()"
+        [overlay]="structure.overlay()"
       />
     </div>
 
@@ -285,6 +290,7 @@ const REFRESH_DELAY_MS = 250;
 export class Replay implements OnInit, OnDestroy {
   protected readonly store = inject(ReplayStore);
   protected readonly indicators = inject(IndicatorsStore);
+  protected readonly structure = inject(StructureStore);
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly timeframes: readonly ReplayTimeframe[] = REPLAY_TIMEFRAMES;
   protected readonly speeds = SPEEDS;
@@ -319,12 +325,19 @@ export class Replay implements OnInit, OnDestroy {
           clearTimeout(this.refreshTimer);
         }
         this.refreshTimer = setTimeout(() => {
-          void this.indicators.refresh({
-            ...(target.kind === 'contract'
+          const series =
+            target.kind === 'contract'
               ? { contract_id: target.id }
-              : { root_id: rootId }),
+              : { root_id: rootId };
+          void this.indicators.refresh({
+            ...series,
             chartTimeframe: timeframe,
             start: first.timestamp,
+            asOf,
+          });
+          void this.structure.refresh({
+            ...series,
+            chartTimeframe: timeframe,
             asOf,
           });
         }, REFRESH_DELAY_MS);

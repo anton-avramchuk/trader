@@ -45,6 +45,7 @@ class ZoneMember(BaseModel):
     role: str
     strength: float
     source_timeframe: str
+    created_at: str = Field(description="Когда уровень появился (ISO)")
     distance_atr: float = Field(description="Расстояние до центра зоны в ATR")
 
 
@@ -92,6 +93,7 @@ def _zone_out(zone: Zone, atr: float) -> ZoneOut:
                 role=m.role,
                 strength=m.score,
                 source_timeframe=m.source_timeframe,
+                created_at=m.created_at,
                 distance_atr=abs(m.price - zone.center) / atr,
             )
             for m in zone.members

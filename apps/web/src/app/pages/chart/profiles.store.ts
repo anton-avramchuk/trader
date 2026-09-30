@@ -2,6 +2,8 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import type { ChartProfile, ProfileConfig } from '@trader/api-client';
 import { ApiService } from '../../core/api/api';
 import { IndicatorsStore } from './indicators.store';
+import { LAYERS, profileKey } from './structure';
+import { StructureStore } from './structure.store';
 
 export type ProfileScope = 'global' | 'root';
 
@@ -10,6 +12,7 @@ export type ProfileScope = 'global' | 'root';
 export class ProfilesStore {
   private readonly api = inject(ApiService);
   private readonly indicators = inject(IndicatorsStore);
+  private readonly structure = inject(StructureStore, { optional: true });
 
   readonly profiles = signal<ChartProfile[]>([]);
   readonly selectedId = signal<number | null>(null);
@@ -77,6 +80,14 @@ export class ProfilesStore {
       })),
       titles,
     );
+    const saved = profile.config.layers ?? {};
+    if (this.structure && LAYERS.some((layer) => profileKey(layer) in saved)) {
+      await this.structure.setLayers(
+        Object.fromEntries(
+          LAYERS.map((layer) => [layer, saved[profileKey(layer)] === true]),
+        ),
+      );
+    }
     await this.api.call(
       this.api.client.POST('/chart-profiles/{profile_id}/use', {
         params: { path: { profile_id: profileId } },
@@ -86,6 +97,7 @@ export class ProfilesStore {
 
   /** Конфигурация из текущего набора индикаторов графика. */
   currentConfig(chartTimeframe: string): ProfileConfig {
+    const structure = this.structure;
     return {
       chart_timeframe: chartTimeframe,
       indicators: this.indicators.active().map((i) => ({
@@ -93,7 +105,14 @@ export class ProfilesStore {
         params: i.params,
         source_timeframe: i.sourceTimeframe,
       })),
-      layers: {},
+      layers: structure
+        ? Object.fromEntries(
+            LAYERS.map((layer) => [
+              profileKey(layer),
+              structure.layers()[layer],
+            ]),
+          )
+        : {},
       style: {},
     };
   }

@@ -3,6 +3,7 @@ import type { ChartProfile, IndicatorInfo } from '@trader/api-client';
 import { API_CLIENT } from '../../core/api/api';
 import { IndicatorsStore } from './indicators.store';
 import { ProfilesStore } from './profiles.store';
+import { StructureStore } from './structure.store';
 
 const ok = <T>(data: T) => Promise.resolve({ data, response: { status: 200 } });
 
@@ -41,7 +42,7 @@ function profile(
   };
 }
 
-function setup(initial: ChartProfile[]) {
+function setup(initial: ChartProfile[], withStructure = false) {
   let stored = [...initial];
   const client = {
     GET: vi.fn((path: string) => {
@@ -66,6 +67,7 @@ function setup(initial: ChartProfile[]) {
     providers: [
       IndicatorsStore,
       ProfilesStore,
+      ...(withStructure ? [StructureStore] : []),
       { provide: API_CLIENT, useValue: client },
     ],
   });
@@ -231,5 +233,48 @@ describe('ProfilesStore', () => {
 
     expect(client.PATCH).not.toHaveBeenCalled();
     expect(client.DELETE).not.toHaveBeenCalled();
+  });
+
+  describe('слои структуры', () => {
+    it('в профиль сохраняются включённые слои, при применении — восстанавливаются', async () => {
+      const { store, client } = setup(
+        [
+          profile(1, 'A', {
+            config: {
+              chart_timeframe: '15m',
+              indicators: [],
+              layers: { 'structure.levels': true, 'structure.pivot': false },
+              style: {},
+            },
+          }),
+        ],
+        true,
+      );
+      const structure = TestBed.inject(StructureStore);
+      await store.load(7);
+
+      await store.apply(1);
+
+      expect(structure.layers().levels).toBe(true);
+      expect(structure.layers().pivot).toBe(false);
+      expect(structure.layers().swings).toBe(false);
+      await store.saveCurrent('15m');
+      const patch = calls(client.PATCH).at(-1)?.[1]?.body as {
+        config: { layers: Record<string, boolean> };
+      };
+      expect(patch.config.layers['structure.levels']).toBe(true);
+      expect(Object.keys(patch.config.layers)).toHaveLength(7);
+    });
+
+    it('профиль без ключей структуры слои не трогает', async () => {
+      const { store } = setup([profile(1, 'A')], true);
+      const structure = TestBed.inject(StructureStore);
+      await structure.setLayer('zones', true);
+      await store.load(7);
+
+      await store.apply(1);
+
+      expect(structure.layers().zones).toBe(true);
+    });
   });
 });

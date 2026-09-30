@@ -2,11 +2,16 @@ import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { Candle, Roll } from '@trader/api-client';
 import type { ChartIndicator } from './indicators';
+import { EMPTY_OVERLAY, type Overlay } from './structure';
 import { PriceChart } from './price-chart';
 
 // jsdom не умеет canvas: подменяем библиотеку и проверяем, что обёртка с ней делает.
 const lib = vi.hoisted(() => {
-  const candleSeries = { setData: vi.fn() };
+  const candleSeries = {
+    setData: vi.fn(),
+    attachPrimitive: vi.fn(),
+    coordinateToPrice: vi.fn(() => 123.5),
+  };
   const volumeSeries = { setData: vi.fn() };
   const markers = { setMarkers: vi.fn() };
   const timeScale = {
@@ -30,6 +35,7 @@ const lib = vi.hoisted(() => {
     priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
     timeScale: vi.fn(() => timeScale),
     subscribeCrosshairMove: vi.fn(),
+    subscribeClick: vi.fn(),
     removeSeries: vi.fn(),
     remove: vi.fn(),
   };
@@ -66,6 +72,8 @@ function candle(timestamp: string): Candle {
     [labels]="labels"
     [datasetKey]="key"
     [indicators]="indicators()"
+    [overlay]="overlay()"
+    (pointPicked)="picked = $event"
     (needOlder)="older = older + 1"
     (hover)="hovered = $event"
   />`,
@@ -77,6 +85,8 @@ class Host {
   ];
   rolls = signal<Roll[]>([]);
   indicators = signal<ChartIndicator[]>([]);
+  overlay = signal<Overlay>(EMPTY_OVERLAY);
+  picked: { time: number; price: number } | undefined;
   labels = { 1: 'A', 2: 'B' };
   key = 'a';
   older = 0;
@@ -133,6 +143,47 @@ describe('PriceChart', () => {
     }[];
     expect(markers).toHaveLength(1);
     expect(markers[0].text).toContain('Ролл A→B');
+  });
+
+  it('слои структуры: маркеры сливаются с роллами по времени, примитив подключён', async () => {
+    const fixture = await mount();
+    fixture.componentInstance.overlay.set({
+      markers: [
+        {
+          time: Date.UTC(2026, 8, 28, 4, 15) / 1000,
+          position: 'aboveBar',
+          shape: 'arrowDown',
+          color: '#f00',
+          text: 'HH',
+        },
+      ],
+      segments: [],
+      zones: [],
+    });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(lib.candleSeries.attachPrimitive).toHaveBeenCalledTimes(1);
+    const markers = lib.markers.setMarkers.mock.calls.at(-1)?.[0] as {
+      text: string;
+    }[];
+    expect(markers.map((m) => m.text)).toEqual(['HH']);
+  });
+
+  it('клик по графику сообщает время бара и цену', async () => {
+    const fixture = await mount();
+    const [listener] = lib.chart.subscribeClick.mock.calls[0] as [
+      (param: { time?: number; point?: { x: number; y: number } }) => void,
+    ];
+
+    listener({});
+    listener({ time: 1000, point: { x: 5, y: 7 } });
+
+    expect(fixture.componentInstance.picked).toEqual({
+      time: 1000,
+      price: 123.5,
+    });
   });
 
   it('у левого края просит более раннюю историю', async () => {
