@@ -7,11 +7,8 @@ export const appRoutes: Route[] = [
   { path: '', pathMatch: 'full', redirectTo: 'data/instruments' },
   {
     path: 'data/instruments',
-    loadComponent: placeholder,
-    data: {
-      title: 'Instruments',
-      note: 'Базовые активы, календарь и контракты.',
-    },
+    loadComponent: () =>
+      import('./pages/instruments/instruments').then((m) => m.Instruments),
   },
   {
     path: 'data/import',

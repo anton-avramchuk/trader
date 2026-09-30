@@ -102,6 +102,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendars/{code}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Праздники и особые дни календаря */
+        get: operations["getCalendarDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/roots": {
         parameters: {
             query?: never;
@@ -508,6 +525,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CalendarDays */
+        CalendarDays: {
+            /**
+             * Holidays
+             * @description Будние дни без торгов
+             */
+            holidays: string[];
+            /**
+             * Special Days
+             * @description Выходные, торгуемые как обычный день (рабочие субботы-переносы)
+             */
+            special_days: string[];
+        };
         /** CalendarDetail */
         CalendarDetail: {
             /** Code */
@@ -777,7 +807,7 @@ export interface components {
              * Allow Non Positive Prices
              * @default false
              */
-            allow_non_positive_prices: boolean;
+            allow_non_positive_prices?: boolean;
         };
         /**
          * FileMapping
@@ -788,33 +818,33 @@ export interface components {
              * Delimiter
              * @default ,
              */
-            delimiter: string;
+            delimiter?: string;
             /**
              * Has Header
              * @default true
              */
-            has_header: boolean;
+            has_header?: boolean;
             /**
              * Encoding
              * @default utf-8-sig
              */
-            encoding: string;
+            encoding?: string;
             /**
              * Skip Rows
              * @default 0
              */
-            skip_rows: number;
+            skip_rows?: number;
             /**
              * Decimal Separator
              * @default .
              * @enum {string}
              */
-            decimal_separator: "." | ",";
+            decimal_separator?: "." | ",";
             /**
              * Timezone
              * @default Europe/Moscow
              */
-            timezone: string;
+            timezone?: string;
             datetime: components["schemas"]["DatetimeSpec"];
             /** Open */
             open: string | number;
@@ -834,7 +864,7 @@ export interface components {
              * Timestamp Is Close
              * @default false
              */
-            timestamp_is_close: boolean;
+            timestamp_is_close?: boolean;
         };
         /** FileOut */
         FileOut: {
@@ -929,7 +959,7 @@ export interface components {
              * @description Сразу поставить загрузку истории каждого контракта
              * @default true
              */
-            enqueue_imports: boolean;
+            enqueue_imports?: boolean;
         };
         /** IssContractsOut */
         IssContractsOut: {
@@ -962,7 +992,7 @@ export interface components {
              * From Year
              * @default 2020
              */
-            from_year: number;
+            from_year?: number;
             /** To Year */
             to_year?: number | null;
             /**
@@ -1007,7 +1037,7 @@ export interface components {
              * @description Сколько раз повторять при сбое worker'а.
              * @default 3
              */
-            max_attempts: number;
+            max_attempts?: number;
         };
         /**
          * JobOut
@@ -1145,7 +1175,7 @@ export interface components {
              * Exchange
              * @default MOEX
              */
-            exchange: string;
+            exchange?: string;
             /**
              * Quote Currency
              * @example USD
@@ -1157,19 +1187,19 @@ export interface components {
              * Calendar Code
              * @default moex_forts
              */
-            calendar_code: string;
+            calendar_code?: string;
             /**
              * Roll Trading Days
              * @description Ролл за N торговых дней до экспирации
              * @default 5
              */
-            roll_trading_days: number;
+            roll_trading_days?: number;
             /**
              * Include Weekend Sessions
              * @description Включать выходные сессии в continuous-серию
              * @default false
              */
-            include_weekend_sessions: boolean;
+            include_weekend_sessions?: boolean;
         };
         /** RootOut */
         RootOut: {
@@ -1423,6 +1453,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarDetail"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getCalendarDays: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarDays"];
                 };
             };
             /** @description Не найдено */

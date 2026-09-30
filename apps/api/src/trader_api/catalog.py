@@ -164,6 +164,40 @@ async def get_calendar(code: str, session: DbSession) -> CalendarDetail:
     )
 
 
+class CalendarDays(BaseModel):
+    holidays: list[date] = Field(description="Будние дни без торгов")
+    special_days: list[date] = Field(
+        description="Выходные, торгуемые как обычный день (рабочие субботы-переносы)"
+    )
+
+
+@router.get(
+    "/calendars/{code}/days",
+    response_model=CalendarDays,
+    tags=["calendars"],
+    operation_id="getCalendarDays",
+    summary="Праздники и особые дни календаря",
+    responses=NOT_FOUND,
+)
+async def get_calendar_days(code: str, session: DbSession) -> CalendarDays:
+    calendar_id = await session.scalar(
+        select(TradingCalendar.id).where(TradingCalendar.code == code)
+    )
+    if calendar_id is None:
+        raise HTTPException(404, "Календарь не найден")
+    holidays = await session.scalars(
+        select(CalendarHoliday.date)
+        .where(CalendarHoliday.calendar_id == calendar_id)
+        .order_by(CalendarHoliday.date)
+    )
+    special = await session.scalars(
+        select(CalendarSpecialDay.date)
+        .where(CalendarSpecialDay.calendar_id == calendar_id)
+        .order_by(CalendarSpecialDay.date)
+    )
+    return CalendarDays(holidays=list(holidays), special_days=list(special))
+
+
 # --- root --------------------------------------------------------------------
 
 

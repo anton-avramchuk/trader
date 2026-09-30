@@ -1,0 +1,85 @@
+.roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.card {
+  margin-bottom: 1.5rem;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+
+dt {
+  opacity: 0.6;
+}
+
+dd {
+  margin: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.table th,
+.table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--tui-border-normal);
+  vertical-align: top;
+}
+
+.empty {
+  opacity: 0.6;
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.tag {
+  display: inline-block;
+  margin-inline-end: 0.5rem;
+  padding: 0 0.4rem;
+  border-radius: 0.25rem;
+  background: var(--tui-background-neutral-1);
+  font-size: 0.8rem;
+}
+
+.check {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.error {
+  color: var(--tui-text-negative);
+}
+
+.hint,
+.status {
+  opacity: 0.7;
+  font-size: 0.875rem;
+}
+
+.days {
+  max-width: 60rem;
+  line-height: 1.6;
+}
