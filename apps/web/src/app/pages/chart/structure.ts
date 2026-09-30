@@ -10,6 +10,7 @@ export const LAYERS = [
   'zones',
   'pivot',
   'fibonacci',
+  'patterns',
 ] as const;
 export type LayerKey = (typeof LAYERS)[number];
 
@@ -21,7 +22,16 @@ export const LAYER_TITLES: Record<LayerKey, string> = {
   zones: 'Confluence-зоны',
   pivot: 'Pivot',
   fibonacci: 'Fibonacci',
+  patterns: 'Паттерны',
 };
+
+/** Движки паттернов (ADR-0022): у каждого своя нумерация вхождений. */
+export const PATTERN_ENGINES = [
+  'double_triple',
+  'head_shoulders',
+  'trendlines',
+  'range_breakout',
+];
 
 /** Движки, которые нужны слою (имя из каталога `GET /engines`). */
 export const LAYER_ENGINES: Record<LayerKey, string[]> = {
@@ -32,6 +42,7 @@ export const LAYER_ENGINES: Record<LayerKey, string[]> = {
   zones: ['levels'],
   pivot: ['pivot'],
   fibonacci: ['fibonacci'],
+  patterns: PATTERN_ENGINES,
 };
 
 export type LayerState = Record<LayerKey, boolean>;
@@ -45,8 +56,8 @@ export const profileKey = (layer: LayerKey): string => `structure.${layer}`;
 
 export const UP = '#26a69a';
 export const DOWN = '#ef5350';
-const NEUTRAL = '#9e9e9e';
-const GOLD = '#f9a825';
+export const NEUTRAL = '#9e9e9e';
+export const GOLD = '#f9a825';
 const BLUE = '#42a5f5';
 const PURPLE = '#ab47bc';
 

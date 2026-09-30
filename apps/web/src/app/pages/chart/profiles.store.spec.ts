@@ -263,7 +263,7 @@ describe('ProfilesStore', () => {
         config: { layers: Record<string, boolean> };
       };
       expect(patch.config.layers['structure.levels']).toBe(true);
-      expect(Object.keys(patch.config.layers)).toHaveLength(7);
+      expect(Object.keys(patch.config.layers)).toHaveLength(8);
     });
 
     it('профиль без ключей структуры слои не трогает', async () => {
