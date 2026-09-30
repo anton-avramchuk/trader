@@ -34,4 +34,6 @@ export type StepPrice = components['schemas']['StepPriceOut'];
 export type IndicatorInfo = components['schemas']['IndicatorInfo'];
 export type IndicatorPoint = components['schemas']['IndicatorPoint'];
 export type IndicatorValues = components['schemas']['IndicatorValuesOut'];
+export type ChartProfile = components['schemas']['ProfileOut'];
+export type ProfileConfig = components['schemas']['ProfileConfig'];
 export type Timeframe = '1m' | '15m' | '1h' | '4h' | '1d' | '1w';

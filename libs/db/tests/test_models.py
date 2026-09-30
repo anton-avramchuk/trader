@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "derived_candles",
     "derived_builds",
     "roll_events",
+    "chart_profiles",
 }
 
 
