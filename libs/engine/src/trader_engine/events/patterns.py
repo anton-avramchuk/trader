@@ -136,6 +136,9 @@ class PatternBase(EventEngine):
         atr = self.atr
         if atr is None or atr <= 0 or height < p.min_height_atr * atr:
             return None
+        indexes = [pt["index"] for pt in points]
+        if any(a >= b for a, b in zip(indexes, indexes[1:], strict=False)):
+            return None  # максимум и минимум на одном баре — геометрия вырождена
         key = [pattern, direction, *[pt["index"] for pt in points]]
         if any(occ["key"] == key for occ in self._live):
             return None

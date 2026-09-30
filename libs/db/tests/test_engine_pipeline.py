@@ -19,6 +19,28 @@ CONFIGS: list[tuple[str, dict[str, Any]]] = [
     ("pivot", {}),
     ("fibonacci", {"atr_period": 3, "atr_mult": 1.0}),
     ("levels", {"atr_period": 3, "atr_mult": 1.0, "max_age": 60}),
+    (
+        "double_triple",
+        {"atr_period": 3, "atr_mult": 1.0, "tol_atr": 3.0, "min_height_atr": 0.5},
+    ),
+    (
+        "head_shoulders",
+        {
+            "atr_period": 3,
+            "atr_mult": 1.0,
+            "shoulder_tol_atr": 5.0,
+            "head_min_atr": 0.1,
+            "min_height_atr": 0.3,
+        },
+    ),
+    (
+        "trendlines",
+        {"atr_period": 3, "atr_mult": 1.0, "tol_atr": 3.0, "min_height_atr": 0.5},
+    ),
+    (
+        "range_breakout",
+        {"atr_period": 3, "atr_mult": 1.0, "tol_atr": 3.0, "min_height_atr": 0.5},
+    ),
 ]
 
 
