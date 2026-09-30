@@ -281,8 +281,9 @@ def read_bars(
 
     ``closed_until`` оставляет только бары, закрытые к этому моменту
     (``close_time <= closed_until``), ``closes_after`` — только закрывающиеся позже
-    этого момента (``close_time > closes_after``). ``limit`` ограничивает число баров: с начала
-    диапазона, а при ``tail`` — последние ``limit`` (порядок всё равно по возрастанию).
+    этого момента (``close_time > closes_after``). ``limit`` ограничивает число
+    баров: с начала диапазона, а при ``tail`` — последние ``limit`` (порядок всё
+    равно по возрастанию).
     """
     query = select(DerivedCandle).where(
         DerivedCandle.contract_id == contract_id,
