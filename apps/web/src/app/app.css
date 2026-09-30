@@ -22,3 +22,9 @@ main {
   opacity: 0.6;
   font-size: 0.875rem;
 }
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}

@@ -490,7 +490,7 @@ export interface paths {
         };
         /**
          * Свечи контракта или continuous-серии
-         * @description `contract_id` — бары контракта в его ценах (`1m` — сырые минуты версии датасета, по умолчанию последней). `root_id` — continuous-серия: цены приведены к масштабу текущего контракта, у каждого бара указан контракт и `price_factor`, в ответе — роллы диапазона. Выдача по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`.
+         * @description `contract_id` — бары контракта в его ценах (`1m` — сырые минуты версии датасета, по умолчанию последней). `root_id` — continuous-серия: цены приведены к масштабу текущего контракта, у каждого бара указан контракт и `price_factor`, в ответе — роллы диапазона. Выдача по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`. С `tail=true` — последние `limit` баров диапазона (при `truncated` слева есть более ранние).
          */
         get: operations["getCandles"];
         put?: never;
@@ -2553,6 +2553,8 @@ export interface operations {
                 /** @description Только 1m; по умолчанию последняя версия */
                 dataset_version_id?: number | null;
                 limit?: number;
+                /** @description Последние `limit` баров диапазона (для подгрузки истории) */
+                tail?: boolean;
             };
             header?: never;
             path?: never;

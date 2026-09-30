@@ -21,8 +21,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'chart',
-    loadComponent: placeholder,
-    data: { title: 'Chart', note: 'График continuous-серии и контрактов.' },
+    loadComponent: () => import('./pages/chart/chart').then((m) => m.Chart),
   },
   {
     path: 'research',

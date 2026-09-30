@@ -1,0 +1,169 @@
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  input,
+  output,
+  viewChild,
+} from '@angular/core';
+import type { Candle, Roll } from '@trader/api-client';
+import {
+  CandlestickSeries,
+  createChart,
+  createSeriesMarkers,
+  HistogramSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type ISeriesMarkersPluginApi,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import { formatMsk } from '../../core/time/msk';
+import { rollMarkers, toChartData, toChartTime } from './chart-data';
+
+/** Порог (в барах) у левого края, с которого просим более раннюю историю. */
+const LOAD_MORE_THRESHOLD = 30;
+
+const asTime = (value: number) => value as UTCTimestamp;
+
+/**
+ * Тонкая обёртка над TradingView Lightweight Charts v5: свечи + объём, маркеры
+ * роллов, подгрузка истории у левого края, время в МСК. Данные хранит
+ * родитель, обёртка только рисует.
+ */
+@Component({
+  selector: 'app-price-chart',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: '<div #host class="host"></div>',
+  styles: `
+    :host {
+      display: block;
+    }
+    .host {
+      width: 100%;
+      height: 100%;
+      min-height: 26rem;
+    }
+  `,
+})
+export class PriceChart {
+  readonly candles = input<Candle[]>([]);
+  readonly rolls = input<Roll[]>([]);
+  readonly labels = input<Record<number, string>>({});
+  /** Идентификатор набора данных (инструмент+TF): при смене график начинается заново. */
+  readonly datasetKey = input('');
+
+  /** Пользователь докрутил до левого края: нужна более ранняя история. */
+  readonly needOlder = output<void>();
+  /** Бар под курсором (null — курсор ушёл с графика). */
+  readonly hover = output<Candle | null>();
+
+  private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
+
+  private chart: IChartApi | null = null;
+  private candleSeries: ISeriesApi<'Candlestick'> | null = null;
+  private volumeSeries: ISeriesApi<'Histogram'> | null = null;
+  private markers: ISeriesMarkersPluginApi<Time> | null = null;
+  private lastFirstTime: number | null = null;
+  private lastKey: string | null = null;
+
+  constructor() {
+    afterNextRender(() => this.create());
+    inject(DestroyRef).onDestroy(() => this.chart?.remove());
+    effect(() => {
+      this.render(this.candles(), this.rolls(), this.labels());
+    });
+  }
+
+  private create(): void {
+    const chart = createChart(this.host().nativeElement, {
+      autoSize: true,
+      layout: { attributionLogo: true },
+      localization: {
+        timeFormatter: (time: Time) =>
+          formatMsk((time as number) * 1000, 'datetime'),
+      },
+      timeScale: {
+        timeVisible: true,
+        secondsVisible: false,
+        tickMarkFormatter: (time: Time, type: number) =>
+          formatMsk((time as number) * 1000, type >= 3 ? 'time' : 'date'),
+      },
+      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.25 } },
+    });
+    this.chart = chart;
+    this.candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderVisible: false,
+    });
+    this.volumeSeries = chart.addSeries(HistogramSeries, {
+      priceScaleId: 'volume',
+      priceFormat: { type: 'volume' },
+    });
+    chart
+      .priceScale('volume')
+      .applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    this.markers = createSeriesMarkers(this.candleSeries, []);
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (range && range.from < LOAD_MORE_THRESHOLD) {
+        this.needOlder.emit();
+      }
+    });
+    chart.subscribeCrosshairMove((param) => {
+      const time = param.time as number | undefined;
+      const found = time
+        ? this.candles().find((c) => toChartTime(c.timestamp) === time)
+        : undefined;
+      this.hover.emit(found ?? null);
+    });
+    this.render(this.candles(), this.rolls(), this.labels());
+  }
+
+  private render(
+    candles: Candle[],
+    rolls: Roll[],
+    labels: Record<number, string>,
+  ): void {
+    if (!this.chart || !this.candleSeries || !this.volumeSeries) {
+      return;
+    }
+    const key = this.datasetKey();
+    if (key !== this.lastKey) {
+      this.lastKey = key;
+      this.lastFirstTime = null;
+    }
+    const data = toChartData(candles);
+    const first = data.candles[0]?.time ?? null;
+    // Если добавилась история слева, сохраняем видимый диапазон по времени.
+    const prepended =
+      this.lastFirstTime !== null &&
+      first !== null &&
+      first < this.lastFirstTime;
+    const visible = prepended ? this.chart.timeScale().getVisibleRange() : null;
+
+    this.candleSeries.setData(
+      data.candles.map((p) => ({ ...p, time: asTime(p.time) })),
+    );
+    this.volumeSeries.setData(
+      data.volume.map((p) => ({ ...p, time: asTime(p.time) })),
+    );
+    this.markers?.setMarkers(
+      rollMarkers(rolls, candles, labels).map((m) => ({
+        ...m,
+        time: asTime(m.time),
+      })),
+    );
+    if (visible) {
+      this.chart.timeScale().setVisibleRange(visible);
+    } else if (this.lastFirstTime === null && first !== null) {
+      this.chart.timeScale().fitContent();
+    }
+    this.lastFirstTime = first;
+  }
+}
