@@ -33,6 +33,14 @@ CONFIGS: list[tuple[str, dict[str, Any]]] = [
     ("fibonacci", PERCENT),
     ("levels", FAST_ATR | {"touch_k": 0.5, "max_age": 60}),
     ("levels", PERCENT | {"atr_period": 5}),
+    ("double_triple", FAST_ATR | {"tol_atr": 3.0, "min_height_atr": 0.5}),
+    (
+        "head_shoulders",
+        FAST_ATR
+        | {"shoulder_tol_atr": 5.0, "head_min_atr": 0.1, "min_height_atr": 0.3},
+    ),
+    ("trendlines", FAST_ATR | {"tol_atr": 3.0, "min_height_atr": 0.5}),
+    ("range_breakout", FAST_ATR | {"tol_atr": 3.0, "min_height_atr": 0.5}),
 ]
 IDS = [f"{name}-{i}" for i, (name, _) in enumerate(CONFIGS)]
 ENGINES = pytest.mark.parametrize(("name", "params"), CONFIGS, ids=IDS)
