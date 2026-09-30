@@ -122,21 +122,21 @@ class PatternBase(EventEngine):
         direction: str,
         points: list[dict[str, Any]],
         line: Line,
-        invalid_level: float,
+        invalid_level: float | Line,
         height: float,
         components: dict[str, float],
         features: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Открыть вхождение (событие ``detected``); ``None`` — отклонено или дубликат.
 
-        ``line`` — шея/граница пробоя; ``invalid_level`` — цена, закрытие за которой до
-        подтверждения отменяет паттерн; ``height`` — высота паттерна (для цели).
+        ``line`` — шея/граница пробоя; ``invalid_level`` — цена (или линия), закрытие за
+        которой до подтверждения отменяет паттерн; ``height`` — высота (для цели).
         """
         p = self.typed_params(PatternParams)
         atr = self.atr
         if atr is None or atr <= 0 or height < p.min_height_atr * atr:
             return None
-        key = [pattern, *[pt["index"] for pt in points]]
+        key = [pattern, direction, *[pt["index"] for pt in points]]
         if any(occ["key"] == key for occ in self._live):
             return None
         first, last = points[0], points[-1]
@@ -150,7 +150,11 @@ class PatternBase(EventEngine):
                 {k: pt[k] for k in ("role", "price", "ts", "index")} for pt in points
             ],
             "line": line.to_dict(),
-            "invalid_level": invalid_level,
+            "invalid": (
+                invalid_level
+                if isinstance(invalid_level, Line)
+                else Line(first["index"], invalid_level, last["index"], invalid_level)
+            ).to_dict(),
             "height": height,
             "last_index": last["index"],
             "state": "candidate",
@@ -213,7 +217,7 @@ class PatternBase(EventEngine):
                 occ["target"] = level + shift
                 self._emit(occ, "confirmed", breakout_level=level)
                 return
-            invalid = occ["invalid_level"]
+            invalid = Line.from_dict(occ["invalid"]).at(self._index)
             if (bar.close < invalid) if bullish else (bar.close > invalid):
                 self._close(occ, "broken")
             elif self._index - occ["last_index"] > p.max_bars:

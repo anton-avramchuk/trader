@@ -25,6 +25,7 @@ from trader_engine.events.resolve import current_events, fingerprint, known_at
 from trader_engine.events.reversals import DoubleTriple  # noqa: E402
 from trader_engine.events.structure import MarketStructure  # noqa: E402
 from trader_engine.events.swing import FixedWindow, ZigZag  # noqa: E402  (регистрация)
+from trader_engine.events.trendlines import Trendlines  # noqa: E402
 
 __all__ = [
     "Event",
@@ -40,6 +41,7 @@ __all__ = [
     "PatternBase",
     "PatternParams",
     "Pivot",
+    "Trendlines",
     "ZigZag",
     "available",
     "create",
