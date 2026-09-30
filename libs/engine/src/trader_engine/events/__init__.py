@@ -8,6 +8,7 @@ from trader_engine.events.base import (
 )
 from trader_engine.events.fibonacci import Fibonacci  # noqa: E402
 from trader_engine.events.geometry import Line, fit_line, max_deviation
+from trader_engine.events.head_shoulders import HeadShoulders  # noqa: E402
 from trader_engine.events.levels import Levels  # noqa: E402
 from trader_engine.events.patterns import PatternBase, PatternParams
 from trader_engine.events.pivot import Pivot  # noqa: E402
@@ -32,6 +33,7 @@ __all__ = [
     "DoubleTriple",
     "Fibonacci",
     "FixedWindow",
+    "HeadShoulders",
     "Levels",
     "Line",
     "MarketStructure",
