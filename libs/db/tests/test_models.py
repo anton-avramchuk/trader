@@ -29,6 +29,7 @@ EXPECTED_TABLES = {
     "chart_profiles",
     "engine_runs",
     "engine_events",
+    "manual_fib_grids",
 }
 
 
