@@ -31,4 +31,7 @@ export type ImportedFile = components['schemas']['FileOut'];
 export type Conflict = components['schemas']['ConflictOut'];
 export type Roll = components['schemas']['RollOut'];
 export type StepPrice = components['schemas']['StepPriceOut'];
+export type IndicatorInfo = components['schemas']['IndicatorInfo'];
+export type IndicatorPoint = components['schemas']['IndicatorPoint'];
+export type IndicatorValues = components['schemas']['IndicatorValuesOut'];
 export type Timeframe = '1m' | '15m' | '1h' | '4h' | '1d' | '1w';

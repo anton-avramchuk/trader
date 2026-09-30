@@ -13,6 +13,11 @@ from trader_engine.indicators.base import (
     run,
 )
 from trader_engine.indicators.cache import CacheStats, IndicatorCache
+from trader_engine.indicators.mtf import (
+    Projection,
+    project,
+    validate_source_timeframe,
+)
 from trader_engine.indicators.registry import (
     available,
     create,
@@ -29,16 +34,19 @@ __all__ = [
     "Indicator",
     "IndicatorCache",
     "IndicatorSeries",
+    "Projection",
     "available",
     "create",
     "describe",
     "get",
     "params_hash",
+    "project",
     "momentum",
     "register",
     "run",
     "trend",
     "unregister",
+    "validate_source_timeframe",
     "volatility",
     "volume",
 ]

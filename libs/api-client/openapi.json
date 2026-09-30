@@ -2029,6 +2029,209 @@
         }
       }
     },
+    "/indicators": {
+      "get": {
+        "tags": [
+          "indicators"
+        ],
+        "summary": "Каталог индикаторов",
+        "description": "Плагины с JSON-схемой параметров и значениями по умолчанию.",
+        "operationId": "listIndicators",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IndicatorInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Listindicators"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/indicator-values": {
+      "get": {
+        "tags": [
+          "indicators"
+        ],
+        "summary": "Значения индикатора на баре графика",
+        "description": "Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары и роллы, известные к нему (масштаб continuous как тогда). Значения до конца прогрева — `valid = false`.",
+        "operationId": "getIndicatorValues",
+        "parameters": [
+          {
+            "name": "indicator",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Имя из `GET /indicators`",
+              "title": "Indicator"
+            },
+            "description": "Имя из `GET /indicators`"
+          },
+          {
+            "name": "chart_timeframe",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "15m, 1h, 4h, 1d, 1w",
+              "title": "Chart Timeframe"
+            },
+            "description": "15m, 1h, 4h, 1d, 1w"
+          },
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          },
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
+          },
+          {
+            "name": "source_timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "По умолчанию равен chart_timeframe",
+              "title": "Source Timeframe"
+            },
+            "description": "По умолчанию равен chart_timeframe"
+          },
+          {
+            "name": "params",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Параметры индикатора JSON-объектом",
+              "default": "{}",
+              "title": "Params"
+            },
+            "description": "Параметры индикатора JSON-объектом"
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20000,
+              "minimum": 1,
+              "default": 2000,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndicatorValuesOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры индикатора, выбор root/контракта или таймфреймы (source TF младше chart TF запрещён)"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3159,6 +3362,216 @@
         ],
         "title": "ImportOut"
       },
+      "IndicatorInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "pane": {
+            "type": "string",
+            "title": "Pane",
+            "description": "`price` — поверх цены, `separate` — отдельная панель"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Outputs"
+          },
+          "warmup_bars": {
+            "type": "integer",
+            "title": "Warmup Bars",
+            "description": "Баров source TF до первого валидного значения"
+          },
+          "params_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params Schema",
+            "description": "JSON-схема параметров (для формы)"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Defaults"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "version",
+          "pane",
+          "outputs",
+          "warmup_bars",
+          "params_schema",
+          "defaults"
+        ],
+        "title": "IndicatorInfo"
+      },
+      "IndicatorPoint": {
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp",
+            "description": "Open time бара графика"
+          },
+          "values": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Values"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid",
+            "description": "Прогрев source-серии завершён"
+          },
+          "source_timestamp": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timestamp",
+            "description": "Open time source-бара, давшего значение"
+          },
+          "available_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available At",
+            "description": "Когда значение стало известно (закрытие source-бара)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp",
+          "values",
+          "valid",
+          "source_timestamp",
+          "available_at"
+        ],
+        "title": "IndicatorPoint"
+      },
+      "IndicatorValuesOut": {
+        "properties": {
+          "indicator": {
+            "type": "string",
+            "title": "Indicator"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "params_hash": {
+            "type": "string",
+            "title": "Params Hash"
+          },
+          "pane": {
+            "type": "string",
+            "title": "Pane"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Outputs"
+          },
+          "chart_timeframe": {
+            "type": "string",
+            "title": "Chart Timeframe"
+          },
+          "source_timeframe": {
+            "type": "string",
+            "title": "Source Timeframe"
+          },
+          "warmup_bars": {
+            "type": "integer",
+            "title": "Warmup Bars"
+          },
+          "source_bar_count": {
+            "type": "integer",
+            "title": "Source Bar Count",
+            "description": "Баров source TF использовано в расчёте"
+          },
+          "source_truncated": {
+            "type": "boolean",
+            "title": "Source Truncated",
+            "description": "История source TF длиннее лимита: прогрев начат не с начала данных"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/IndicatorPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indicator",
+          "version",
+          "params",
+          "params_hash",
+          "pane",
+          "outputs",
+          "chart_timeframe",
+          "source_timeframe",
+          "warmup_bars",
+          "source_bar_count",
+          "source_truncated",
+          "as_of",
+          "points"
+        ],
+        "title": "IndicatorValuesOut"
+      },
       "IssContractIn": {
         "properties": {
           "secid": {
@@ -4014,6 +4427,10 @@
     {
       "name": "candles",
       "description": "Свечи, continuous-серия и snapshot as-of."
+    },
+    {
+      "name": "indicators",
+      "description": "Индикаторы и MTF-проекция."
     },
     {
       "name": "system",

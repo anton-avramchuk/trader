@@ -1,16 +1,19 @@
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from threading import Lock
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from trader_db import check_connection, make_async_engine, upgrade_head
+from trader_engine.indicators import IndicatorCache
 
 from trader_api.candles_api import router as candles_router
 from trader_api.catalog import router as catalog_router
 from trader_api.imports_api import router as imports_router
+from trader_api.indicators_api import router as indicators_router
 from trader_api.jobs import router as jobs_router
 
 DbCheck = Callable[[], Awaitable[bool]]
@@ -72,15 +75,19 @@ def create_app(
                 "name": "candles",
                 "description": "Свечи, continuous-серия и snapshot as-of.",
             },
+            {"name": "indicators", "description": "Индикаторы и MTF-проекция."},
             {"name": "system", "description": "Служебные проверки."},
         ],
         lifespan=lifespan,
     )
     app.state.job_poll_interval = job_poll_interval
+    app.state.indicator_cache = IndicatorCache()
+    app.state.indicator_lock = Lock()
     app.include_router(jobs_router)
     app.include_router(catalog_router)
     app.include_router(imports_router)
     app.include_router(candles_router)
+    app.include_router(indicators_router)
 
     @app.get(
         "/health",
