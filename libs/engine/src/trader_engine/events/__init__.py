@@ -16,6 +16,7 @@ from trader_engine.events.registry import (
     unregister,
 )
 from trader_engine.events.resolve import current_events, fingerprint, known_at
+from trader_engine.events.structure import MarketStructure  # noqa: E402
 from trader_engine.events.swing import FixedWindow, ZigZag  # noqa: E402  (регистрация)
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "EventEngine",
     "EventStatus",
     "FixedWindow",
+    "MarketStructure",
     "ZigZag",
     "available",
     "create",

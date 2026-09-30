@@ -13,3 +13,6 @@
 - Движки событий `zigzag` (параметр `threshold`: `atr` — `atr_mult` × ATR(`atr_period`), либо `percent` — % цены экстремума) и `swing_fixed` (`window` баров с каждой стороны). Событие `swing`, `payload`: `type` (high/low), `price`, `timestamp` (бар-экстремум), `method`.
 - ZigZag: кандидат колена — `detected`, сдвиг экстремума — `revised`, закрытие бара на расстоянии ≥ порога — `confirmed` (`confirmed_at = close_time`) и новый кандидат в обратную сторону. Пока ATR не прогрет, подтверждений нет; первое колено определяется первым разворотом от бегущего максимума.
 - Fixed-window подтверждает экстремум через `window` баров (`available_at` = закрытие этого бара); на плато берётся первый бар.
+
+## Реализация market structure (#35)
+- Движок `market_structure` (параметры как у `zigzag`) строится поверх подтверждённых точек ZigZag. `structure_point` — метка HH/LH/HL/LL относительно предыдущей точки того же типа; `trend_state` — смена состояния: uptrend (HH+HL), downtrend (LH+LL), иначе range. BOS/CHoCH не входят в MVP.
