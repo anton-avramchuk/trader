@@ -4,7 +4,7 @@
 
 ```bash
 npx nx run api-client:generate   # export-schema (python) → openapi-typescript
-npx nx run api-client:test       # падает, если сгенерированное не совпадает с закоммиченным
+# тест apps/api/tests/test_openapi.py падает, если openapi.json устарел
 ```
 
 Использование: `import { createApiClient } from '@trader/api-client'` — `client.GET('/roots')`, `client.POST('/jobs', { body })`; типы путей и тел берутся из схемы.

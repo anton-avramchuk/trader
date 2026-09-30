@@ -60,6 +60,9 @@
         "development": {
           "buildTarget": "web:build:development"
         }
+      },
+      "options": {
+        "proxyConfig": "apps/web/proxy.conf.js"
       }
     },
     "lint": {

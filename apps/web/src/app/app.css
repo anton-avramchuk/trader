@@ -1,0 +1,24 @@
+.layout {
+  display: flex;
+  min-height: calc(100vh - 3.5rem);
+}
+
+main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem;
+}
+
+.toggle {
+  border: 0;
+  background: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: inherit;
+}
+
+.tz {
+  margin-inline-start: auto;
+  opacity: 0.6;
+  font-size: 0.875rem;
+}

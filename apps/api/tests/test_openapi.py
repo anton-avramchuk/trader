@@ -1,5 +1,7 @@
 """OpenAPI-схема: валидна, каждый маршрут описан, документация доступна."""
 
+import json
+from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -52,3 +54,15 @@ def test_docs_pages_are_served() -> None:
     with TestClient(create_app(migrate_on_startup=False)) as client:
         assert client.get("/docs").status_code == 200
         assert client.get("/redoc").status_code == 200
+
+
+def test_committed_client_schema_is_current() -> None:
+    """`libs/api-client/openapi.json` совпадает со схемой приложения."""
+    path = Path(__file__).resolve().parents[3] / "libs" / "api-client" / "openapi.json"
+    expected = json.dumps(
+        create_app(migrate_on_startup=False).openapi(), indent=2, ensure_ascii=False
+    )
+
+    assert path.read_text(encoding="utf-8").strip() == expected, (
+        "Схема API изменилась: выполните `npx nx run api-client:generate`"
+    )
