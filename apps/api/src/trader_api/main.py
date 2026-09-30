@@ -34,11 +34,37 @@ def create_app(
         finally:
             await app.state.engine.dispose()
 
-    app = FastAPI(title="Trader API", lifespan=lifespan)
+    app = FastAPI(
+        title="Trader API",
+        version="0.1.0",
+        summary="Исследовательская платформа по фьючерсам MOEX",
+        description=(
+            "REST API платформы. Документация: `/docs` (Swagger UI), `/redoc`, "
+            "схема — `/openapi.json`.\n\n"
+            "**WebSocket** `/ws/jobs/{job_id}` (в OpenAPI не описывается): шлёт JSON "
+            "в формате `JobOut` при каждом изменении задачи и закрывается по её "
+            "завершении; код закрытия 4404 — задачи нет."
+        ),
+        openapi_tags=[
+            {
+                "name": "jobs",
+                "description": "Фоновые задачи: импорт, загрузка ISS, сборка баров.",
+            },
+            {"name": "system", "description": "Служебные проверки."},
+        ],
+        lifespan=lifespan,
+    )
     app.state.job_poll_interval = job_poll_interval
     app.include_router(jobs_router)
 
-    @app.get("/health")
+    @app.get(
+        "/health",
+        tags=["system"],
+        operation_id="getHealth",
+        summary="Проверка работоспособности",
+        description="200 — API и база доступны, 503 — база недоступна.",
+        responses={503: {"description": "База данных недоступна"}},
+    )
     async def health(
         db_check: Annotated[DbCheck, Depends(get_db_check)],
     ) -> JSONResponse:
