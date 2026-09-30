@@ -2981,6 +2981,171 @@
         }
       }
     },
+    "/level-zones": {
+      "get": {
+        "tags": [
+          "engines"
+        ],
+        "summary": "Confluence-зоны уровней",
+        "description": "Активные уровни (не пробитые, не отменённые) прогонов `levels` по `source_timeframes`, известные к `as_of`, объединяются в зоны: соседние уровни ближе `threshold_atr` × ATR попадают в одну зону.",
+        "operationId": "getLevelZones",
+        "parameters": [
+          {
+            "name": "chart_timeframe",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "15m, 1h, 4h, 1d, 1w",
+              "title": "Chart Timeframe"
+            },
+            "description": "15m, 1h, 4h, 1d, 1w"
+          },
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          },
+          {
+            "name": "contract_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Contract Id"
+            }
+          },
+          {
+            "name": "source_timeframes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "По умолчанию — chart TF",
+              "title": "Source Timeframes"
+            },
+            "description": "По умолчанию — chart TF"
+          },
+          {
+            "name": "atr_timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "TF для ATR; по умолчанию — chart TF",
+              "title": "Atr Timeframe"
+            },
+            "description": "TF для ATR; по умолчанию — chart TF"
+          },
+          {
+            "name": "atr_period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 14,
+              "title": "Atr Period"
+            }
+          },
+          {
+            "name": "threshold_atr",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 20,
+              "exclusiveMinimum": 0,
+              "default": 0.5,
+              "title": "Threshold Atr"
+            }
+          },
+          {
+            "name": "levels_params",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Параметры движка levels JSON-объектом",
+              "default": "{}",
+              "title": "Levels Params"
+            },
+            "description": "Параметры движка levels JSON-объектом"
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZonesOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Некорректные параметры или source TF младше chart TF"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -5715,6 +5880,185 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ZoneMember": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "strength": {
+            "type": "number",
+            "title": "Strength"
+          },
+          "source_timeframe": {
+            "type": "string",
+            "title": "Source Timeframe"
+          },
+          "distance_atr": {
+            "type": "number",
+            "title": "Distance Atr",
+            "description": "Расстояние до центра зоны в ATR"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "price",
+          "source",
+          "family",
+          "role",
+          "strength",
+          "source_timeframe",
+          "distance_atr"
+        ],
+        "title": "ZoneMember"
+      },
+      "ZoneOut": {
+        "properties": {
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          },
+          "center": {
+            "type": "number",
+            "title": "Center"
+          },
+          "width_atr": {
+            "type": "number",
+            "title": "Width Atr"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Роль сильнейшего уровня зоны"
+          },
+          "strength": {
+            "type": "number",
+            "title": "Strength",
+            "description": "Сила зоны: max силы членов + бонус за семейства"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Families"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneMember"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "low",
+          "high",
+          "center",
+          "width_atr",
+          "role",
+          "strength",
+          "families",
+          "members"
+        ],
+        "title": "ZoneOut"
+      },
+      "ZonesOut": {
+        "properties": {
+          "chart_timeframe": {
+            "type": "string",
+            "title": "Chart Timeframe"
+          },
+          "source_timeframes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Timeframes"
+          },
+          "atr_timeframe": {
+            "type": "string",
+            "title": "Atr Timeframe"
+          },
+          "atr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Atr",
+            "description": "ATR на момент `as_of`; пусто — нет данных"
+          },
+          "threshold_atr": {
+            "type": "number",
+            "title": "Threshold Atr"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "missing_timeframes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Timeframes",
+            "description": "Source TF, по которым нет прогона levels (уровней нет)"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneOut"
+            },
+            "type": "array",
+            "title": "Zones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chart_timeframe",
+          "source_timeframes",
+          "atr_timeframe",
+          "atr",
+          "threshold_atr",
+          "as_of",
+          "missing_timeframes",
+          "zones"
+        ],
+        "title": "ZonesOut"
       }
     }
   },
