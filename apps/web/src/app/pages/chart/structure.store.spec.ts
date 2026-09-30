@@ -286,4 +286,174 @@ describe('StructureStore', () => {
     store.selectPattern('double_triple:1');
     expect(store.selectedPattern()).toBeNull();
   });
+
+  describe('блок «Исторически»', () => {
+    const STATS = {
+      matched: 3,
+      unit: 'atr',
+      buckets: [],
+      warnings: [],
+      skipped: 0,
+    };
+
+    const patternEvent = (): EngineEvent => ({
+      seq: 0,
+      kind: 'pattern',
+      status: 'confirmed',
+      payload: {
+        id: 1,
+        pattern: 'double_top',
+        direction: 'bearish',
+        state: 'confirmed',
+        end: '2026-09-28T05:00:00Z',
+        points: [
+          {
+            role: 'top1',
+            price: 10,
+            ts: '2026-09-28T04:00:00Z',
+            index: 1,
+          },
+        ],
+        line: { p1: 9, p2: 9, t1: null, t2: null },
+        height: 1,
+        target: 8,
+        features: {},
+        quality: { score: 50, components: {} },
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: '2026-09-28T05:00:00Z',
+      available_at: '2026-09-28T05:00:00Z',
+      revises: null,
+    });
+
+    const levelEvent = (role: string): EngineEvent => ({
+      seq: 0,
+      kind: 'level',
+      status: 'detected',
+      payload: {
+        id: 5,
+        source: 'swing_high',
+        family: 'swing',
+        price: 120,
+        role,
+        state: 'active',
+        touches: 1,
+        created_at: '2026-09-28T04:00:00Z',
+        strength: { score: 60, version: 1, components: {} },
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: null,
+      available_at: '2026-09-28T04:00:00Z',
+      revises: null,
+    });
+
+    function withStats(events: EngineEvent[]) {
+      const ctx = setup();
+      ctx.client.GET.mockImplementation((path: string) => {
+        if (path === '/stats/outcomes') {
+          return ok(STATS);
+        }
+        return ok(path === '/engine-runs/{run_id}/events' ? events : []);
+      });
+      return ctx;
+    }
+
+    const statsCalls = (client: ReturnType<typeof setup>['client']) =>
+      calls(client.GET).filter(([path]) => path === '/stats/outcomes');
+
+    it('выбор паттерна запрашивает статистику типа и направления по его прогону', async () => {
+      const { store, client } = withStats([patternEvent()]);
+      await store.refresh({ ...CONTEXT, asOf: '2026-09-28T07:00:00Z' });
+      await store.setLayer('patterns', true);
+
+      store.selectPattern('double_triple:1');
+      await vi.waitFor(() => expect(store.statsViews()[0]?.data).toBeTruthy());
+
+      const [request] = statsCalls(client).slice(-1);
+      expect(request?.[1]?.params?.query).toMatchObject({
+        group: ['double_top'],
+        direction: 'bearish',
+        unit: 'atr',
+        as_of: '2026-09-28T07:00:00Z',
+      });
+      const runs = calls(client.POST).filter(
+        ([, r]) => r?.body?.params?.engine === 'double_triple',
+      ).length;
+      expect(runs).toBe(1);
+      expect(store.statsViews()).toHaveLength(1);
+      expect(store.statsViews()[0]).toMatchObject({
+        pattern: true,
+        loading: false,
+        error: null,
+      });
+    });
+
+    it('снятие выбора убирает блок, смена единиц перезапрашивает', async () => {
+      const { store, client } = withStats([patternEvent()]);
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+      await vi.waitFor(() => expect(store.statsViews()[0]?.data).toBeTruthy());
+
+      store.setStatsUnit('pct');
+      await vi.waitFor(() => expect(statsCalls(client)).toHaveLength(2));
+      expect(statsCalls(client).at(-1)?.[1]?.params?.query).toMatchObject({
+        unit: 'pct',
+      });
+
+      store.selectPattern('double_triple:1');
+      expect(store.statsViews()).toEqual([]);
+    });
+
+    it('выбор уровня даёт отбой и пробой той же роли', async () => {
+      const { store, client } = withStats([levelEvent('support')]);
+      await store.refresh(CONTEXT);
+      await store.setLayer('levels', true);
+
+      store.selectLevel(5);
+      await vi.waitFor(() => expect(statsCalls(client)).toHaveLength(2));
+
+      const queries = statsCalls(client).map(([, r]) => r?.params?.query);
+      expect(queries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            group: ['level_touch'],
+            direction: 'bullish',
+          }),
+          expect.objectContaining({
+            group: ['level_break'],
+            direction: 'bearish',
+          }),
+        ]),
+      );
+    });
+
+    it('ошибка запроса показывается в блоке, без падения', async () => {
+      const { store, client } = withStats([patternEvent()]);
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+      client.GET.mockImplementation((path: string) =>
+        path === '/stats/outcomes'
+          ? Promise.reject(new Error('сервер недоступен'))
+          : ok(path === '/engine-runs/{run_id}/events' ? [patternEvent()] : []),
+      );
+
+      store.selectPattern('double_triple:1');
+      await vi.waitFor(() =>
+        expect(store.statsViews()[0]?.error).toBe('Нет связи с сервером'),
+      );
+    });
+
+    it('выключение слоя очищает блок', async () => {
+      const { store } = withStats([patternEvent()]);
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+      await vi.waitFor(() => expect(store.statsViews()).toHaveLength(1));
+
+      await store.setLayer('patterns', false);
+
+      expect(store.statsViews()).toEqual([]);
+    });
+  });
 });

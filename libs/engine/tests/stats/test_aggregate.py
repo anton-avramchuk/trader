@@ -205,6 +205,25 @@ class TestSummarize:
         assert stats.edge_ci is not None and stats.edge_ci.low > 0
         assert "no_baseline" not in stats.warnings
 
+    def test_tiny_baseline_gives_no_edge_but_a_warning(self) -> None:
+        events = [obs(i * 10, 2.0) for i in range(20)]
+        base = [obs(i * 10 + 3, -3.0, key="base") for i in range(4)]
+
+        stats = summarize(events, base, horizon=5, min_effective=1)
+
+        assert stats.baseline_n == 4
+        assert stats.edge is None and stats.edge_ci is None
+        assert "small_baseline" in stats.warnings
+        assert "no_baseline" not in stats.warnings
+
+    def test_baseline_threshold_is_configurable(self) -> None:
+        events = [obs(i * 10, 2.0) for i in range(10)]
+        base = [obs(i * 10 + 3, 0.5, key="base") for i in range(4)]
+
+        stats = summarize(events, base, horizon=5, min_effective=1, min_baseline=3)
+
+        assert stats.edge == pytest.approx(1.5)
+
     def test_missing_baseline_is_reported(self) -> None:
         stats = summarize([obs(0), obs(10)], horizon=5, min_effective=1)
 

@@ -6,6 +6,7 @@ import { MskPipe } from '../../core/time/msk';
 import { allowedSourceTimeframes } from './indicators';
 import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
 import { PatternGallery } from './pattern-gallery';
+import { StatsBlock } from './stats-block';
 import { LAYER_TITLES, LAYERS } from './structure';
 import { StructureStore } from './structure.store';
 
@@ -35,7 +36,14 @@ const REASONS: Record<string, string> = {
 /** Слои структуры и уровней: переключатели, зоны по TF, детали уровня, ручная Fibonacci. */
 @Component({
   selector: 'app-structure-panel',
-  imports: [DecimalPipe, FormsModule, MskPipe, PatternGallery, TuiButton],
+  imports: [
+    DecimalPipe,
+    FormsModule,
+    MskPipe,
+    PatternGallery,
+    StatsBlock,
+    TuiButton,
+  ],
   template: `
     <div class="layers" role="group" aria-label="Слои структуры">
       @for (layer of layers; track layer) {
@@ -177,6 +185,13 @@ const REASONS: Record<string, string> = {
           }
         </ul>
       </div>
+    }
+    @if (store.statsViews().length) {
+      <app-stats-block
+        [views]="store.statsViews()"
+        [unit]="store.statsUnit()"
+        (unitChange)="store.setStatsUnit($event)"
+      />
     }
     @if (store.layers().patterns) {
       <app-pattern-gallery />

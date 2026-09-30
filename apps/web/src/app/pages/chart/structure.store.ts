@@ -33,6 +33,14 @@ import {
   patternMarkers,
   patternSegments,
 } from './pattern-layer';
+import {
+  levelStatsRequests,
+  patternStatsRequests,
+  type StatsRequest,
+  statsQuery,
+  type StatsUnit,
+  type StatsView,
+} from './stats-layer';
 
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
 export interface StructureContext {
@@ -66,6 +74,9 @@ export class StructureStore {
   /** Ключ выбранного паттерна (`движок:id`) и показ отменённых. */
   readonly selectedPattern = signal<string | null>(null);
   readonly showCancelled = signal(false);
+  /** Блок «Исторически» для выбранного паттерна/уровня и его единицы. */
+  readonly statsViews = signal<StatsView[]>([]);
+  readonly statsUnit = signal<StatsUnit>('atr');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   /** Режим рисования ручной сетки: первая и вторая точки. */
@@ -75,6 +86,7 @@ export class StructureStore {
   private context: StructureContext | null = null;
   private runs = new Map<string, number>();
   private sequence = 0;
+  private statsSequence = 0;
 
   /** Сильнейшие активные уровни — они же на графике и в списке. */
   readonly levels = computed(() =>
@@ -169,6 +181,7 @@ export class StructureStore {
 
   selectPattern(key: string | null): void {
     this.selectedPattern.set(key === this.selectedPattern() ? null : key);
+    void this.loadStats();
   }
 
   setShowCancelled(show: boolean): void {
@@ -177,6 +190,12 @@ export class StructureStore {
 
   selectLevel(id: number | null): void {
     this.selectedLevel.set(id === this.selectedLevel() ? null : id);
+    void this.loadStats();
+  }
+
+  setStatsUnit(unit: StatsUnit): void {
+    this.statsUnit.set(unit);
+    void this.loadStats();
   }
 
   /** Сбросить кэш прогонов: следующее обновление пересчитает движки (появились новые бары). */
@@ -217,6 +236,7 @@ export class StructureStore {
     if (!engines.size && !layers.fibonacci) {
       this.events.set({});
       this.zones.set([]);
+      this.statsViews.set([]);
       this.error.set(null);
       return;
     }
@@ -242,6 +262,7 @@ export class StructureStore {
       this.zones.set(zones);
       this.manual.set(manual);
       this.error.set(null);
+      void this.loadStats();
     } catch (error) {
       if (seq === this.sequence) {
         this.error.set(
@@ -283,6 +304,67 @@ export class StructureStore {
     const runId = Number((last.result as { run_id: number }).run_id);
     this.runs.set(key, runId);
     return runId;
+  }
+
+  /** Выборки блока «Исторически»: по выбранному паттерну и/или уровню. */
+  private statsRequests(): StatsRequest[] {
+    const layers = this.layers();
+    const pattern = layers.patterns ? this.selectedPatternInfo() : null;
+    const level = layers.levels ? this.selected() : null;
+    return [
+      ...(pattern ? patternStatsRequests(pattern) : []),
+      ...(level ? levelStatsRequests(level) : []),
+    ];
+  }
+
+  private async loadStats(): Promise<void> {
+    const seq = ++this.statsSequence;
+    const context = this.context;
+    const requests = this.statsRequests();
+    if (!context || !requests.length) {
+      this.statsViews.set([]);
+      return;
+    }
+    const unit = this.statsUnit();
+    const view = (
+      request: StatsRequest,
+      rest: Partial<StatsView>,
+    ): StatsView => ({
+      title: request.title,
+      pattern: request.pattern,
+      loading: false,
+      error: null,
+      data: null,
+      ...rest,
+    });
+    this.statsViews.set(requests.map((r) => view(r, { loading: true })));
+    const views = await Promise.all(
+      requests.map(async (request) => {
+        const runId = this.runs.get(
+          `${this.seriesKey()}:${request.engine}:${context.chartTimeframe}`,
+        );
+        if (runId === undefined) {
+          return view(request, { error: 'Прогон движка ещё не выполнен' });
+        }
+        try {
+          const data = await this.api.call(
+            this.api.client.GET('/stats/outcomes', {
+              params: {
+                query: statsQuery(runId, request, unit, context.asOf),
+              },
+            }),
+          );
+          return view(request, { data });
+        } catch (error) {
+          return view(request, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }),
+    );
+    if (seq === this.statsSequence) {
+      this.statsViews.set(views);
+    }
   }
 
   private loadEvents(

@@ -42,6 +42,10 @@ def sample_baseline(
 ) -> list[BaselinePoint]:
     """До ``per_event`` точек на событие; события без известного режима пропускаются.
 
+    Каждый бар берётся не более одного раза на режим и направление: повторы одних и
+    тех же баров сузили бы доверительный интервал без новой информации. Если пул
+    режима исчерпан, последним событиям точек достаётся меньше.
+
     ``exclusion`` — радиус в барах вокруг входов реальных событий (обычно наибольший
     горизонт), где baseline-точек быть не должно: окна исходов не должны
     пересекаться с событиями.
@@ -57,14 +61,19 @@ def sample_baseline(
         if regime is not None and not blocked[index]:
             pools.setdefault(regime, []).append(index)
     rng = random.Random(seed)
+    queues: dict[tuple[Regime, str], list[int]] = {}
     points: list[BaselinePoint] = []
     for request in sorted(requests, key=lambda r: (r.entry, r.direction)):
         regime = regimes[request.entry] if 0 <= request.entry < len(regimes) else None
-        pool = pools.get(regime, []) if regime is not None else []
-        if regime is None or not pool:
+        if regime is None:
             continue
-        for index in rng.sample(pool, min(per_event, len(pool))):
+        queue = queues.get((regime, request.direction))
+        if queue is None:
+            queue = list(pools.get(regime, []))
+            rng.shuffle(queue)
+            queues[(regime, request.direction)] = queue
+        for _ in range(min(per_event, len(queue))):
             points.append(
-                BaselinePoint(index, request.direction, regime, request.entry)
+                BaselinePoint(queue.pop(), request.direction, regime, request.entry)
             )
     return points
