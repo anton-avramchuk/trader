@@ -30,3 +30,7 @@
 5. Range breakout.
 6. UI: слой паттернов и визуальные примеры.
 7. Тесты: leakage, регрессия, replay, интеграция для всех паттернов.
+
+## Реализация каркаса (#90)
+- `events/patterns.py`: `PatternBase` (ZigZag + ATR внутри, недавние точки, жизненный цикл, `open`/`detect`), `PatternParams` (допуски, `max_bars`, `false_break_bars`, `max_lookback`), качество v1 (`docs/pattern-quality-v1.md`); `events/geometry.py`: `Line` и подгонка линий (по номерам баров, не по времени).
+- Детектор реализует только `detect(swings, bar)` и вызывает `open(pattern, direction, points, line, invalid_level, height, components)`; подтверждение, отмену, ложный пробой, цель и качество ведёт каркас. Общая ось X — номер бара.

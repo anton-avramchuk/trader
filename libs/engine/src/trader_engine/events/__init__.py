@@ -7,7 +7,9 @@ from trader_engine.events.base import (
     run_engine,
 )
 from trader_engine.events.fibonacci import Fibonacci  # noqa: E402
+from trader_engine.events.geometry import Line, fit_line, max_deviation
 from trader_engine.events.levels import Levels  # noqa: E402
+from trader_engine.events.patterns import PatternBase, PatternParams
 from trader_engine.events.pivot import Pivot  # noqa: E402
 from trader_engine.events.registry import (
     available,
@@ -29,7 +31,10 @@ __all__ = [
     "Fibonacci",
     "FixedWindow",
     "Levels",
+    "Line",
     "MarketStructure",
+    "PatternBase",
+    "PatternParams",
     "Pivot",
     "ZigZag",
     "available",
@@ -37,9 +42,11 @@ __all__ = [
     "current_events",
     "describe",
     "fingerprint",
+    "fit_line",
     "get",
     "hash_params",
     "known_at",
+    "max_deviation",
     "register",
     "run_engine",
     "unregister",
