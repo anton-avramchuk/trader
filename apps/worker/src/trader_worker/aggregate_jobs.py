@@ -16,6 +16,7 @@ from trader_db import (
     build_bars,
     load_contract_calendar,
     loaded_windows,
+    update_rolls,
 )
 from trader_db.models import Contract, RawCandle1m, Root
 from trader_engine.aggregation import TIMEFRAMES
@@ -77,6 +78,7 @@ def make_aggregate_handler(
                 raise JobFailed(f"Контракт {contract_id} не найден")
             root = session.get(Root, contract.root_id)
             assert root is not None
+            root_id = root.id
             include_weekend = root.include_weekend_sessions
             calendar = load_contract_calendar(session, contract_id)
             complete_until = _complete_until(session, contract_id, now())
@@ -108,10 +110,16 @@ def make_aggregate_handler(
                     ),
                 }
             )
+        context.report_progress(0.95, "события ролла")
+        with session_factory() as session:
+            rolls = update_rolls(session, root_id, calendar)
+            session.commit()
+            roll_count = len(rolls)
         context.report_progress(1.0, "готово")
         return {
             "contract_id": contract_id,
             "complete_until": complete_until.isoformat(),
+            "rolls": roll_count,
             "builds": results,
         }
 

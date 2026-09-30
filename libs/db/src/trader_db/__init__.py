@@ -1,6 +1,13 @@
 """Доступ к PostgreSQL: настройки, движки SQLAlchemy, миграции Alembic."""
 
 from trader_db.calendars import load_contract_calendar, load_trading_calendar
+from trader_db.continuous import (
+    load_rolls,
+    load_segments,
+    participating_contracts,
+    read_continuous,
+    update_rolls,
+)
 from trader_db.contracts import loaded_windows, provider_contract_id, upsert_contract
 from trader_db.datasets import (
     create_dataset_version,
@@ -67,6 +74,11 @@ __all__ = [
     "create_schedule",
     "delete_preset",
     "enqueue_aggregation",
+    "load_rolls",
+    "load_segments",
+    "participating_contracts",
+    "read_continuous",
+    "update_rolls",
     "enqueue_job",
     "enqueue_statement",
     "extend_dataset_version",
