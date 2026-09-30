@@ -27,6 +27,8 @@ EXPECTED_TABLES = {
     "derived_builds",
     "roll_events",
     "chart_profiles",
+    "engine_runs",
+    "engine_events",
 }
 
 

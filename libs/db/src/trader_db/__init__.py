@@ -24,6 +24,14 @@ from trader_db.derived import (
     stream_candles,
 )
 from trader_db.engine import check_connection, make_async_engine, make_engine
+from trader_db.engine_runs import (
+    RunOutcome,
+    advance_run,
+    events_statement,
+    find_latest_run,
+    load_events,
+    to_event,
+)
 from trader_db.import_pipeline import ImportOutcome, run_candle_import
 from trader_db.imports import (
     Candle1m,
@@ -70,6 +78,12 @@ __all__ = [
     "Candle1m",
     "DbSettings",
     "ImportOutcome",
+    "RunOutcome",
+    "advance_run",
+    "events_statement",
+    "find_latest_run",
+    "load_events",
+    "to_event",
     "InsertReport",
     "build_bars",
     "cancel_running_job",

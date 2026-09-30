@@ -7,6 +7,7 @@ from trader_db.models.calendars import (
 from trader_db.models.chart_profiles import ChartProfile
 from trader_db.models.continuous import RollEvent
 from trader_db.models.derived import DerivedBuild, DerivedCandle
+from trader_db.models.engine_events import EngineEvent, EngineRun
 from trader_db.models.instruments import (
     Contract,
     ContractProviderId,
@@ -44,6 +45,8 @@ __all__ = [
     "RollEvent",
     "DerivedBuild",
     "DerivedCandle",
+    "EngineEvent",
+    "EngineRun",
     "ImportConflict",
     "ImportPreset",
     "Job",

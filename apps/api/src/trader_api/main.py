@@ -12,6 +12,7 @@ from trader_engine.indicators import IndicatorCache
 
 from trader_api.candles_api import router as candles_router
 from trader_api.catalog import router as catalog_router
+from trader_api.engines_api import router as engines_router
 from trader_api.imports_api import router as imports_router
 from trader_api.indicators_api import router as indicators_router
 from trader_api.jobs import router as jobs_router
@@ -78,6 +79,10 @@ def create_app(
             },
             {"name": "indicators", "description": "Индикаторы и MTF-проекция."},
             {"name": "profiles", "description": "Профили графика (индикаторы, слои)."},
+            {
+                "name": "engines",
+                "description": "Движки событий: прогоны и неизменяемый лог событий.",
+            },
             {"name": "system", "description": "Служебные проверки."},
         ],
         lifespan=lifespan,
@@ -91,6 +96,7 @@ def create_app(
     app.include_router(candles_router)
     app.include_router(indicators_router)
     app.include_router(profiles_router)
+    app.include_router(engines_router)
 
     @app.get(
         "/health",
