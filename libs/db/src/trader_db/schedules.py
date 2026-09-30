@@ -34,6 +34,25 @@ def create_schedule(
     return schedule.id
 
 
+def ensure_schedule(
+    session: Session,
+    name: str,
+    job_type: str,
+    interval_seconds: int,
+    *,
+    params: dict[str, Any] | None = None,
+) -> int:
+    """Создать расписание ``name``, если его нет; существующее не трогается.
+
+    Так стартовые расписания worker'а можно объявлять при каждом запуске, не
+    сбрасывая ``next_run_at`` и не затирая правки пользователя.
+    """
+    existing = session.scalar(select(JobSchedule.id).where(JobSchedule.name == name))
+    if existing is not None:
+        return existing
+    return create_schedule(session, name, job_type, interval_seconds, params=params)
+
+
 def run_due_schedules(session: Session) -> list[int]:
     """Поставить задачи по наступившим расписаниям; вернуть id созданных задач.
 

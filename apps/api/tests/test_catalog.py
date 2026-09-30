@@ -1,9 +1,13 @@
 """REST каталога: root, календари, контракты (нужен TRADER_DATABASE_URL)."""
 
+from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+from trader_db import make_engine, upsert_step_prices
 
 ROOT = {
     "code": "NG",
@@ -151,6 +155,53 @@ class TestContracts:
         assert create.status_code == 404
         assert client.get("/contracts/999").status_code == 404
         assert client.delete("/contracts/999").status_code == 404
+
+
+class TestStepPrices:
+    def test_latest_price_is_in_the_contract_and_history_is_newest_first(
+        self, client: TestClient, database_url: str
+    ) -> None:
+        root = make_root(client)
+        contract = client.post(
+            f"/roots/{root['id']}/contracts", json={"expiration_date": "2026-12-29"}
+        ).json()
+        assert contract["step_price"] is None
+        engine = make_engine(database_url)
+        with Session(engine) as session:
+            upsert_step_prices(
+                session,
+                contract["id"],
+                [
+                    (date(2026, 3, 10), Decimal("7.87")),
+                    (date(2026, 3, 11), Decimal("7.95")),
+                    (date(2026, 3, 12), Decimal("8.01")),
+                ],
+            )
+            session.commit()
+        engine.dispose()
+
+        card = client.get(f"/contracts/{contract['id']}").json()
+        history = client.get(
+            f"/contracts/{contract['id']}/step-prices", params={"limit": 2}
+        ).json()
+
+        assert card["step_price"] == {"date": "2026-03-12", "step_price": "8.01000000"}
+        assert [h["date"] for h in history] == ["2026-03-12", "2026-03-11"]
+
+    def test_refresh_enqueues_a_job_and_unknown_contract_is_404(
+        self, client: TestClient
+    ) -> None:
+        root = make_root(client)
+        contract = client.post(
+            f"/roots/{root['id']}/contracts", json={"expiration_date": "2026-12-29"}
+        ).json()
+
+        job = client.post(f"/contracts/{contract['id']}/step-prices/refresh").json()
+
+        assert job["type"] == "iss.step_prices"
+        assert job["params"] == {"contract_id": contract["id"]}
+        assert client.post("/contracts/999/step-prices/refresh").status_code == 404
+        assert client.get("/contracts/999/step-prices").status_code == 404
 
 
 class TestIssContracts:

@@ -777,6 +777,114 @@
         }
       }
     },
+    "/contracts/{contract_id}/step-prices": {
+      "get": {
+        "tags": [
+          "contracts"
+        ],
+        "summary": "История стоимости шага цены",
+        "description": "Дневная стоимость шага в ₽, выведенная из итогов торгов ISS (оборот / (объём × средневзвешенная цена) × шаг цены). Новые первыми.",
+        "operationId": "listStepPrices",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contract Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2000,
+              "minimum": 1,
+              "default": 60,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StepPriceOut"
+                  },
+                  "title": "Response Liststepprices"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{contract_id}/step-prices/refresh": {
+      "post": {
+        "tags": [
+          "contracts"
+        ],
+        "summary": "Обновить стоимость шага цены из ISS",
+        "description": "Ставит `iss.step_prices`; догружает с последнего сохранённого дня.",
+        "operationId": "refreshStepPrices",
+        "parameters": [
+          {
+            "name": "contract_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Contract Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/roots/{root_id}/iss-preview": {
       "post": {
         "tags": [
@@ -2521,6 +2629,17 @@
             },
             "type": "array",
             "title": "Provider Ids"
+          },
+          "step_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepPriceOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Последняя известная стоимость шага цены"
           }
         },
         "type": "object",
@@ -3799,6 +3918,27 @@
         },
         "type": "object",
         "title": "RootPatch"
+      },
+      "StepPriceOut": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "step_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Step Price",
+            "description": "Стоимость шага цены в ₽"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "step_price"
+        ],
+        "title": "StepPriceOut"
       },
       "ValidationError": {
         "properties": {

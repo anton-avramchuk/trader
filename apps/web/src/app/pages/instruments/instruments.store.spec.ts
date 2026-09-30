@@ -120,6 +120,27 @@ describe('InstrumentsStore', () => {
     expect(store.contracts()).toEqual([]);
   });
 
+  it('обновление шага цены ставит задачу, ждёт её и перечитывает контракты', async () => {
+    const { client, store } = setup(() => of(job({ type: 'iss.step_prices' })));
+    client.POST.mockImplementation(() =>
+      ok(job({ type: 'iss.step_prices', status: 'queued' })),
+    );
+    await store.loadRoots();
+    const before = client.GET.mock.calls.filter(
+      ([path]) => path === '/roots/{root_id}/contracts',
+    ).length;
+
+    const finished = await store.refreshStepPrices(10);
+
+    const [path] = client.POST.mock.calls[0] as unknown as [string];
+    expect(path).toBe('/contracts/{contract_id}/step-prices/refresh');
+    expect(finished.status).toBe('succeeded');
+    expect(store.stepJob()?.status).toBe('succeeded');
+    expect(
+      client.GET.mock.calls.filter(([p]) => p === '/roots/{root_id}/contracts'),
+    ).toHaveLength(before + 1);
+  });
+
   describe('контракты ISS', () => {
     const found = [
       { secid: 'NGZ6', expiration_date: '2026-12-29', last_trade_date: null },

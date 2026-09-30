@@ -54,8 +54,14 @@ from trader_db.jobs import (
 from trader_db.migrate import upgrade_head
 from trader_db.models import Base
 from trader_db.presets import delete_preset, get_preset, list_presets, save_preset
-from trader_db.schedules import create_schedule, run_due_schedules
+from trader_db.schedules import create_schedule, ensure_schedule, run_due_schedules
 from trader_db.settings import DbSettings
+from trader_db.step_prices import (
+    last_step_price_date,
+    list_step_prices,
+    step_price_on,
+    upsert_step_prices,
+)
 
 __all__ = [
     "AGGREGATE_JOB_TYPE",
@@ -73,8 +79,13 @@ __all__ = [
     "complete_job",
     "create_dataset_version",
     "create_schedule",
+    "ensure_schedule",
     "delete_preset",
     "enqueue_aggregation",
+    "last_step_price_date",
+    "list_step_prices",
+    "step_price_on",
+    "upsert_step_prices",
     "load_rolls",
     "load_segments",
     "participating_contracts",

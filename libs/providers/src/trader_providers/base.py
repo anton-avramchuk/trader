@@ -3,6 +3,7 @@
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Protocol
 
 from trader_engine.ingest import RawRow, RowError
@@ -20,6 +21,19 @@ class ProviderContract:
     # Диапазон истории, о котором заявляет поставщик (по дате).
     history_from: date | None
     history_till: date | None
+
+
+@dataclass(frozen=True, slots=True)
+class DailyBar:
+    """Итог торгового дня контракта: объём, сделки, оборот и средневзвешенная цена."""
+
+    trade_date: date
+    volume: int
+    trades: int
+    # Оборот за день в валюте расчётов (₽) и средневзвешенная цена: по ним
+    # выводится стоимость шага цены (ADR-0007).
+    value: Decimal | None = None
+    waprice: Decimal | None = None
 
 
 class HistoricalDataProvider(Protocol):
@@ -60,6 +74,10 @@ class HistoricalDataProvider(Protocol):
         on_page: Callable[[int], None] | None = None,
     ) -> Iterator[RawRow | RowError]:
         """Минутные свечи за даты ``[start, end]`` включительно, по возрастанию."""
+        ...
+
+    def daily_history(self, provider_id: str, start: date, end: date) -> list[DailyBar]:
+        """Итоги торговых дней контракта за ``[start, end]`` (включительно)."""
         ...
 
     def close(self) -> None:

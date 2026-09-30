@@ -9,7 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -26,6 +26,7 @@ from trader_db.models import (
     CalendarSpecialDay,
     Contract,
     ContractProviderId,
+    ContractStepPrice,
     DataProvider,
     Root,
     TradingCalendar,
@@ -416,6 +417,11 @@ class ContractPatch(BaseModel):
     secid: str | None = Field(default=None, max_length=32)
 
 
+class StepPriceOut(BaseModel):
+    date: date
+    step_price: Decimal = Field(description="Стоимость шага цены в ₽")
+
+
 class ContractOut(BaseModel):
     id: int
     root_id: int
@@ -423,6 +429,9 @@ class ContractOut(BaseModel):
     last_trade_date: date | None
     secid: str | None
     provider_ids: list[ProviderIdOut]
+    step_price: StepPriceOut | None = Field(
+        default=None, description="Последняя известная стоимость шага цены"
+    )
 
 
 async def _contract_out(session: AsyncSession, contract: Contract) -> ContractOut:
@@ -436,6 +445,14 @@ async def _contract_out(session: AsyncSession, contract: Contract) -> ContractOu
         .where(ContractProviderId.contract_id == contract.id)
         .order_by(DataProvider.code, ContractProviderId.id_type)
     )
+    latest = (
+        await session.scalars(
+            select(ContractStepPrice)
+            .where(ContractStepPrice.contract_id == contract.id)
+            .order_by(ContractStepPrice.date.desc())
+            .limit(1)
+        )
+    ).one_or_none()
     return ContractOut(
         id=contract.id,
         root_id=contract.root_id,
@@ -446,6 +463,11 @@ async def _contract_out(session: AsyncSession, contract: Contract) -> ContractOu
             ProviderIdOut(provider=provider, id_type=id_type, external_id=external)
             for provider, id_type, external in rows
         ],
+        step_price=(
+            StepPriceOut(date=latest.date, step_price=latest.step_price)
+            if latest is not None
+            else None
+        ),
     )
 
 
@@ -556,6 +578,54 @@ async def delete_contract(contract_id: int, session: DbSession) -> None:
     except IntegrityError as error:
         await session.rollback()
         raise HTTPException(409, "У контракта есть данные или импорты") from error
+
+
+@router.get(
+    "/contracts/{contract_id}/step-prices",
+    response_model=list[StepPriceOut],
+    tags=["contracts"],
+    operation_id="listStepPrices",
+    summary="История стоимости шага цены",
+    description=(
+        "Дневная стоимость шага в ₽, выведенная из итогов торгов ISS "
+        "(оборот / (объём × средневзвешенная цена) × шаг цены). Новые первыми."
+    ),
+    responses=NOT_FOUND,
+)
+async def list_step_prices_endpoint(
+    contract_id: int,
+    session: DbSession,
+    limit: int = Query(default=60, ge=1, le=2000),
+) -> list[StepPriceOut]:
+    await _find_contract(session, contract_id)
+    rows = await session.scalars(
+        select(ContractStepPrice)
+        .where(ContractStepPrice.contract_id == contract_id)
+        .order_by(ContractStepPrice.date.desc())
+        .limit(limit)
+    )
+    return [StepPriceOut(date=r.date, step_price=r.step_price) for r in rows]
+
+
+@router.post(
+    "/contracts/{contract_id}/step-prices/refresh",
+    response_model=JobOut,
+    status_code=201,
+    tags=["contracts"],
+    operation_id="refreshStepPrices",
+    summary="Обновить стоимость шага цены из ISS",
+    description="Ставит `iss.step_prices`; догружает с последнего сохранённого дня.",
+    responses=NOT_FOUND,
+)
+async def refresh_step_prices(contract_id: int, session: DbSession) -> Any:
+    await _find_contract(session, contract_id)
+    job = (
+        await session.scalars(
+            enqueue_statement("iss.step_prices", {"contract_id": contract_id})
+        )
+    ).one()
+    await session.commit()
+    return job
 
 
 # --- контракты из ISS --------------------------------------------------------

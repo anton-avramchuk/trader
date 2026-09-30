@@ -1,7 +1,7 @@
 """Поставщики рыночных данных."""
 
-from trader_providers.base import HistoricalDataProvider, ProviderContract
-from trader_providers.iss import DailyBar, IssClient, IssError
+from trader_providers.base import DailyBar, HistoricalDataProvider, ProviderContract
+from trader_providers.iss import IssClient, IssError
 
 __all__ = [
     "DailyBar",

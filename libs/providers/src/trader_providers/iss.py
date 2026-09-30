@@ -16,7 +16,6 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
@@ -25,7 +24,7 @@ from zoneinfo import ZoneInfo
 import httpx
 from trader_engine.ingest import RawRow, RowError
 
-from trader_providers.base import ProviderContract
+from trader_providers.base import DailyBar, ProviderContract
 
 log = logging.getLogger("trader_providers.iss")
 
@@ -39,15 +38,6 @@ _BOARD = "RFUD"
 
 class IssError(Exception):
     """Сбой обращения к ISS; сообщение объясняет причину."""
-
-
-@dataclass(frozen=True, slots=True)
-class DailyBar:
-    """Итог торгового дня контракта (для торговых дней и ликвидности)."""
-
-    trade_date: date
-    volume: int
-    trades: int
 
 
 def _table(payload: dict[str, Any], block: str) -> list[dict[str, Any]]:
@@ -310,6 +300,8 @@ class IssClient:
                             trade_date,
                             int(row.get("VOLUME") or 0),
                             int(row.get("NUMTRADES") or 0),
+                            _decimal(row.get("VALUE")),
+                            _decimal(row.get("WAPRICE")),
                         )
                     )
             offset += len(page)

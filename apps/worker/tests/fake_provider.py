@@ -6,7 +6,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from trader_engine.ingest import RawRow, RowError
-from trader_providers import IssError, ProviderContract
+from trader_providers import DailyBar, IssError, ProviderContract
 
 MSK = ZoneInfo("Europe/Moscow")
 TODAY = date(2026, 10, 5)
@@ -55,12 +55,26 @@ class FakeProvider:
         self.range_override: dict[str, tuple[datetime, datetime] | None] = {}
         self.list_calls: list[dict[str, object]] = []
         self.candle_calls: list[tuple[str, date, date]] = []
+        self.daily: dict[str, list[DailyBar]] = {}
+        self.daily_calls: list[tuple[str, date, date]] = []
         self.closed = 0
         self.list_error: IssError | None = None
         self.fail_on: Callable[[str, date, date], IssError | None] | None = None
 
     def set_days(self, secid: str, days: list[date], count: int = 30) -> None:
         self.days[secid] = {day: list(day_rows(day, count)) for day in days}
+
+    def daily_history(self, provider_id: str, start: date, end: date) -> list[DailyBar]:
+        self.daily_calls.append((provider_id, start, end))
+        if self.fail_on is not None and (
+            error := self.fail_on(provider_id, start, end)
+        ):
+            raise error
+        return [
+            bar
+            for bar in self.daily.get(provider_id, [])
+            if start <= bar.trade_date <= end
+        ]
 
     def factory(self) -> "FakeProvider":
         return self

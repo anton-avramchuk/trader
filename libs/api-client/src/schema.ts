@@ -211,6 +211,46 @@ export interface paths {
         patch: operations["updateContract"];
         trace?: never;
     };
+    "/contracts/{contract_id}/step-prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * История стоимости шага цены
+         * @description Дневная стоимость шага в ₽, выведенная из итогов торгов ISS (оборот / (объём × средневзвешенная цена) × шаг цены). Новые первыми.
+         */
+        get: operations["listStepPrices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contracts/{contract_id}/step-prices/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Обновить стоимость шага цены из ISS
+         * @description Ставит `iss.step_prices`; догружает с последнего сохранённого дня.
+         */
+        post: operations["refreshStepPrices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/roots/{root_id}/iss-preview": {
         parameters: {
             query?: never;
@@ -773,6 +813,8 @@ export interface components {
             secid: string | null;
             /** Provider Ids */
             provider_ids: components["schemas"]["ProviderIdOut"][];
+            /** @description Последняя известная стоимость шага цены */
+            step_price?: components["schemas"]["StepPriceOut"] | null;
         };
         /** ContractPatch */
         ContractPatch: {
@@ -1282,6 +1324,19 @@ export interface components {
             roll_trading_days?: number | null;
             /** Include Weekend Sessions */
             include_weekend_sessions?: boolean | null;
+        };
+        /** StepPriceOut */
+        StepPriceOut: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Step Price
+             * @description Стоимость шага цены в ₽
+             */
+            step_price: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1936,6 +1991,84 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listStepPrices: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                contract_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepPriceOut"][];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refreshStepPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contract_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

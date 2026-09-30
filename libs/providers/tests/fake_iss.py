@@ -50,7 +50,7 @@ class FakeIss:
         # secid -> свечи ``[open, close, high, low, value, volume, begin, end]``
         self.candles: dict[str, list[list[Any]]] = {}
         self.borders: dict[str, list[list[Any]]] = {}
-        # secid -> дни ``[TRADEDATE, VOLUME, NUMTRADES]`` для дневной истории
+        # secid -> дни ``[TRADEDATE, VOLUME, NUMTRADES(, VALUE, WAPRICE)]``
         self.daily: dict[str, list[list[Any]]] = {}
         self.series_rows = list(SERIES_ROWS)
         # Очередь ответов-сбоев, отдаваемых до нормальной работы: коды или исключения.
@@ -138,10 +138,15 @@ class FakeIss:
     def _history(self, secid: str, params: httpx.QueryParams) -> dict[str, Any]:
         first, last = params["from"], params["till"]
         start = int(params.get("start", "0"))
-        rows = [r for r in self.daily.get(secid, []) if first <= r[0] <= last]
+        rows = [
+            [*r, None, None][:5]
+            for r in self.daily.get(secid, [])
+            if first <= r[0] <= last
+        ]
         return {
             "history": block(
-                ["TRADEDATE", "VOLUME", "NUMTRADES"], rows[start : start + 100]
+                ["TRADEDATE", "VOLUME", "NUMTRADES", "VALUE", "WAPRICE"],
+                rows[start : start + 100],
             )
         }
 

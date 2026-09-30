@@ -25,6 +25,12 @@ from trader_worker.iss_jobs import (
     make_sync_root_handler,
     msk_today,
 )
+from trader_worker.step_price_jobs import (
+    STEP_PRICES_ALL_JOB_TYPE,
+    STEP_PRICES_JOB_TYPE,
+    make_step_prices_all_handler,
+    make_step_prices_handler,
+)
 
 
 def build_registry(
@@ -54,5 +60,11 @@ def build_registry(
     )
     registry.register(AGGREGATE_JOB_TYPE)(
         make_aggregate_handler(session_factory, now=clock)
+    )
+    registry.register(STEP_PRICES_JOB_TYPE)(
+        make_step_prices_handler(session_factory, provider_factory, today=today)
+    )
+    registry.register(STEP_PRICES_ALL_JOB_TYPE)(
+        make_step_prices_all_handler(session_factory, today=today)
     )
     return registry
