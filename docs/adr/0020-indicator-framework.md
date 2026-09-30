@@ -2,7 +2,7 @@
 
 **Статус:** принято
 
-Реализует [ADR-0003](0003-causal-computation-and-event-log.md), [ADR-0009](0009-mtf-display-rules.md) и [ADR-0010](0010-derived-data-persistence.md) для индикаторов.
+Реализует [ADR-0003](0003-causal-event-log.md), [ADR-0009](0009-mtf-projection.md) и [ADR-0010](0010-derived-persistence.md) для индикаторов.
 
 ## Плагин (`trader_engine.indicators`)
 - Индикатор — подкласс `Indicator` с метаданными (`name`, `title`, `version`, `pane`: `price` / `separate`, `outputs`), моделью параметров `Params` (Pydantic) и **каузальной машиной** `update(bar) -> значения выходов`. Batch, replay и продолжение хвоста — один код.
