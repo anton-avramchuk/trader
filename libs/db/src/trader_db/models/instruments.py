@@ -96,7 +96,7 @@ class DataProvider(Base):
 
 
 class ContractProviderId(Base):
-    """Код контракта у провайдера (ISS SECID, T-Invest uid/figi...)."""
+    """Код контракта у провайдера (ISS SECID)."""
 
     __tablename__ = "contract_provider_ids"
     __table_args__ = (

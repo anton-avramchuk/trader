@@ -98,7 +98,7 @@ class TestUpsert:
         root_id = make_root(session)
         contract, _ = add(session, root_id)
 
-        assert provider_contract_id(session, contract.id, "tinvest") is None
+        assert provider_contract_id(session, contract.id, "csv") is None
 
 
 class TestLoadedWindows:
