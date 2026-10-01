@@ -14,14 +14,14 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from trader_db.models import ChartProfile, Root
+from trader_db.models import ChartProfile, Instrument
 from trader_engine.indicators import create, validate_source_timeframe
 
 from trader_api.deps import DbSession
 
 router = APIRouter(tags=["profiles"])
 
-RootFilter = Annotated[int | None, Query(description="Фильтр по root")]
+InstrumentFilter = Annotated[int | None, Query(description="Фильтр по инструменту")]
 
 NOT_FOUND: dict[int | str, dict[str, Any]] = {404: {"description": "Не найдено"}}
 CONFLICT: dict[int | str, dict[str, Any]] = {
@@ -59,8 +59,9 @@ class ProfileConfig(BaseModel):
 
 class ProfileIn(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    root_id: int | None = Field(
-        default=None, description="Пусто — глобальный профиль, иначе для этого root"
+    instrument_id: int | None = Field(
+        default=None,
+        description="Пусто — глобальный профиль, иначе для этого инструмента",
     )
     config: ProfileConfig = Field(default_factory=ProfileConfig)
 
@@ -73,7 +74,7 @@ class ProfilePatch(BaseModel):
 class ProfileOut(BaseModel):
     id: int
     name: str
-    root_id: int | None
+    instrument_id: int | None
     config: ProfileConfig
     created_at: datetime
     updated_at: datetime
@@ -84,7 +85,7 @@ def _out(profile: ChartProfile) -> ProfileOut:
     return ProfileOut(
         id=profile.id,
         name=profile.name,
-        root_id=profile.root_id,
+        instrument_id=profile.instrument_id,
         config=ProfileConfig.model_validate(profile.config),
         created_at=profile.created_at,
         updated_at=profile.updated_at,
@@ -105,17 +106,20 @@ async def _find(session: AsyncSession, profile_id: int) -> ChartProfile:
     operation_id="listChartProfiles",
     summary="Профили графика",
     description=(
-        "С `root_id` — глобальные и профили этого root; без него — все. "
+        "С `instrument_id` — глобальные и профили этого инструмента; без него — все. "
         "Последние применённые первыми."
     ),
 )
 async def list_profiles(
-    session: DbSession, root_id: RootFilter = None
+    session: DbSession, instrument_id: InstrumentFilter = None
 ) -> list[ProfileOut]:
     query = select(ChartProfile)
-    if root_id is not None:
+    if instrument_id is not None:
         query = query.where(
-            or_(ChartProfile.root_id.is_(None), ChartProfile.root_id == root_id)
+            or_(
+                ChartProfile.instrument_id.is_(None),
+                ChartProfile.instrument_id == instrument_id,
+            )
         )
     query = query.order_by(
         ChartProfile.last_used_at.desc().nulls_last(),
@@ -133,11 +137,14 @@ async def list_profiles(
     responses={**NOT_FOUND, **CONFLICT},
 )
 async def create_profile(body: ProfileIn, session: DbSession) -> ProfileOut:
-    if body.root_id is not None and await session.get(Root, body.root_id) is None:
-        raise HTTPException(404, "Root не найден")
+    if (
+        body.instrument_id is not None
+        and await session.get(Instrument, body.instrument_id) is None
+    ):
+        raise HTTPException(404, "Инструмент не найден")
     profile = ChartProfile(
         name=body.name.strip(),
-        root_id=body.root_id,
+        instrument_id=body.instrument_id,
         config=body.config.model_dump(mode="json"),
     )
     session.add(profile)

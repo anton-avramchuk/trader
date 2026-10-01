@@ -21,11 +21,11 @@ NOON = datetime(2026, 10, 1, 12, tzinfo=UTC)
 
 def body(seed: Seed, **kw: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "root_id": seed.root_id,
+        "instrument_id": seed.id,
         "timeframe": "15m",
         "strategy": {"source": "level_touch", "max_bars": 6},
         "costs": {"slippage_ticks": 1},
-        "contracts": 2,
+        "quantity": 2,
         "period_from": "2026-09-28",
         "period_to": "2026-10-06",
     }
@@ -44,7 +44,7 @@ def test_create_stores_experiment_and_queues_the_job(
     created = create(client, seed)
 
     assert created["status"] == "queued" and created["kind"] == "single"
-    assert created["family"] == "level_touch" and created["contracts"] == 2
+    assert created["family"] == "level_touch" and created["quantity"] == 2
     assert created["strategy"]["source"] == "level_touch"
     assert created["strategy"]["stop"] == {"kind": "atr", "value": 1.5}
     assert len(created["params_hash"]) == 64 and created["job_id"] is not None
@@ -58,11 +58,11 @@ def test_same_inputs_give_the_same_hash_and_each_run_is_logged(
     client: TestClient, seed: Seed
 ) -> None:
     first, second = create(client, seed), create(client, seed)
-    other = create(client, seed, contracts=3)
+    other = create(client, seed, quantity=3)
 
     assert first["params_hash"] == second["params_hash"] != other["params_hash"]
     log = client.get(
-        "/backtest-log", params={"root_id": seed.root_id, "family": "level_touch"}
+        "/backtest-log", params={"instrument_id": seed.id, "family": "level_touch"}
     ).json()
     assert [entry["event"] for entry in log] == ["run", "run", "run"]
     assert log[0]["experiment_id"] == other["id"]
@@ -90,7 +90,7 @@ def test_walk_forward_request_is_stored_with_test_period(
         "target_atr": [2.0, 3.0],
     }
     assert created["test_from"] == "2026-10-07"
-    log = client.get("/backtest-log", params={"root_id": seed.root_id}).json()
+    log = client.get("/backtest-log", params={"instrument_id": seed.id}).json()
     assert log[0]["event"] == "walk_forward" and log[0]["touches_test"]
 
 
@@ -108,7 +108,7 @@ def test_walk_forward_request_is_stored_with_test_period(
             }
         },
         {"period_from": "2026-12-01"},
-        {"contracts": 0},
+        {"quantity": 0},
         {"costs": {"slippage_ticks": -1}},
         {"kind": "walk_forward"},
         {"test_from": "2026-10-07", "test_to": "2026-10-30"},  # test — не для single
@@ -165,10 +165,14 @@ def test_validation_errors(
     assert client.get("/backtest-log").json() == []  # неверный запрос не логируется
 
 
-def test_unknown_root_and_missing_backtest(client: TestClient, seed: Seed) -> None:
-    missing_root = client.post("/backtests", json=body(seed, root_id=999999))
+def test_unknown_instrument_and_missing_backtest(
+    client: TestClient, seed: Seed
+) -> None:
+    missing_instrument = client.post(
+        "/backtests", json=body(seed, instrument_id=999999)
+    )
 
-    assert missing_root.status_code == 404
+    assert missing_instrument.status_code == 404
     for path in ("", "/trades", "/windows"):
         assert client.get(f"/backtests/999999{path}").status_code == 404
 
@@ -190,20 +194,21 @@ def fabricate(database_url: str, experiment_id: int) -> int:
             "side": "long",
             "ref": "levels:1:3",
             "signal_price": 99.5,
-            "contracts": 2,
+            "quantity": 2,
             "entry_time": NOON,
             "exit_time": NOON,
             "reason": "target",
-            "legs": [{"contract_id": 1}],
+            "entry_price": 100.0,
+            "exit_price": 100.05,
             "gross_ticks": 5.0,
             "cost_ticks": 2.0,
             "mfe_ticks": 6.0,
             "mae_ticks": -1.0,
             "gross_points": 0.1,
             "net_points": 0.06,
-            "commission_rub": 10.0,
-            "gross_rub": 100.0,
-            "net_rub": 50.0,
+            "commission": 10.0,
+            "gross_money": 100.0,
+            "net_money": 50.0,
         }
         add_trades(session, experiment_id, [row, row | {"reason": "stop"}])
         add_trades(
@@ -232,7 +237,7 @@ def test_results_trades_and_windows(
         ("single", 1),
         ("validation", 0),
     ]
-    assert trades[0]["net_rub"] == 50.0 and trades[0]["legs"] == [{"contract_id": 1}]
+    assert trades[0]["net_money"] == 50.0 and trades[0]["entry_price"] == 100.0
     assert trades[0]["signal_price"] == 99.5
     assert len(client.get(f"{path}/trades", params={"segment": "single"}).json()) == 2
     assert (
@@ -244,7 +249,7 @@ def test_results_trades_and_windows(
     [window] = client.get(f"{path}/windows").json()
     assert window["params"] == {"stop_atr": 1.0} and window["valid_metrics"] is None
     listed = client.get(
-        "/backtests", params={"root_id": seed.root_id, "status": "succeeded"}
+        "/backtests", params={"instrument_id": seed.id, "status": "succeeded"}
     )
     assert [b["id"] for b in listed.json()] == [created["id"]]
     assert client.get("/backtests", params={"status": "failed"}).json() == []
@@ -259,7 +264,7 @@ def test_locks_listing_and_explicit_unlock(
         open_test_period(
             session,
             experiment_id=created["id"],
-            root_id=seed.root_id,
+            instrument_id=seed.id,
             timeframe_code="15m",
             family="level_touch",
             test_from=date(2026, 10, 7),
@@ -268,9 +273,9 @@ def test_locks_listing_and_explicit_unlock(
         session.commit()
     engine.dispose()
 
-    [lock] = client.get("/backtest-locks", params={"root_id": seed.root_id}).json()
+    [lock] = client.get("/backtest-locks", params={"instrument_id": seed.id}).json()
     assert lock["family"] == "level_touch" and lock["test_from"] == "2026-10-07"
-    unlock = {"root_id": seed.root_id, "timeframe": "15m", "family": "level_touch"}
+    unlock = {"instrument_id": seed.id, "timeframe": "15m", "family": "level_touch"}
 
     short = client.post("/backtest-locks/unlock", json=unlock | {"note": "ок"})
     done = client.post(

@@ -1,39 +1,72 @@
-"""REST свечей: диапазоны, continuous, snapshot as-of (нужен TRADER_DATABASE_URL)."""
+"""REST свечей: диапазоны, пагинация, snapshot as-of (нужен TRADER_DATABASE_URL)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from trader_engine.aggregation import TIMEFRAMES
+from trader_engine.timeframes import TIMEFRAMES
 
-from tests.seeding import FACTOR, MINUTE, Seed, get, iso
+from tests.seeding import BARS_PER_DAY, DAYS, Seed, get, iso
 
 
 class TestCandles:
-    def test_contract_bars_are_ascending_and_in_contract_prices(
+    def test_candles_are_ascending_closed_and_complete(
         self, client: TestClient, seed: Seed
     ) -> None:
-        body = get(client, "/candles", contract_id=seed.b, timeframe="15m")
+        body = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
 
         stamps = [c["timestamp"] for c in body["candles"]]
-        assert stamps == sorted(set(stamps)) and body["count"] == len(stamps) > 10
+        assert stamps == sorted(set(stamps))
+        assert body["count"] == len(stamps) == BARS_PER_DAY * len(DAYS)
         assert body["truncated"] is False and body["next_start"] is None
-        assert body["rolls"] == [] and body["dataset_version_id"] is None
         first = body["candles"][0]
-        assert first["contract_id"] is None and first["price_factor"] is None
-        assert Decimal(first["open"]) >= 200  # цены B — свои, без масштаба
+        assert set(first) == {
+            "timestamp",
+            "close_time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "trading_day",
+        }
+        opened = datetime.fromisoformat(first["timestamp"])
+        assert datetime.fromisoformat(first["close_time"]) == opened + timedelta(
+            minutes=15
+        )
+        assert first["trading_day"] == DAYS[0].isoformat()
+        assert Decimal(first["high"]) >= Decimal(first["low"])
+
+    @pytest.mark.parametrize("timeframe", list(TIMEFRAMES))
+    def test_every_timeframe_is_served(
+        self, client: TestClient, seed: Seed, timeframe: str
+    ) -> None:
+        body = get(client, "/candles", instrument_id=seed.id, timeframe=timeframe)
+
+        assert body["count"] > 0 and body["timeframe"] == timeframe
+        assert body["instrument_id"] == seed.id
+
+    def test_higher_timeframes_aggregate_the_lower_ones(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        daily = get(client, "/candles", instrument_id=seed.id, timeframe="1d")
+        quarters = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
+
+        assert daily["count"] == len(DAYS)
+        total = sum(Decimal(c["volume"]) for c in quarters["candles"])
+        assert sum(Decimal(c["volume"]) for c in daily["candles"]) == total
 
     def test_pagination_reassembles_the_full_series(
         self, client: TestClient, seed: Seed
     ) -> None:
-        full = get(client, "/candles", contract_id=seed.a, timeframe="15m")
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
         collected: list[dict[str, Any]] = []
         start: str | None = None
         for _ in range(100):
             params: dict[str, Any] = {
-                "contract_id": seed.a,
+                "instrument_id": seed.id,
                 "timeframe": "15m",
                 "limit": 7,
             }
@@ -44,250 +77,153 @@ class TestCandles:
             if not page["truncated"]:
                 break
             start = page["next_start"]
+
         assert collected == full["candles"]
 
-    def test_tail_returns_the_latest_bars_and_signals_older_ones(
+    def test_tail_returns_the_last_candles_in_ascending_order(
         self, client: TestClient, seed: Seed
     ) -> None:
-        full = get(client, "/candles", contract_id=seed.a, timeframe="15m")
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
 
-        latest = get(
-            client, "/candles", contract_id=seed.a, timeframe="15m", limit=4, tail=True
+        tail = get(
+            client,
+            "/candles",
+            instrument_id=seed.id,
+            timeframe="15m",
+            limit=5,
+            tail=True,
         )
+
+        assert tail["candles"] == full["candles"][-5:]
+        assert tail["truncated"] is True and tail["next_start"] is None
         older = get(
             client,
             "/candles",
-            contract_id=seed.a,
+            instrument_id=seed.id,
             timeframe="15m",
-            limit=4,
-            tail=True,
-            end=latest["candles"][0]["timestamp"],
-        )
-
-        assert latest["candles"] == full["candles"][-4:]
-        assert latest["truncated"] is True and latest["next_start"] is None
-        assert older["candles"] == full["candles"][-8:-4]
-
-    def test_range_filter(self, client: TestClient, seed: Seed) -> None:
-        body = get(
-            client,
-            "/candles",
-            contract_id=seed.a,
-            timeframe="1d",
-            start=iso(seed.roll_at),
-        )
-
-        assert body["count"] == 2  # 05.10 и 06.10
-        stamps = [datetime.fromisoformat(c["timestamp"]) for c in body["candles"]]
-        assert all(stamp >= seed.roll_at for stamp in stamps)
-
-    def test_raw_minutes_use_the_latest_or_a_chosen_dataset_version(
-        self, client: TestClient, seed: Seed
-    ) -> None:
-        latest = get(client, "/candles", contract_id=seed.a, timeframe="1m", limit=5)
-
-        assert latest["dataset_version_id"] is not None and latest["count"] == 5
-        assert latest["candles"][0]["close_time"] > latest["candles"][0]["timestamp"]
-        same = get(
-            client,
-            "/candles",
-            contract_id=seed.a,
-            timeframe="1m",
             limit=5,
-            dataset_version_id=latest["dataset_version_id"],
+            tail=True,
+            end=tail["candles"][0]["timestamp"],
         )
-        assert same == latest
+        assert older["candles"] == full["candles"][-10:-5]
+
+    def test_start_and_end_bound_the_range(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
+        lo, hi = full["candles"][10]["timestamp"], full["candles"][20]["timestamp"]
+
+        body = get(
+            client, "/candles", instrument_id=seed.id, timeframe="15m", start=lo, end=hi
+        )
+
+        assert body["candles"] == full["candles"][10:20]
+
+    def test_errors(self, client: TestClient, seed: Seed) -> None:
+        assert client.get("/candles", params={"timeframe": "15m"}).status_code == 422
         assert (
             client.get(
-                "/candles",
-                params={
-                    "contract_id": seed.a,
-                    "timeframe": "1m",
-                    "dataset_version_id": 999,
-                },
+                "/candles", params={"instrument_id": 99999, "timeframe": "15m"}
             ).status_code
             == 404
         )
         assert (
             client.get(
+                "/candles", params={"instrument_id": seed.id, "timeframe": "1m"}
+            ).status_code
+            == 422
+        )
+        assert (
+            client.get(
+                "/candles",
+                params={"instrument_id": seed.id, "timeframe": "15m", "limit": 0},
+            ).status_code
+            == 422
+        )
+        assert (
+            client.get(
                 "/candles",
                 params={
-                    "contract_id": seed.a,
+                    "instrument_id": seed.id,
                     "timeframe": "15m",
-                    "dataset_version_id": latest["dataset_version_id"],
+                    "start": "2026-09-28T10:00:00",
                 },
             ).status_code
-            == 409
+            == 422
         )
-
-    def test_continuous_switches_contract_at_the_roll_with_ratio(
-        self, client: TestClient, seed: Seed
-    ) -> None:
-        body = get(client, "/candles", root_id=seed.root_id, timeframe="1d")
-
-        by_contract = {(c["contract_id"], c["price_factor"]) for c in body["candles"]}
-        assert by_contract == {(seed.a, "2.000000000000"), (seed.b, "1")}
-        assert [r["ratio"] for r in body["rolls"]] == ["2.000000000000"]
-        roll = body["rolls"][0]
-        assert (roll["from_contract_id"], roll["to_contract_id"]) == (seed.a, seed.b)
-        for candle in body["candles"]:
-            moment = datetime.fromisoformat(candle["timestamp"])
-            expected = seed.a if moment < seed.roll_at else seed.b
-            assert candle["contract_id"] == expected
-        assert Decimal(body["candles"][0]["close"]) >= 200  # A приведён к масштабу B
-
-    def test_weekly_bars_never_mix_contracts(
-        self, client: TestClient, seed: Seed
-    ) -> None:
-        body = get(client, "/candles", root_id=seed.root_id, timeframe="1w")
-
-        assert len(body["candles"]) == 2
-        assert [c["contract_id"] for c in body["candles"]] == [seed.a, seed.b]
-
-
-class TestValidation:
-    @pytest.mark.parametrize(
-        "params",
-        [
-            {"timeframe": "15m"},
-            {"timeframe": "15m", "root_id": 1, "contract_id": 1},
-            {"timeframe": "7m", "contract_id": 1},
-            {"timeframe": "1m", "root_id": 1},
-            {"timeframe": "15m", "contract_id": 1, "start": "2026-10-05T00:00:00"},
-            {"timeframe": "15m", "contract_id": 1, "limit": 0},
-        ],
-    )
-    def test_bad_requests_are_422(
-        self, client: TestClient, seed: Seed, params: dict[str, Any]
-    ) -> None:
-        assert client.get("/candles", params=params).status_code == 422
-
-    def test_unknown_ids_are_404(self, client: TestClient, seed: Seed) -> None:
-        assert (
-            client.get(
-                "/candles", params={"timeframe": "1d", "root_id": 999}
-            ).status_code
-            == 404
-        )
-        assert (
-            client.get(
-                "/candles", params={"timeframe": "1d", "contract_id": 999}
-            ).status_code
-            == 404
-        )
-        assert (
-            client.get(
-                "/candles", params={"timeframe": "1m", "contract_id": 999}
-            ).status_code
-            == 404
-        )
-
-    def test_snapshot_requires_an_aware_as_of(
-        self, client: TestClient, seed: Seed
-    ) -> None:
-        for as_of in (None, "2026-10-05T12:00:00"):
-            params: dict[str, Any] = {"timeframe": "1d", "contract_id": seed.a}
-            if as_of:
-                params["as_of"] = as_of
-            assert client.get("/snapshot", params=params).status_code == 422
-
-    def test_contract_without_minutes_is_404(self, client: TestClient) -> None:
-        root = client.post(
-            "/roots",
-            json={
-                "code": "BR",
-                "name": "Brent",
-                "quote_currency": "USD",
-                "tick_size": "0.01",
-            },
-        ).json()
-        contract = client.post(
-            f"/roots/{root['id']}/contracts", json={"expiration_date": "2026-12-01"}
-        ).json()
-
-        response = client.get(
-            "/candles", params={"timeframe": "1m", "contract_id": contract["id"]}
-        )
-
-        assert response.status_code == 404
 
 
 class TestSnapshot:
-    @pytest.mark.parametrize("timeframe", ["1m", *TIMEFRAMES])
-    @pytest.mark.parametrize(
-        "as_of",
-        [
-            datetime(2026, 9, 28, 12, 7, tzinfo=UTC),
-            datetime(2026, 9, 29, 9, 30, 30, tzinfo=UTC),
-            datetime(2026, 10, 5, 10, 0, tzinfo=UTC),
-            datetime(2026, 10, 6, 20, 59, tzinfo=UTC),
-        ],
-    )
-    def test_no_candle_closes_after_as_of(
-        self, client: TestClient, seed: Seed, timeframe: str, as_of: datetime
-    ) -> None:
-        selections: list[dict[str, Any]] = [{"contract_id": seed.a}]
-        if timeframe != "1m":
-            selections.append({"root_id": seed.root_id})
-        for selection in selections:
-            body = get(
-                client, "/snapshot", timeframe=timeframe, as_of=iso(as_of), **selection
-            )
-
-            assert body["as_of"] is not None
-            closes = [datetime.fromisoformat(c["close_time"]) for c in body["candles"]]
-            assert all(close <= as_of for close in closes)
-
-    def test_returns_the_latest_bars_closed_by_as_of(
+    def test_hides_candles_closed_after_as_of(
         self, client: TestClient, seed: Seed
     ) -> None:
-        as_of = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
-        everything = get(
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
+        moment = datetime.fromisoformat(full["candles"][20]["close_time"])
+
+        body = get(
             client,
             "/snapshot",
-            contract_id=seed.a,
+            instrument_id=seed.id,
             timeframe="15m",
-            as_of=iso(as_of),
-            limit=10_000,
+            as_of=iso(moment),
         )
 
-        latest = get(
-            client,
-            "/snapshot",
-            contract_id=seed.a,
-            timeframe="15m",
-            as_of=iso(as_of),
-            limit=3,
+        assert body["count"] == 21 and body["as_of"] is not None
+        assert all(
+            datetime.fromisoformat(c["close_time"]) <= moment for c in body["candles"]
         )
+        assert body["candles"] == full["candles"][:21]
 
-        assert latest["truncated"] is True and latest["next_start"] is None
-        assert latest["candles"] == everything["candles"][-3:]
-        last_close = datetime.fromisoformat(everything["candles"][-1]["close_time"])
-        assert last_close <= as_of
-
-    def test_a_roll_is_invisible_before_it_becomes_available(
+    def test_before_the_first_close_is_empty_and_far_future_is_everything(
         self, client: TestClient, seed: Seed
     ) -> None:
-        before = get(
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
+        first_open = datetime.fromisoformat(full["candles"][0]["timestamp"])
+
+        early = get(
             client,
             "/snapshot",
-            root_id=seed.root_id,
-            timeframe="1d",
-            as_of=iso(seed.roll_at - MINUTE),
+            instrument_id=seed.id,
+            timeframe="15m",
+            as_of=iso(first_open),
         )
-        after = get(
+        late = get(
             client,
             "/snapshot",
-            root_id=seed.root_id,
-            timeframe="1d",
-            as_of=iso(seed.roll_at + timedelta(days=5)),
+            instrument_id=seed.id,
+            timeframe="15m",
+            as_of="2030-01-01T00:00:00Z",
         )
 
-        assert before["rolls"] == [] and after["rolls"] != []
-        assert {c["price_factor"] for c in before["candles"]} == {"1"}
-        assert {c["contract_id"] for c in before["candles"]} == {seed.a}
-        old = {c["timestamp"]: c for c in after["candles"]}
-        for candle in before["candles"]:
-            # Тот же бар в «будущем» масштабе умножен на ratio ролла.
-            scaled = Decimal(candle["close"]) * FACTOR
-            assert Decimal(old[candle["timestamp"]]["close"]) == scaled
+        assert early["candles"] == []
+        assert late["candles"] == full["candles"]
+
+    def test_limit_keeps_the_latest_candles(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        full = get(client, "/candles", instrument_id=seed.id, timeframe="15m")
+
+        body = get(
+            client,
+            "/snapshot",
+            instrument_id=seed.id,
+            timeframe="15m",
+            as_of="2030-01-01T00:00:00Z",
+            limit=4,
+        )
+
+        assert body["candles"] == full["candles"][-4:] and body["truncated"] is True
+
+    def test_requires_a_timezone_aware_moment(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        response = client.get(
+            "/snapshot",
+            params={
+                "instrument_id": seed.id,
+                "timeframe": "15m",
+                "as_of": "2026-09-28T12:00:00",
+            },
+        )
+
+        assert response.status_code == 422

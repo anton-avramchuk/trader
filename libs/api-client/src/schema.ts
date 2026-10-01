@@ -65,7 +65,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/calendars": {
+    "/importer/tickers": {
         parameters: {
             query?: never;
             header?: never;
@@ -73,10 +73,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Торговые календари
-         * @description Календари только для чтения: расписание откалибровано по данным ISS и меняется миграциями (ADR-0014).
+         * Тикеры importer
+         * @description Список инструментов, которые умеет отдавать importer; `added` — уже заведённые в системе.
          */
-        get: operations["listCalendars"];
+        get: operations["listImporterTickers"];
         put?: never;
         post?: never;
         delete?: never;
@@ -85,153 +85,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/calendars/{code}": {
+    "/instruments": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Календарь с эпохами расписания */
-        get: operations["getCalendar"];
+        /**
+         * Инструменты
+         * @description Заведённые инструменты и покрытие свечами по таймфреймам.
+         */
+        get: operations["listInstruments"];
         put?: never;
-        post?: never;
+        /**
+         * Завести инструмент по тикеру importer
+         * @description Название, валюта, шаг цены и часовой пояс берутся у importer. Свечи загружаются отдельно: `POST /instruments/{id}/load`.
+         */
+        post: operations["createInstrument"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/calendars/{code}/days": {
+    "/instruments/{instrument_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Праздники и особые дни календаря */
-        get: operations["getCalendarDays"];
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Изменить стоимость тика */
+        patch: operations["updateInstrument"];
         trace?: never;
     };
-    "/roots": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Базовые активы */
-        get: operations["listRoots"];
-        put?: never;
-        /** Завести базовый актив */
-        post: operations["createRoot"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/roots/{root_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Базовый актив */
-        get: operations["getRoot"];
-        put?: never;
-        post?: never;
-        /**
-         * Удалить базовый актив
-         * @description Только без контрактов.
-         */
-        delete: operations["deleteRoot"];
-        options?: never;
-        head?: never;
-        /**
-         * Изменить базовый актив
-         * @description Код неизменяем. Смена календаря, числа дней до ролла или флага выходных сессий приводит к пересборке баров при следующем `aggregate.contract`.
-         */
-        patch: operations["updateRoot"];
-        trace?: never;
-    };
-    "/roots/{root_id}/contracts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Контракты базового актива
-         * @description По возрастанию экспирации.
-         */
-        get: operations["listContracts"];
-        put?: never;
-        /**
-         * Завести контракт вручную
-         * @description Ключ контракта — `(root, expiration_date)`; SECID — лишь атрибут.
-         */
-        post: operations["createContract"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/contracts/{contract_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Контракт */
-        get: operations["getContract"];
-        put?: never;
-        post?: never;
-        /**
-         * Удалить контракт
-         * @description Только без загруженных данных и импортов.
-         */
-        delete: operations["deleteContract"];
-        options?: never;
-        head?: never;
-        /**
-         * Изменить контракт
-         * @description Экспирация — часть ключа и не меняется.
-         */
-        patch: operations["updateContract"];
-        trace?: never;
-    };
-    "/contracts/{contract_id}/step-prices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * История стоимости шага цены
-         * @description Дневная стоимость шага в ₽, выведенная из итогов торгов ISS (оборот / (объём × средневзвешенная цена) × шаг цены). Новые первыми.
-         */
-        get: operations["listStepPrices"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/contracts/{contract_id}/step-prices/refresh": {
+    "/instruments/{instrument_id}/load": {
         parameters: {
             query?: never;
             header?: never;
@@ -241,57 +136,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Обновить стоимость шага цены из ISS
-         * @description Ставит `iss.step_prices`; догружает с последнего сохранённого дня.
+         * Подгрузить свечи из importer
+         * @description Ставит задачу `candles.load` за период `[period_from, period_to)`: worker забирает готовые свечи у importer и записывает их поверх существующих. Ход — `GET /jobs/{id}` или WebSocket. Пока по инструменту идёт загрузка, новая не ставится.
          */
-        post: operations["refreshStepPrices"];
+        post: operations["loadCandles"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/roots/{root_id}/iss-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Запросить список контрактов из ISS
-         * @description Ставит задачу `iss.sync_root` в режиме `dry_run`: ничего не создаётся. Результат задачи (`result.contracts`) показывается пользователю для подтверждения, затем вызывается `from-iss`.
-         */
-        post: operations["previewIssContracts"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/roots/{root_id}/contracts/from-iss": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Создать подтверждённые контракты ISS
-         * @description Идемпотентно: существующие контракты обновляются. Для каждого при `enqueue_imports` ставится загрузка истории (если она уже не ждёт).
-         */
-        post: operations["createContractsFromIss"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/imports": {
+    "/instruments/{instrument_id}/loads": {
         parameters: {
             query?: never;
             header?: never;
@@ -299,222 +154,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Импорты
-         * @description Новые первыми.
+         * Журнал загрузок свечей
+         * @description Что и за какой период загружено; новые первыми.
          */
-        get: operations["listImports"];
+        get: operations["listCandleLoads"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/imports/{import_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Импорт с отчётом */
-        get: operations["getImport"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/imports/{import_id}/errors": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Отклонённые строки импорта */
-        get: operations["listImportErrors"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/contracts/{contract_id}/imports/iss": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Загрузить историю из ISS
-         * @description Ставит `import.iss`. Загрузка возобновляемая: повторный запуск догружает только недостающее.
-         */
-        post: operations["startIssImport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/contracts/{contract_id}/imports/file": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Импортировать загруженный файл
-         * @description Ставит `import.file` для файла из каталога импорта.
-         */
-        post: operations["startFileImport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/import-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Загруженные файлы */
-        get: operations["listImportFiles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/import-files/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Загрузить файл для импорта
-         * @description Тело запроса — содержимое файла как есть (`application/octet-stream`). Существующий файл с тем же именем заменяется.
-         */
-        put: operations["uploadImportFile"];
-        post?: never;
-        /** Удалить загруженный файл */
-        delete: operations["deleteImportFile"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/import-files/{name}/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Первые строки загруженного файла
-         * @description Для настройки маппинга колонок. Только текстовые форматы (CSV, JSON); кодировка задаётся параметром `encoding`.
-         */
-        get: operations["previewImportFile"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/import-presets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Пресеты маппинга файлов
-         * @description Встроенные первыми (`finam`, `finam_no_header`, `iso_utc`).
-         */
-        get: operations["listImportPresets"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/import-presets/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Создать или обновить пресет */
-        put: operations["saveImportPreset"];
-        post?: never;
-        /** Удалить пользовательский пресет */
-        delete: operations["deleteImportPreset"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/imports/{import_id}/conflicts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Конфликты импорта
-         * @description Свечи из импорта, отличающиеся от уже загруженных. Не применяются без решения пользователя (ADR-0005).
-         */
-        get: operations["listImportConflicts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/imports/{import_id}/conflicts/resolve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Принять или отклонить конфликты
-         * @description Принятие создаёт импорт-разрешение и новую версию датасета (старые версии остаются воспроизводимыми) и ставит пересборку баров.
-         */
-        post: operations["resolveImportConflicts"];
         delete?: never;
         options?: never;
         head?: never;
@@ -529,8 +174,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Свечи контракта или continuous-серии
-         * @description `contract_id` — бары контракта в его ценах (`1m` — сырые минуты версии датасета, по умолчанию последней). `root_id` — continuous-серия: цены приведены к масштабу текущего контракта, у каждого бара указан контракт и `price_factor`, в ответе — роллы диапазона. Выдача по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`. С `tail=true` — последние `limit` баров диапазона (при `truncated` слева есть более ранние).
+         * Свечи инструмента
+         * @description Закрытые свечи инструмента на таймфрейме по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`. С `tail=true` — последние `limit` свечей диапазона (при `truncated` слева есть более ранние).
          */
         get: operations["getCandles"];
         put?: never;
@@ -550,7 +195,7 @@ export interface paths {
         };
         /**
          * Свечи, известные на момент as_of
-         * @description Срез знания: только бары, закрытые к `as_of` (`close_time <= as_of`), и только роллы, известные к этому моменту — масштаб continuous такой, каким его видел бы наблюдатель в момент `as_of`. Возвращает **последние** `limit` баров (по возрастанию). Основа для воспроизводимых расчётов без заглядывания в будущее.
+         * @description Срез знания: только свечи, закрытые к `as_of` (`close_time <= as_of`). Возвращает **последние** `limit` свечей (по возрастанию). Основа для воспроизводимых расчётов без заглядывания в будущее.
          */
         get: operations["getSnapshot"];
         put?: never;
@@ -590,7 +235,7 @@ export interface paths {
         };
         /**
          * Значения индикатора на баре графика
-         * @description Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары и роллы, известные к нему (масштаб continuous как тогда). Значения до конца прогрева — `valid = false`.
+         * @description Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары. Значения до конца прогрева — `valid = false`.
          */
         get: operations["getIndicatorValues"];
         put?: never;
@@ -610,7 +255,7 @@ export interface paths {
         };
         /**
          * Профили графика
-         * @description С `root_id` — глобальные и профили этого root; без него — все. Последние применённые первыми.
+         * @description С `instrument_id` — глобальные и профили этого инструмента; без него — все. Последние применённые первыми.
          */
         get: operations["listChartProfiles"];
         put?: never;
@@ -687,7 +332,7 @@ export interface paths {
         };
         /**
          * Прогоны движков
-         * @description Новые сверху. Фильтры по движку, ряду и таймфрейму.
+         * @description Новые сверху. Фильтры по движку, инструменту и таймфрейму.
          */
         get: operations["listEngineRuns"];
         put?: never;
@@ -899,13 +544,13 @@ export interface paths {
         };
         /**
          * Список бэктестов
-         * @description Новые первыми; фильтры по root, таймфрейму и статусу.
+         * @description Новые первыми; фильтры по инструменту, таймфрейму и статусу.
          */
         get: operations["listBacktests"];
         put?: never;
         /**
          * Запустить бэктест
-         * @description Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (root, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.
+         * @description Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (инструмент, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.
          */
         post: operations["createBacktest"];
         delete?: never;
@@ -943,7 +588,7 @@ export interface paths {
         };
         /**
          * Заблокированные test-периоды
-         * @description Test-периоды связок (root, TF, семейство), уже открытые один раз.
+         * @description Test-периоды связок (инструмент, TF, семейство), открытые один раз.
          */
         get: operations["listBacktestLocks"];
         put?: never;
@@ -965,7 +610,7 @@ export interface paths {
         put?: never;
         /**
          * Разблокировать test-период
-         * @description Явная разблокировка связки (root, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.
+         * @description Явная разблокировка связки (инструмент, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.
          */
         post: operations["unlockBacktestTest"];
         delete?: never;
@@ -983,7 +628,7 @@ export interface paths {
         };
         /**
          * Результат бэктеста
-         * @description Состояние, версии и результат: метрики в тиках, пунктах и ₽, equity, walk-forward и test.
+         * @description Состояние, версии и результат: метрики в тиках, пунктах и деньгах, equity, walk-forward и test.
          */
         get: operations["getBacktest"];
         put?: never;
@@ -1098,8 +743,8 @@ export interface components {
         };
         /** BacktestCreate */
         BacktestCreate: {
-            /** Root Id */
-            root_id: number;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe */
             timeframe: string;
             /**
@@ -1111,10 +756,10 @@ export interface components {
             strategy: components["schemas"]["StrategyIn"];
             costs?: components["schemas"]["CostsIn"];
             /**
-             * Contracts
+             * Quantity
              * @default 1
              */
-            contracts?: number;
+            quantity?: number;
             /**
              * Period From
              * Format: date
@@ -1145,8 +790,8 @@ export interface components {
              * @description queued, running, succeeded, failed
              */
             status: string;
-            /** Root Id */
-            root_id: number;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe Code */
             timeframe_code: string;
             /** Family */
@@ -1159,8 +804,8 @@ export interface components {
             costs: {
                 [key: string]: unknown;
             };
-            /** Contracts */
-            contracts: number;
+            /** Quantity */
+            quantity: number;
             /**
              * Period From
              * Format: date
@@ -1230,82 +875,6 @@ export interface components {
             /** Horizons */
             horizons: components["schemas"]["HorizonStatsOut"][];
         };
-        /** CalendarDays */
-        CalendarDays: {
-            /**
-             * Holidays
-             * @description Будние дни без торгов
-             */
-            holidays: string[];
-            /**
-             * Special Days
-             * @description Выходные, торгуемые как обычный день (рабочие субботы-переносы)
-             */
-            special_days: string[];
-        };
-        /** CalendarDetail */
-        CalendarDetail: {
-            /** Code */
-            code: string;
-            /** Name */
-            name: string;
-            /** Timezone */
-            timezone: string;
-            /**
-             * Rules
-             * @description Сколько эпох расписания (ADR-0014)
-             */
-            rules: number;
-            /** Holidays */
-            holidays: number;
-            /** Special Days */
-            special_days: number;
-            /**
-             * Fingerprint
-             * @description Отпечаток расписания: меняется вместе с ним
-             */
-            fingerprint: string;
-            /** Rule List */
-            rule_list: components["schemas"]["CalendarRuleOut"][];
-        };
-        /** CalendarOut */
-        CalendarOut: {
-            /** Code */
-            code: string;
-            /** Name */
-            name: string;
-            /** Timezone */
-            timezone: string;
-            /**
-             * Rules
-             * @description Сколько эпох расписания (ADR-0014)
-             */
-            rules: number;
-            /** Holidays */
-            holidays: number;
-            /** Special Days */
-            special_days: number;
-        };
-        /** CalendarRuleOut */
-        CalendarRuleOut: {
-            /**
-             * Effective From
-             * Format: date
-             */
-            effective_from: string;
-            /** Effective To */
-            effective_to: string | null;
-            /** Bar Anchor */
-            bar_anchor: string;
-            /** Weekday Windows */
-            weekday_windows: {
-                [key: string]: unknown;
-            }[];
-            /** Weekend Windows */
-            weekend_windows: {
-                [key: string]: unknown;
-            }[];
-        };
         /** CalibrationOut */
         CalibrationOut: {
             /** Group */
@@ -1346,13 +915,13 @@ export interface components {
             /**
              * Timestamp
              * Format: date-time
-             * @description Open time бара (UTC)
+             * @description Открытие свечи (UTC)
              */
             timestamp: string;
             /**
              * Close Time
              * Format: date-time
-             * @description Конец бара; данные доступны с этого момента
+             * @description Конец свечи; данные доступны с этого момента
              */
             close_time: string;
             /** Open */
@@ -1365,57 +934,19 @@ export interface components {
             close: string;
             /** Volume */
             volume: string;
-            /** Trade Count */
-            trade_count?: number | null;
-            /**
-             * Is Partial
-             * @description Бар короче номинала (сессия, клиринг, граница)
-             */
-            is_partial: boolean;
             /**
              * Trading Day
-             * @description Торговый день (только TF)
+             * Format: date
+             * @description Дата открытия в часовом поясе инструмента
              */
-            trading_day?: string | null;
-            /**
-             * Contract Id
-             * @description Контракт бара (только continuous)
-             */
-            contract_id?: number | null;
-            /**
-             * Price Factor
-             * @description Множитель цен к масштабу текущего контракта (только continuous)
-             */
-            price_factor?: string | null;
-        };
-        /** CandleValues */
-        CandleValues: {
-            /** Open */
-            open: string;
-            /** High */
-            high: string;
-            /** Low */
-            low: string;
-            /** Close */
-            close: string;
-            /** Volume */
-            volume: string;
-            /** Trade Count */
-            trade_count?: number | null;
+            trading_day: string;
         };
         /** CandlesOut */
         CandlesOut: {
             /** Timeframe */
             timeframe: string;
-            /** Root Id */
-            root_id: number | null;
-            /** Contract Id */
-            contract_id: number | null;
-            /**
-             * Dataset Version Id
-             * @description Версия датасета 1m (для сырых минут); у баров TF — null
-             */
-            dataset_version_id: number | null;
+            /** Instrument Id */
+            instrument_id: number;
             /**
              * As Of
              * @description Срез знания (snapshot)
@@ -1425,7 +956,7 @@ export interface components {
             count: number;
             /**
              * Truncated
-             * @description Есть ещё бары за пределами `limit`
+             * @description Есть ещё свечи за пределами `limit`
              */
             truncated: boolean;
             /**
@@ -1435,73 +966,6 @@ export interface components {
             next_start: string | null;
             /** Candles */
             candles: components["schemas"]["CandleOut"][];
-            /**
-             * Rolls
-             * @description Роллы continuous-серии в диапазоне выданных баров
-             */
-            rolls: components["schemas"]["RollOut"][];
-        };
-        /** ConflictOut */
-        ConflictOut: {
-            /** Id */
-            id: number;
-            /**
-             * Timestamp
-             * Format: date-time
-             */
-            timestamp: string;
-            /**
-             * Status
-             * @description pending, accepted, rejected
-             */
-            status: string;
-            /** @description Активная свеча на момент обнаружения */
-            existing: components["schemas"]["CandleValues"];
-            /** @description Свеча из импорта */
-            incoming: components["schemas"]["CandleValues"];
-            /** Resolved At */
-            resolved_at: string | null;
-            /** Resolution Import Id */
-            resolution_import_id: number | null;
-        };
-        /** ContractIn */
-        ContractIn: {
-            /**
-             * Expiration Date
-             * Format: date
-             */
-            expiration_date: string;
-            /** Last Trade Date */
-            last_trade_date?: string | null;
-            /** Secid */
-            secid?: string | null;
-        };
-        /** ContractOut */
-        ContractOut: {
-            /** Id */
-            id: number;
-            /** Root Id */
-            root_id: number;
-            /**
-             * Expiration Date
-             * Format: date
-             */
-            expiration_date: string;
-            /** Last Trade Date */
-            last_trade_date: string | null;
-            /** Secid */
-            secid: string | null;
-            /** Provider Ids */
-            provider_ids: components["schemas"]["ProviderIdOut"][];
-            /** @description Последняя известная стоимость шага цены */
-            step_price?: components["schemas"]["StepPriceOut"] | null;
-        };
-        /** ContractPatch */
-        ContractPatch: {
-            /** Last Trade Date */
-            last_trade_date?: string | null;
-            /** Secid */
-            secid?: string | null;
         };
         /** CostsIn */
         CostsIn: {
@@ -1518,21 +982,28 @@ export interface components {
              */
             slippage_ticks?: number;
             /**
-             * Commission Per Contract
-             * @description ₽ за контракт на сторону
+             * Commission Per Unit
+             * @description Комиссия за единицу количества на сторону
              * @default 0
              */
-            commission_per_contract?: number;
+            commission_per_unit?: number;
         };
-        /**
-         * DatetimeSpec
-         * @description Откуда брать время свечи: одна колонка или две (дата и время) + формат.
-         */
-        DatetimeSpec: {
-            /** Columns */
-            columns: (string | number)[];
-            /** Format */
-            format: string;
+        /** CoverageOut */
+        CoverageOut: {
+            /** Timeframe */
+            timeframe: string;
+            /** Count */
+            count: number;
+            /**
+             * First
+             * @description Открытие первой свечи
+             */
+            first: string | null;
+            /**
+             * Last
+             * @description Закрытие последней свечи
+             */
+            last: string | null;
         };
         /** DistOut */
         DistOut: {
@@ -1612,20 +1083,10 @@ export interface components {
             };
             /** Params Hash */
             params_hash: string;
-            /** Contract Id */
-            contract_id: number | null;
-            /**
-             * Root Id
-             * @description Continuous-серия root (или контракт)
-             */
-            root_id: number | null;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe */
             timeframe: string;
-            /**
-             * Dataset Version Id
-             * @description Версия минутных данных контракта (у continuous пусто)
-             */
-            dataset_version_id: number | null;
             /** Bars Processed */
             bars_processed: number;
             /** Last Close Time */
@@ -1659,13 +1120,8 @@ export interface components {
         };
         /** FibGridIn */
         FibGridIn: {
-            /** Contract Id */
-            contract_id?: number | null;
-            /**
-             * Root Id
-             * @description Continuous-серия root
-             */
-            root_id?: number | null;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe */
             timeframe: string;
             start: components["schemas"]["FibPoint"];
@@ -1677,10 +1133,8 @@ export interface components {
         FibGridOut: {
             /** Id */
             id: number;
-            /** Contract Id */
-            contract_id: number | null;
-            /** Root Id */
-            root_id: number | null;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe */
             timeframe: string;
             start: components["schemas"]["FibPoint"];
@@ -1718,132 +1172,6 @@ export interface components {
             time: string;
             /** Price */
             price: number;
-        };
-        /**
-         * FileImportIn
-         * @example {
-         *       "file": "NG-2020.csv",
-         *       "preset": "finam"
-         *     }
-         */
-        FileImportIn: {
-            /**
-             * File
-             * @description Имя файла, загруженного через `PUT /import-files/{name}`
-             */
-            file: string;
-            /**
-             * Format
-             * @description По умолчанию — по расширению
-             */
-            format?: string | null;
-            /**
-             * Preset
-             * @description Имя пресета маппинга
-             */
-            preset?: string | null;
-            /** @description Маппинг без пресета */
-            mapping?: components["schemas"]["FileMapping"] | null;
-            /**
-             * Overrides
-             * @description Поля маппинга, заменяемые для этого запуска
-             */
-            overrides?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Allow Non Positive Prices
-             * @default false
-             */
-            allow_non_positive_prices?: boolean;
-        };
-        /**
-         * FileMapping
-         * @description Как читать файл со свечами 1m. Одинаков для CSV, JSON и Parquet.
-         */
-        FileMapping: {
-            /**
-             * Delimiter
-             * @default ,
-             */
-            delimiter?: string;
-            /**
-             * Has Header
-             * @default true
-             */
-            has_header?: boolean;
-            /**
-             * Encoding
-             * @default utf-8-sig
-             */
-            encoding?: string;
-            /**
-             * Skip Rows
-             * @default 0
-             */
-            skip_rows?: number;
-            /**
-             * Decimal Separator
-             * @default .
-             * @enum {string}
-             */
-            decimal_separator?: "." | ",";
-            /**
-             * Timezone
-             * @default Europe/Moscow
-             */
-            timezone?: string;
-            datetime: components["schemas"]["DatetimeSpec"];
-            /** Open */
-            open: string | number;
-            /** High */
-            high: string | number;
-            /** Low */
-            low: string | number;
-            /** Close */
-            close: string | number;
-            /** Volume */
-            volume: string | number;
-            /** Trade Count */
-            trade_count?: string | number | null;
-            /** Quote Volume */
-            quote_volume?: string | number | null;
-            /**
-             * Timestamp Is Close
-             * @default false
-             */
-            timestamp_is_close?: boolean;
-        };
-        /** FileOut */
-        FileOut: {
-            /** Name */
-            name: string;
-            /** Size */
-            size: number;
-            /**
-             * Modified At
-             * Format: date-time
-             */
-            modified_at: string;
-        };
-        /** FilePreview */
-        FilePreview: {
-            /** Name */
-            name: string;
-            /** Size */
-            size: number;
-            /** Encoding */
-            encoding: string;
-            /**
-             * Lines
-             * @description Первые строки файла как текст
-             */
-            lines: string[];
-            /**
-             * Delimiter
-             * @description Предполагаемый разделитель CSV (`,` `;` таб `|`) или null
-             */
-            delimiter: string | null;
         };
         /** ForecastOut */
         ForecastOut: {
@@ -1967,8 +1295,6 @@ export interface components {
             crosses_session_gap: boolean;
             /** Crosses Weekend */
             crosses_weekend: boolean;
-            /** Crosses Roll */
-            crosses_roll: boolean;
         };
         /** HorizonStatsOut */
         HorizonStatsOut: {
@@ -2028,58 +1354,6 @@ export interface components {
             };
             /** Warnings */
             warnings: string[];
-        };
-        /** ImportErrorOut */
-        ImportErrorOut: {
-            /** Row Number */
-            row_number: number | null;
-            /** Raw Row */
-            raw_row: string | null;
-            /** Reason Code */
-            reason_code: string;
-            /** Message */
-            message: string;
-        };
-        /** ImportOut */
-        ImportOut: {
-            /** Id */
-            id: number;
-            /** Contract Id */
-            contract_id: number;
-            /** Provider */
-            provider: string;
-            /**
-             * Kind
-             * @description `import` или `conflict_resolution`
-             */
-            kind: string;
-            /** Source Type */
-            source_type: string;
-            /** Source Name */
-            source_name: string | null;
-            /**
-             * Status
-             * @description running, completed, failed
-             */
-            status: string;
-            /**
-             * Report
-             * @description Отчёт: строки, дубликаты, конфликты, покрытие, диапазон (ADR-0015)
-             */
-            report: {
-                [key: string]: unknown;
-            };
-            /** Error */
-            error: string | null;
-            /** Resolves Import Id */
-            resolves_import_id: number | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Finished At */
-            finished_at: string | null;
         };
         /** IndicatorInfo */
         IndicatorInfo: {
@@ -2178,78 +1452,59 @@ export interface components {
             /** Points */
             points: components["schemas"]["IndicatorPoint"][];
         };
+        /** InstrumentCreate */
+        InstrumentCreate: {
+            /**
+             * Ticker
+             * @description Тикер из importer
+             */
+            ticker: string;
+            /** Tick Value */
+            tick_value?: number | string | null;
+        };
+        /** InstrumentOut */
+        InstrumentOut: {
+            /** Id */
+            id: number;
+            /** Ticker */
+            ticker: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+            /** Tick Size */
+            tick_size: string;
+            /** Timezone */
+            timezone: string;
+            /**
+             * Tick Value
+             * @description Стоимость тика в валюте счёта на единицу (для денег в бэктесте)
+             */
+            tick_value: string | null;
+            /** Source */
+            source: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Coverage */
+            coverage?: components["schemas"]["CoverageOut"][];
+        };
+        /** InstrumentPatch */
+        InstrumentPatch: {
+            /**
+             * Tick Value
+             * @description `null` — убрать (деньги не считаются)
+             */
+            tick_value?: number | string | null;
+        };
         /** IntervalOut */
         IntervalOut: {
             /** Low */
             low: number;
             /** High */
             high: number;
-        };
-        /**
-         * IssContractIn
-         * @description Серия ISS, подтверждённая пользователем.
-         */
-        IssContractIn: {
-            /** Secid */
-            secid: string;
-            /**
-             * Expiration Date
-             * Format: date
-             */
-            expiration_date: string;
-            /** Last Trade Date */
-            last_trade_date?: string | null;
-        };
-        /** IssContractsIn */
-        IssContractsIn: {
-            /** Contracts */
-            contracts: components["schemas"]["IssContractIn"][];
-            /**
-             * Enqueue Imports
-             * @description Сразу поставить загрузку истории каждого контракта
-             * @default true
-             */
-            enqueue_imports?: boolean;
-        };
-        /** IssContractsOut */
-        IssContractsOut: {
-            /** Contracts */
-            contracts: components["schemas"]["ContractOut"][];
-            /** Created */
-            created: number;
-            /**
-             * Imports Enqueued
-             * @description id поставленных задач `import.iss`
-             */
-            imports_enqueued: number[];
-        };
-        /** IssImportIn */
-        IssImportIn: {
-            /**
-             * From
-             * @description Начало окна (включительно)
-             */
-            from?: string | null;
-            /**
-             * Till
-             * @description Конец окна (включительно)
-             */
-            till?: string | null;
-        };
-        /** IssPreviewIn */
-        IssPreviewIn: {
-            /**
-             * From Year
-             * @default 2020
-             */
-            from_year?: number;
-            /** To Year */
-            to_year?: number | null;
-            /**
-             * Secid Prefix
-             * @description Префикс SECID; по умолчанию определяется по ISS
-             */
-            secid_prefix?: string | null;
         };
         /**
          * JobCreate
@@ -2330,12 +1585,58 @@ export interface components {
             /** Finished At */
             finished_at: string | null;
         };
+        /** LoadOut */
+        LoadOut: {
+            /** Id */
+            id: number;
+            /** Timeframe Code */
+            timeframe_code: string;
+            /**
+             * Period From
+             * Format: date-time
+             */
+            period_from: string;
+            /**
+             * Period To
+             * Format: date-time
+             */
+            period_to: string;
+            /** Rows */
+            rows: number;
+            /** Source */
+            source: string;
+            /** Job Id */
+            job_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** LoadRequest */
+        LoadRequest: {
+            /**
+             * Period From
+             * @description Начало периода (дата — начало дня в зоне инструмента)
+             */
+            period_from: string;
+            /**
+             * Period To
+             * @description Конец периода, исключительно
+             */
+            period_to: string;
+            /**
+             * Timeframes
+             * @description По умолчанию все: 15m, 1h, 4h, 1d, 1w
+             */
+            timeframes?: string[] | null;
+        };
         /** LockOut */
         LockOut: {
             /** Id */
             id: number;
-            /** Root Id */
-            root_id: number;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe Code */
             timeframe_code: string;
             /** Family */
@@ -2369,8 +1670,8 @@ export interface components {
             created_at: string;
             /** Event */
             event: string;
-            /** Root Id */
-            root_id: number | null;
+            /** Instrument Id */
+            instrument_id: number | null;
             /** Timeframe Code */
             timeframe_code: string | null;
             /** Family */
@@ -2497,22 +1798,6 @@ export interface components {
             /** Values */
             values: number[];
         };
-        /** PresetIn */
-        PresetIn: {
-            /** Description */
-            description?: string | null;
-            mapping: components["schemas"]["FileMapping"];
-        };
-        /** PresetOut */
-        PresetOut: {
-            /** Name */
-            name: string;
-            /** Description */
-            description: string | null;
-            /** Builtin */
-            builtin: boolean;
-            mapping: components["schemas"]["FileMapping"];
-        };
         /** ProbabilityOut */
         ProbabilityOut: {
             /**
@@ -2559,10 +1844,10 @@ export interface components {
             /** Name */
             name: string;
             /**
-             * Root Id
-             * @description Пусто — глобальный профиль, иначе для этого root
+             * Instrument Id
+             * @description Пусто — глобальный профиль, иначе для этого инструмента
              */
-            root_id?: number | null;
+            instrument_id?: number | null;
             config?: components["schemas"]["ProfileConfig"];
         };
         /** ProfileIndicator */
@@ -2588,8 +1873,8 @@ export interface components {
             id: number;
             /** Name */
             name: string;
-            /** Root Id */
-            root_id: number | null;
+            /** Instrument Id */
+            instrument_id: number | null;
             config: components["schemas"]["ProfileConfig"];
             /**
              * Created At
@@ -2610,160 +1895,12 @@ export interface components {
             name?: string | null;
             config?: components["schemas"]["ProfileConfig"] | null;
         };
-        /** ProviderIdOut */
-        ProviderIdOut: {
-            /** Provider */
-            provider: string;
-            /** Id Type */
-            id_type: string;
-            /** External Id */
-            external_id: string;
-        };
         /** QuantileOut */
         QuantileOut: {
             /** Q */
             q: number;
             /** Value */
             value: number;
-        };
-        /** ResolveIn */
-        ResolveIn: {
-            /**
-             * Accept
-             * @description `true` — принять новые значения, `false` — отклонить
-             */
-            accept: boolean;
-            /**
-             * Conflict Ids
-             * @description Только эти конфликты; по умолчанию — все ожидающие
-             */
-            conflict_ids?: number[] | null;
-        };
-        /** ResolveOut */
-        ResolveOut: {
-            /** Resolved */
-            resolved: number;
-            /** Resolution Import Id */
-            resolution_import_id: number | null;
-            /**
-             * Dataset Version Id
-             * @description Новая версия датасета (только при принятии изменений)
-             */
-            dataset_version_id: number | null;
-            /**
-             * Aggregation Job Id
-             * @description Задача пересборки баров
-             */
-            aggregation_job_id: number | null;
-        };
-        /** RollOut */
-        RollOut: {
-            /** From Contract Id */
-            from_contract_id: number;
-            /** To Contract Id */
-            to_contract_id: number;
-            /**
-             * Rolled At
-             * Format: date-time
-             */
-            rolled_at: string;
-            /** Ratio */
-            ratio: string;
-            /**
-             * Available At
-             * Format: date-time
-             */
-            available_at: string;
-        };
-        /**
-         * RootIn
-         * @example {
-         *       "code": "NG",
-         *       "name": "Природный газ",
-         *       "quote_currency": "USD",
-         *       "tick_size": "0.001"
-         *     }
-         */
-        RootIn: {
-            /**
-             * Code
-             * @description Код базового актива (для ISS — ASSETCODE, например NG, BR, GOLD)
-             */
-            code: string;
-            /** Name */
-            name: string;
-            /**
-             * Exchange
-             * @default MOEX
-             */
-            exchange?: string;
-            /**
-             * Quote Currency
-             * @example USD
-             */
-            quote_currency: string;
-            /** Tick Size */
-            tick_size: number | string;
-            /**
-             * Calendar Code
-             * @default moex_forts
-             */
-            calendar_code?: string;
-            /**
-             * Roll Trading Days
-             * @description Ролл за N торговых дней до экспирации
-             * @default 5
-             */
-            roll_trading_days?: number;
-            /**
-             * Include Weekend Sessions
-             * @description Включать выходные сессии в continuous-серию
-             * @default false
-             */
-            include_weekend_sessions?: boolean;
-        };
-        /** RootOut */
-        RootOut: {
-            /** Id */
-            id: number;
-            /** Code */
-            code: string;
-            /** Name */
-            name: string;
-            /** Exchange */
-            exchange: string;
-            /** Quote Currency */
-            quote_currency: string;
-            /** Tick Size */
-            tick_size: string;
-            /** Calendar Code */
-            calendar_code: string;
-            /** Roll Trading Days */
-            roll_trading_days: number;
-            /** Include Weekend Sessions */
-            include_weekend_sessions: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** RootPatch */
-        RootPatch: {
-            /** Name */
-            name?: string | null;
-            /** Exchange */
-            exchange?: string | null;
-            /** Quote Currency */
-            quote_currency?: string | null;
-            /** Tick Size */
-            tick_size?: number | string | null;
-            /** Calendar Code */
-            calendar_code?: string | null;
-            /** Roll Trading Days */
-            roll_trading_days?: number | null;
-            /** Include Weekend Sessions */
-            include_weekend_sessions?: boolean | null;
         };
         /** ShapeOut */
         ShapeOut: {
@@ -2805,19 +1942,6 @@ export interface components {
              * @default 0
              */
             skipped?: number;
-        };
-        /** StepPriceOut */
-        StepPriceOut: {
-            /**
-             * Date
-             * Format: date
-             */
-            date: string;
-            /**
-             * Step Price
-             * @description Стоимость шага цены в ₽
-             */
-            step_price: string;
         };
         /**
          * StrategyIn
@@ -2885,6 +2009,31 @@ export interface components {
             /** Bins */
             bins: components["schemas"]["BinOut"][];
         };
+        /** TickerOut */
+        TickerOut: {
+            /** Ticker */
+            ticker: string;
+            /** Name */
+            name: string;
+            /** Currency */
+            currency: string;
+            /** Tick Size */
+            tick_size: string;
+            /** Timezone */
+            timezone: string;
+            /** Timeframes */
+            timeframes: string[];
+            /** First Date */
+            first_date?: string | null;
+            /** Last Date */
+            last_date?: string | null;
+            /**
+             * Added
+             * @description Уже заведён как инструмент
+             * @default false
+             */
+            added?: boolean;
+        };
         /** TradeOut */
         TradeOut: {
             /** Id */
@@ -2901,11 +2050,11 @@ export interface components {
             ref: string | null;
             /**
              * Signal Price
-             * @description Close сигнального бара в шкале continuous (для уровней)
+             * @description Close сигнального бара (для связи с уровнями)
              */
             signal_price: number | null;
-            /** Contracts */
-            contracts: number;
+            /** Quantity */
+            quantity: number;
             /**
              * Entry Time
              * Format: date-time
@@ -2916,12 +2065,12 @@ export interface components {
              * Format: date-time
              */
             exit_time: string;
+            /** Entry Price */
+            entry_price: number;
+            /** Exit Price */
+            exit_price: number;
             /** Reason */
             reason: string;
-            /** Legs */
-            legs: {
-                [key: string]: unknown;
-            }[];
             /** Gross Ticks */
             gross_ticks: number;
             /** Cost Ticks */
@@ -2934,23 +2083,22 @@ export interface components {
             gross_points: number;
             /** Net Points */
             net_points: number;
-            /** Commission Rub */
-            commission_rub: number;
-            /** Gross Rub */
-            gross_rub: number | null;
-            /** Net Rub */
-            net_rub: number | null;
-            /** Step Price Estimated */
-            step_price_estimated: boolean;
+            /** Commission */
+            commission: number;
+            /**
+             * Gross Money
+             * @description Только если у инструмента есть tick_value
+             */
+            gross_money: number | null;
+            /** Net Money */
+            net_money: number | null;
             /** Ambiguous Bar */
             ambiguous_bar: boolean;
-            /** Rolled */
-            rolled: boolean;
         };
         /** UnlockIn */
         UnlockIn: {
-            /** Root Id */
-            root_id: number;
+            /** Instrument Id */
+            instrument_id: number;
             /** Timeframe */
             timeframe: string;
             /** Family */
@@ -3280,7 +2428,7 @@ export interface operations {
             };
         };
     };
-    listCalendars: {
+    listImporterTickers: {
         parameters: {
             query?: never;
             header?: never;
@@ -3295,88 +2443,19 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CalendarOut"][];
+                    "application/json": components["schemas"]["TickerOut"][];
                 };
             };
-        };
-    };
-    getCalendar: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CalendarDetail"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
+            /** @description Importer недоступен */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
         };
     };
-    getCalendarDays: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CalendarDays"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listRoots: {
+    listInstruments: {
         parameters: {
             query?: never;
             header?: never;
@@ -3391,12 +2470,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RootOut"][];
+                    "application/json": components["schemas"]["InstrumentOut"][];
                 };
             };
         };
     };
-    createRoot: {
+    createInstrument: {
         parameters: {
             query?: never;
             header?: never;
@@ -3405,7 +2484,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootIn"];
+                "application/json": components["schemas"]["InstrumentCreate"];
             };
         };
         responses: {
@@ -3415,43 +2494,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RootOut"];
-                };
-            };
-            /** @description Конфликт данных */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Неизвестный календарь или значения */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    getRoot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                root_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RootOut"];
+                    "application/json": components["schemas"]["InstrumentOut"];
                 };
             };
             /** @description Не найдено */
@@ -3461,43 +2504,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    deleteRoot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                root_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Конфликт данных */
+            /** @description Конфликт */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3513,20 +2520,27 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Importer недоступен */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    updateRoot: {
+    updateInstrument: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                root_id: number;
+                instrument_id: number;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RootPatch"];
+                "application/json": components["schemas"]["InstrumentPatch"];
             };
         };
         responses: {
@@ -3536,7 +2550,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RootOut"];
+                    "application/json": components["schemas"]["InstrumentOut"];
                 };
             };
             /** @description Не найдено */
@@ -3557,304 +2571,18 @@ export interface operations {
             };
         };
     };
-    listContracts: {
+    loadCandles: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                root_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContractOut"][];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    createContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                root_id: number;
+                instrument_id: number;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ContractIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContractOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Конфликт данных */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    getContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContractOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    deleteContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Конфликт данных */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    updateContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ContractPatch"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContractOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description last_trade_date позже экспирации */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listStepPrices: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StepPriceOut"][];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    refreshStepPrices: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    previewIssContracts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                root_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IssPreviewIn"];
+                "application/json": components["schemas"]["LoadRequest"];
             };
         };
         responses: {
@@ -3874,440 +2602,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    createContractsFromIss: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                root_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IssContractsIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssContractsOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listImports: {
-        parameters: {
-            query?: {
-                contract_id?: number | null;
-                status?: string | null;
-                kind?: string | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportOut"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    getImport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listImportErrors: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportErrorOut"][];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    startIssImport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IssImportIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    startFileImport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                contract_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FileImportIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobOut"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listImportFiles: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileOut"][];
-                };
-            };
-        };
-    };
-    uploadImportFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileOut"];
-                };
-            };
-            /** @description Файл больше лимита */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Недопустимое имя */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    deleteImportFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    previewImportFile: {
-        parameters: {
-            query?: {
-                encoding?: string;
-                lines?: number;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FilePreview"];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Нельзя прочитать как текст */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listImportPresets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetOut"][];
-                };
-            };
-        };
-    };
-    saveImportPreset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PresetIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetOut"];
-                };
-            };
-            /** @description Пресет встроенный */
+            /** @description Конфликт */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Недопустимое имя */
+            /** @description Неверный период */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4316,59 +2618,14 @@ export interface operations {
             };
         };
     };
-    deleteImportPreset: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Пресет встроенный */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listImportConflicts: {
+    listCandleLoads: {
         parameters: {
             query?: {
-                status?: string | null;
                 limit?: number;
-                offset?: number;
             };
             header?: never;
             path: {
-                import_id: number;
+                instrument_id: number;
             };
             cookie?: never;
         };
@@ -4380,49 +2637,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConflictOut"][];
-                };
-            };
-            /** @description Не найдено */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    resolveImportConflicts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResolveIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResolveOut"];
+                    "application/json": components["schemas"]["LoadOut"][];
                 };
             };
             /** @description Не найдено */
@@ -4446,18 +2661,15 @@ export interface operations {
     getCandles: {
         parameters: {
             query: {
-                /** @description 1m, 15m, 1h, 4h, 1d, 1w */
+                instrument_id: number;
+                /** @description 15m, 1h, 4h, 1d, 1w */
                 timeframe: string;
-                root_id?: number | null;
-                contract_id?: number | null;
                 /** @description Включительно */
                 start?: string | null;
                 /** @description Исключительно */
                 end?: string | null;
-                /** @description Только 1m; по умолчанию последняя версия */
-                dataset_version_id?: number | null;
                 limit?: number;
-                /** @description Последние `limit` баров диапазона (для подгрузки истории) */
+                /** @description Последние `limit` свечей диапазона (подгрузка истории) */
                 tail?: boolean;
             };
             header?: never;
@@ -4482,14 +2694,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description dataset_version_id для TF */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Нужен ровно один из root_id / contract_id; неверный TF */
+            /** @description Неизвестный таймфрейм */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4501,12 +2706,11 @@ export interface operations {
     getSnapshot: {
         parameters: {
             query: {
-                /** @description 1m, 15m, 1h, 4h, 1d, 1w */
+                instrument_id: number;
+                /** @description 15m, 1h, 4h, 1d, 1w */
                 timeframe: string;
                 /** @description Момент знания (UTC или со смещением) */
                 as_of: string;
-                root_id?: number | null;
-                contract_id?: number | null;
                 /** @description Включительно */
                 start?: string | null;
                 limit?: number;
@@ -4533,7 +2737,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Нужен ровно один из root_id / contract_id; неверный TF */
+            /** @description Неизвестный таймфрейм */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4569,8 +2773,7 @@ export interface operations {
                 indicator: string;
                 /** @description 15m, 1h, 4h, 1d, 1w */
                 chart_timeframe: string;
-                root_id?: number | null;
-                contract_id?: number | null;
+                instrument_id: number;
                 /** @description По умолчанию равен chart_timeframe */
                 source_timeframe?: string | null;
                 /** @description Параметры индикатора JSON-объектом */
@@ -4602,7 +2805,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Неверные параметры индикатора, выбор root/контракта или таймфреймы (source TF младше chart TF запрещён) */
+            /** @description Неверные параметры индикатора, инструмент или таймфреймы (source TF младше chart TF запрещён) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4614,8 +2817,8 @@ export interface operations {
     listChartProfiles: {
         parameters: {
             query?: {
-                /** @description Фильтр по root */
-                root_id?: number | null;
+                /** @description Фильтр по инструменту */
+                instrument_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -4876,9 +3079,7 @@ export interface operations {
             query?: {
                 /** @description Имя движка */
                 engine?: string | null;
-                contract_id?: number | null;
-                /** @description Continuous-серия */
-                root_id?: number | null;
+                instrument_id?: number | null;
                 timeframe?: string | null;
                 limit?: number;
             };
@@ -4991,8 +3192,7 @@ export interface operations {
     listFibGrids: {
         parameters: {
             query?: {
-                contract_id?: number | null;
-                root_id?: number | null;
+                instrument_id?: number | null;
                 timeframe?: string | null;
             };
             header?: never;
@@ -5102,8 +3302,7 @@ export interface operations {
             query: {
                 /** @description 15m, 1h, 4h, 1d, 1w */
                 chart_timeframe: string;
-                root_id?: number | null;
-                contract_id?: number | null;
+                instrument_id: number;
                 /** @description По умолчанию — chart TF */
                 source_timeframes?: string[] | null;
                 /** @description TF для ATR; по умолчанию — chart TF */
@@ -5401,7 +3600,7 @@ export interface operations {
     listBacktests: {
         parameters: {
             query?: {
-                root_id?: number | null;
+                instrument_id?: number | null;
                 timeframe?: string | null;
                 status?: string | null;
                 limit?: number;
@@ -5473,7 +3672,7 @@ export interface operations {
     listBacktestLog: {
         parameters: {
             query?: {
-                root_id?: number | null;
+                instrument_id?: number | null;
                 timeframe?: string | null;
                 family?: string | null;
                 limit?: number;
@@ -5507,7 +3706,7 @@ export interface operations {
     listBacktestLocks: {
         parameters: {
             query?: {
-                root_id?: number | null;
+                instrument_id?: number | null;
             };
             header?: never;
             path?: never;

@@ -1,7 +1,6 @@
-"""Общие зависимости маршрутов: сессия БД и каталог загруженных файлов."""
+"""Общие зависимости маршрутов: сессия БД и настройки."""
 
 from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -10,12 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ApiSettings(BaseSettings):
-    """Настройки API; каталог файлов общий с worker (``TRADER_IMPORT_DIR``)."""
+    """Настройки API; переменные окружения с префиксом ``TRADER_``."""
 
     model_config = SettingsConfigDict(env_prefix="TRADER_", extra="ignore")
 
-    import_dir: Path = Path("data/imports")
-    max_upload_bytes: int = 512 * 1024 * 1024
+    importer_url: str = "http://127.0.0.1:8100"
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:

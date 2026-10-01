@@ -19,8 +19,8 @@ def run_bars(seed: Seed, database_url: str) -> list[BarInput]:
     """Прогон levels (только pivot/prev) по 15-минутным барам контракта A."""
     engine = make_engine(database_url)
     with Session(engine) as session:
-        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.a, "15m")]
-        advance_run(session, "levels", PARAMS, bars, "15m", contract_id=seed.a)
+        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.id, "15m")]
+        advance_run(session, "levels", PARAMS, bars, "15m", instrument_id=seed.id)
         session.commit()
     engine.dispose()
     return bars
@@ -28,7 +28,7 @@ def run_bars(seed: Seed, database_url: str) -> list[BarInput]:
 
 def zones(client: TestClient, seed: Seed, **params: Any) -> dict[str, Any]:
     query = {
-        "contract_id": seed.a,
+        "instrument_id": seed.id,
         "chart_timeframe": "15m",
         "levels_params": json.dumps(PARAMS),
     }
@@ -96,7 +96,7 @@ def test_source_timeframe_younger_than_chart_is_422(
     response = client.get(
         "/level-zones",
         params={
-            "contract_id": seed.a,
+            "instrument_id": seed.id,
             "chart_timeframe": "1h",
             "source_timeframes": ["15m"],
         },
@@ -110,19 +110,20 @@ def test_bad_levels_params_and_subject(client: TestClient, seed: Seed) -> None:
 
     assert (
         client.get(
-            "/level-zones", params=base | {"contract_id": seed.a, "levels_params": "[]"}
+            "/level-zones",
+            params=base | {"instrument_id": seed.id, "levels_params": "[]"},
         ).status_code
         == 422
     )
     assert (
         client.get(
             "/level-zones",
-            params=base | {"contract_id": seed.a, "levels_params": '{"x": 1}'},
+            params=base | {"instrument_id": seed.id, "levels_params": '{"x": 1}'},
         ).status_code
         == 200
     )
     assert client.get("/level-zones", params=base).status_code == 422
     assert (
-        client.get("/level-zones", params=base | {"contract_id": 99999}).status_code
+        client.get("/level-zones", params=base | {"instrument_id": 99999}).status_code
         == 404
     )

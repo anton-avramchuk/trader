@@ -38,12 +38,8 @@ class EngineRunOut(BaseModel):
     algorithm_version: int
     params: dict[str, Any]
     params_hash: str
-    contract_id: int | None
-    root_id: int | None = Field(description="Continuous-серия root (или контракт)")
+    instrument_id: int
     timeframe: str
-    dataset_version_id: int | None = Field(
-        description="Версия минутных данных контракта (у continuous пусто)"
-    )
     bars_processed: int
     last_close_time: datetime | None
     event_count: int
@@ -80,10 +76,8 @@ def _run_out(run: EngineRun, event_count: int) -> EngineRunOut:
         algorithm_version=run.algorithm_version,
         params=run.params,
         params_hash=run.params_hash,
-        contract_id=run.contract_id,
-        root_id=run.root_id,
+        instrument_id=run.instrument_id,
         timeframe=run.timeframe_code,
-        dataset_version_id=run.dataset_version_id,
         bars_processed=run.bars_processed,
         last_close_time=run.last_close_time,
         event_count=event_count,
@@ -121,23 +115,20 @@ async def list_engines() -> list[EngineInfo]:
     response_model=list[EngineRunOut],
     operation_id="listEngineRuns",
     summary="Прогоны движков",
-    description="Новые сверху. Фильтры по движку, ряду и таймфрейму.",
+    description="Новые сверху. Фильтры по движку, инструменту и таймфрейму.",
 )
 async def list_runs(
     session: DbSession,
     engine: Annotated[str | None, Query(description="Имя движка")] = None,
-    contract_id: Annotated[int | None, Query()] = None,
-    root_id: Annotated[int | None, Query(description="Continuous-серия")] = None,
+    instrument_id: Annotated[int | None, Query()] = None,
     timeframe: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[EngineRunOut]:
     query = _run_query()
     if engine is not None:
         query = query.where(EngineRun.engine == engine)
-    if contract_id is not None:
-        query = query.where(EngineRun.contract_id == contract_id)
-    if root_id is not None:
-        query = query.where(EngineRun.root_id == root_id)
+    if instrument_id is not None:
+        query = query.where(EngineRun.instrument_id == instrument_id)
     if timeframe is not None:
         query = query.where(EngineRun.timeframe_code == timeframe)
     rows = await session.execute(query.order_by(EngineRun.id.desc()).limit(limit))

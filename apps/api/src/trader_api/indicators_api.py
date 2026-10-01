@@ -39,7 +39,7 @@ NOT_FOUND: dict[int | str, dict[str, Any]] = {404: {"description": "Не най�
 INVALID: dict[int | str, dict[str, Any]] = {
     422: {
         "description": (
-            "Неверные параметры индикатора, выбор root/контракта или таймфреймы "
+            "Неверные параметры индикатора, инструмент или таймфреймы "
             "(source TF младше chart TF запрещён)"
         )
     }
@@ -114,7 +114,7 @@ def _bars(candles: list[CandleOut]) -> list[BarInput]:
             low=float(c.low),
             close=float(c.close),
             volume=float(c.volume),
-            trading_day=c.trading_day or c.timestamp.date(),
+            trading_day=c.trading_day,
         )
         for c in candles
     ]
@@ -129,8 +129,7 @@ def _bars(candles: list[CandleOut]) -> list[BarInput]:
         "Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и "
         "проецирует на последние `limit` баров `chart_timeframe` ступенькой по "
         "`available_at` (без формирующегося старшего бара). С `as_of` — только "
-        "закрытые к моменту бары и роллы, известные к нему (масштаб continuous как "
-        "тогда). Значения до конца прогрева — `valid = false`."
+        "закрытые к моменту бары. Значения до конца прогрева — `valid = false`."
     ),
     responses={**NOT_FOUND, **INVALID},
 )
@@ -139,8 +138,7 @@ async def get_indicator_values(
     session: DbSession,
     indicator: Annotated[str, Query(description="Имя из `GET /indicators`")],
     chart_timeframe: Annotated[str, Query(description="15m, 1h, 4h, 1d, 1w")],
-    root_id: int | None = None,
-    contract_id: int | None = None,
+    instrument_id: int,
     source_timeframe: Annotated[
         str | None, Query(description="По умолчанию равен chart_timeframe")
     ] = None,
@@ -169,8 +167,7 @@ async def get_indicator_values(
 
     chart_page = await _fetch(
         session,
-        root_id=root_id,
-        contract_id=contract_id,
+        instrument_id=instrument_id,
         timeframe=chart_timeframe,
         start=start,
         end=end,
@@ -200,8 +197,7 @@ async def get_indicator_values(
     # Для прогрева нужна вся предшествующая история source TF, а не окно графика.
     history = await _fetch(
         session,
-        root_id=root_id,
-        contract_id=contract_id,
+        instrument_id=instrument_id,
         timeframe=source_tf,
         start=None,
         end=chart_bars[-1].close_time if as_of is None else None,
@@ -214,9 +210,7 @@ async def get_indicator_values(
 
     cache: IndicatorCache = request.app.state.indicator_cache
     lock: Lock = request.app.state.indicator_lock
-    dataset_key = (
-        f"{'root' if root_id is not None else 'contract'}:{root_id or contract_id}"
-    )
+    dataset_key = f"instrument:{instrument_id}"
 
     def compute() -> list[Any]:
         with lock:

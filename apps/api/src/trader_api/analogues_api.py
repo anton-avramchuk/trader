@@ -176,7 +176,6 @@ def prepare(
             series[series_key] = build_series(
                 series_key,
                 loaded.bars[series_key],
-                roll_times=loaded.rolls[series_key],
                 as_of=as_of,
             )
     items: list[SeriesOccurrence] = []
