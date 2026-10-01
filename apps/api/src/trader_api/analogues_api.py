@@ -77,9 +77,7 @@ class MatchOut(Orm):
     distance: float
     normalized_distance: float = Field(description="Накопленное / длина пути")
     similarity: float = Field(description="1 / (1 + normalized_distance), (0, 1]")
-    path: list[tuple[int, int]] = Field(
-        description="Выравнивание точек (запрос, аналог)"
-    )
+    path: list[list[int]] = Field(description="Выравнивание точек (запрос, аналог)")
     outcomes: list[HorizonOutcomeOut]
     trajectory: list[float] | None = Field(
         description="Сдвиг close после входа по барам, в единицах запроса"
@@ -226,7 +224,7 @@ def _search(
                 distance=m.dtw.distance,
                 normalized_distance=m.dtw.normalized_distance,
                 similarity=m.dtw.similarity,
-                path=list(m.dtw.path),
+                path=[list(step) for step in m.dtw.path],
                 outcomes=[HorizonOutcomeOut.model_validate(o) for o in m.outcomes],
                 trajectory=m.trajectory,
             )

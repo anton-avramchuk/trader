@@ -6358,17 +6358,10 @@
           },
           "path": {
             "items": {
-              "prefixItems": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "integer"
-                }
-              ],
-              "type": "array",
-              "maxItems": 2,
-              "minItems": 2
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
             },
             "type": "array",
             "title": "Path",

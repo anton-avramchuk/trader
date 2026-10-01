@@ -41,6 +41,11 @@ import {
   type StatsUnit,
   type StatsView,
 } from './stats-layer';
+import {
+  analoguesQuery,
+  type AnaloguesMode,
+  type AnaloguesView,
+} from './analogues-layer';
 
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
 export interface StructureContext {
@@ -77,6 +82,9 @@ export class StructureStore {
   /** Блок «Исторически» для выбранного паттерна/уровня и его единицы. */
   readonly statsViews = signal<StatsView[]>([]);
   readonly statsUnit = signal<StatsUnit>('atr');
+  /** Поиск аналогов (ADR-0025): последний результат; сбрасывается при обновлении данных. */
+  readonly analogues = signal<AnaloguesView | null>(null);
+  private analoguesSequence = 0;
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   /** Режим рисования ручной сетки: первая и вторая точки. */
@@ -196,6 +204,76 @@ export class StructureStore {
   setStatsUnit(unit: StatsUnit): void {
     this.statsUnit.set(unit);
     void this.loadStats();
+    const shown = this.analogues();
+    if (shown) {
+      void this.findAnalogues(shown.mode);
+    }
+  }
+
+  /** Прогоны текущей серии и TF: `[движок, id]` (по ним ищем историю аналогов). */
+  private seriesRuns(): [string, number][] {
+    const timeframe = this.context?.chartTimeframe;
+    const prefix = `${this.seriesKey()}:`;
+    return [...this.runs.entries()]
+      .filter(
+        ([key]) => key.startsWith(prefix) && key.endsWith(`:${timeframe}`),
+      )
+      .map(([key, id]): [string, number] => [
+        key.slice(prefix.length, key.length - `:${timeframe}`.length),
+        id,
+      ])
+      .filter(
+        ([engine]) => engine === 'levels' || PATTERN_ENGINES.includes(engine),
+      );
+  }
+
+  /** Ищет аналоги выбранного паттерна или текущего окна; история — вхождения прогонов серии. */
+  async findAnalogues(mode: AnaloguesMode): Promise<void> {
+    const seq = ++this.analoguesSequence;
+    const context = this.context;
+    const runs = this.seriesRuns();
+    const pattern = mode === 'pattern' ? this.selectedPatternInfo() : null;
+    const state = (rest: Partial<AnaloguesView>): void => {
+      if (seq === this.analoguesSequence) {
+        this.analogues.set({
+          mode,
+          loading: false,
+          error: null,
+          data: null,
+          ...rest,
+        });
+      }
+    };
+    if (!context || (mode === 'pattern' && !pattern)) {
+      state({ error: 'Выберите паттерн на графике' });
+      return;
+    }
+    const queryRun = pattern
+      ? runs.find(([engine]) => engine === pattern.engine)?.[1]
+      : runs[0]?.[1];
+    if (queryRun === undefined) {
+      state({ error: 'Включите слой паттернов или уровней' });
+      return;
+    }
+    state({ loading: true });
+    try {
+      const data = await this.api.call(
+        this.api.client.GET('/analogues', {
+          params: {
+            query: analoguesQuery(
+              queryRun,
+              runs.map(([, id]) => id),
+              this.statsUnit(),
+              pattern?.key,
+              context.asOf,
+            ),
+          },
+        }),
+      );
+      state({ data });
+    } catch (error) {
+      state({ error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   /** Сбросить кэш прогонов: следующее обновление пересчитает движки (появились новые бары). */
@@ -262,6 +340,8 @@ export class StructureStore {
       this.zones.set(zones);
       this.manual.set(manual);
       this.error.set(null);
+      this.analoguesSequence++;
+      this.analogues.set(null);
       void this.loadStats();
     } catch (error) {
       if (seq === this.sequence) {
