@@ -51,7 +51,7 @@ docker compose up -d --build
 | PostgreSQL 18 | `127.0.0.1:5432` (данные в томе `pgdata`) |
 | pgAdmin | http://127.0.0.1:5050 — без входа, сервер «trader» уже добавлен и подключается без пароля |
 | API | http://127.0.0.1:8000/health |
-| Web (dev-сервер) | http://127.0.0.1:4200 |
+| Web (production-сборка за nginx) | http://127.0.0.1:4200 (для разработки с hot-reload — `npx nx serve web`) |
 | worker | без порта, статус в `docker compose logs worker` |
 
 Все порты слушают только localhost. Миграции Alembic применяются при старте `api`.
