@@ -11,6 +11,7 @@ from trader_db import check_connection, make_async_engine, upgrade_head
 from trader_engine.indicators import IndicatorCache
 
 from trader_api.analogues_api import router as analogues_router
+from trader_api.backtests_api import router as backtests_router
 from trader_api.candles_api import router as candles_router
 from trader_api.catalog import router as catalog_router
 from trader_api.engines_api import router as engines_router
@@ -107,6 +108,7 @@ def create_app(
     app.include_router(stats_router)
     app.include_router(analogues_router)
     app.include_router(forecast_router)
+    app.include_router(backtests_router)
 
     @app.get(
         "/health",

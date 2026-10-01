@@ -890,6 +890,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backtests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список бэктестов
+         * @description Новые первыми; фильтры по root, таймфрейму и статусу.
+         */
+        get: operations["listBacktests"];
+        put?: never;
+        /**
+         * Запустить бэктест
+         * @description Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (root, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.
+         */
+        post: operations["createBacktest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtest-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Журнал запусков бэктестов
+         * @description Все запуски (включая неудачные), открытия, отклонения и разблокировки test: по нему видно, сколько вариантов перебрано. Новые первыми.
+         */
+        get: operations["listBacktestLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtest-locks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Заблокированные test-периоды
+         * @description Test-периоды связок (root, TF, семейство), уже открытые один раз.
+         */
+        get: operations["listBacktestLocks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtest-locks/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Разблокировать test-период
+         * @description Явная разблокировка связки (root, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.
+         */
+        post: operations["unlockBacktestTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtests/{experiment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Результат бэктеста
+         * @description Состояние, версии и результат: метрики в тиках, пунктах и ₽, equity, walk-forward и test.
+         */
+        get: operations["getBacktest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtests/{experiment_id}/trades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Сделки бэктеста
+         * @description В порядке сегмента, окна и номера; фильтры по сегменту и окну.
+         */
+        get: operations["listBacktestTrades"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backtests/{experiment_id}/windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Окна walk-forward
+         * @description Периоды окон, выбранные параметры и метрики train/validation.
+         */
+        get: operations["listBacktestWindows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -951,6 +1095,111 @@ export interface components {
             trajectory_count: number;
             /** Warnings */
             warnings: string[];
+        };
+        /** BacktestCreate */
+        BacktestCreate: {
+            /** Root Id */
+            root_id: number;
+            /** Timeframe */
+            timeframe: string;
+            /**
+             * Kind
+             * @default single
+             * @enum {string}
+             */
+            kind?: "single" | "walk_forward";
+            strategy: components["schemas"]["StrategyIn"];
+            costs?: components["schemas"]["CostsIn"];
+            /**
+             * Contracts
+             * @default 1
+             */
+            contracts?: number;
+            /**
+             * Period From
+             * Format: date
+             */
+            period_from: string;
+            /**
+             * Period To
+             * Format: date
+             */
+            period_to: string;
+            walk_forward?: components["schemas"]["WalkForwardIn"] | null;
+            /**
+             * Test From
+             * @description Финальный test: после period_to, открывается один раз
+             */
+            test_from?: string | null;
+            /** Test To */
+            test_to?: string | null;
+        };
+        /** BacktestOut */
+        BacktestOut: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Status
+             * @description queued, running, succeeded, failed
+             */
+            status: string;
+            /** Root Id */
+            root_id: number;
+            /** Timeframe Code */
+            timeframe_code: string;
+            /** Family */
+            family: string;
+            /** Strategy */
+            strategy: {
+                [key: string]: unknown;
+            };
+            /** Costs */
+            costs: {
+                [key: string]: unknown;
+            };
+            /** Contracts */
+            contracts: number;
+            /**
+             * Period From
+             * Format: date
+             */
+            period_from: string;
+            /**
+             * Period To
+             * Format: date
+             */
+            period_to: string;
+            /** Test From */
+            test_from: string | null;
+            /** Test To */
+            test_to: string | null;
+            /** Walk Forward */
+            walk_forward: {
+                [key: string]: unknown;
+            } | null;
+            /** Versions */
+            versions: {
+                [key: string]: unknown;
+            };
+            /** Params Hash */
+            params_hash: string;
+            /** Result */
+            result: {
+                [key: string]: unknown;
+            } | null;
+            /** Error */
+            error: string | null;
+            /** Job Id */
+            job_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Finished At */
+            finished_at: string | null;
         };
         /** BinOut */
         BinOut: {
@@ -1254,6 +1503,27 @@ export interface components {
             /** Secid */
             secid?: string | null;
         };
+        /** CostsIn */
+        CostsIn: {
+            /**
+             * Half Spread Ticks
+             * @description Тики на сторону
+             * @default 0
+             */
+            half_spread_ticks?: number;
+            /**
+             * Slippage Ticks
+             * @description Тики на сторону
+             * @default 0
+             */
+            slippage_ticks?: number;
+            /**
+             * Commission Per Contract
+             * @description ₽ за контракт на сторону
+             * @default 0
+             */
+            commission_per_contract?: number;
+        };
         /**
          * DatetimeSpec
          * @description Откуда брать время свечи: одна колонка или две (дата и время) + формат.
@@ -1372,6 +1642,20 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ExitRuleIn */
+        ExitRuleIn: {
+            /**
+             * Kind
+             * @description Стоп: none/atr/structure; цель: none/atr/pattern
+             */
+            kind: string;
+            /**
+             * Value
+             * @description Для atr — размер в ATR
+             * @default 0
+             */
+            value?: number;
         };
         /** FibGridIn */
         FibGridIn: {
@@ -2046,6 +2330,64 @@ export interface components {
             /** Finished At */
             finished_at: string | null;
         };
+        /** LockOut */
+        LockOut: {
+            /** Id */
+            id: number;
+            /** Root Id */
+            root_id: number;
+            /** Timeframe Code */
+            timeframe_code: string;
+            /** Family */
+            family: string;
+            /**
+             * Test From
+             * Format: date
+             */
+            test_from: string;
+            /**
+             * Test To
+             * Format: date
+             */
+            test_to: string;
+            /** Experiment Id */
+            experiment_id: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** LogOut */
+        LogOut: {
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Event */
+            event: string;
+            /** Root Id */
+            root_id: number | null;
+            /** Timeframe Code */
+            timeframe_code: string | null;
+            /** Family */
+            family: string | null;
+            /** Experiment Id */
+            experiment_id: number | null;
+            /** Params Hash */
+            params_hash: string | null;
+            /** Period From */
+            period_from: string | null;
+            /** Period To */
+            period_to: string | null;
+            /** Touches Test */
+            touches_test: boolean;
+            /** Note */
+            note: string | null;
+        };
         /** MatchOut */
         MatchOut: {
             occurrence: components["schemas"]["OccurrenceOut"];
@@ -2477,6 +2819,45 @@ export interface components {
              */
             step_price: string;
         };
+        /**
+         * StrategyIn
+         * @description Шаблон «вход по событию» (ADR-0027).
+         */
+        StrategyIn: {
+            /**
+             * Source
+             * @default pattern
+             * @enum {string}
+             */
+            source?: "pattern" | "level_touch" | "level_break";
+            /**
+             * Groups
+             * @description Типы; пусто — все
+             */
+            groups?: string[];
+            /**
+             * Side
+             * @default follow
+             * @enum {string}
+             */
+            side?: "follow" | "fade";
+            /** Quality Min */
+            quality_min?: number | null;
+            /** Quality Max */
+            quality_max?: number | null;
+            /** Trends */
+            trends?: string[];
+            /** Volatilities */
+            volatilities?: string[];
+            /** Since */
+            since?: string | null;
+            /** Until */
+            until?: string | null;
+            stop?: components["schemas"]["ExitRuleIn"];
+            target?: components["schemas"]["ExitRuleIn"];
+            /** Max Bars */
+            max_bars?: number | null;
+        };
         /** ThresholdCalibrationOut */
         ThresholdCalibrationOut: {
             /** Threshold */
@@ -2504,6 +2885,82 @@ export interface components {
             /** Bins */
             bins: components["schemas"]["BinOut"][];
         };
+        /** TradeOut */
+        TradeOut: {
+            /** Id */
+            id: number;
+            /** Segment */
+            segment: string;
+            /** Window Id */
+            window_id: number | null;
+            /** Sequence */
+            sequence: number;
+            /** Side */
+            side: string;
+            /** Ref */
+            ref: string | null;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /** Reason */
+            reason: string;
+            /** Legs */
+            legs: {
+                [key: string]: unknown;
+            }[];
+            /** Gross Ticks */
+            gross_ticks: number;
+            /** Cost Ticks */
+            cost_ticks: number;
+            /** Mfe Ticks */
+            mfe_ticks: number;
+            /** Mae Ticks */
+            mae_ticks: number;
+            /** Gross Points */
+            gross_points: number;
+            /** Net Points */
+            net_points: number;
+            /** Commission Rub */
+            commission_rub: number;
+            /** Gross Rub */
+            gross_rub: number | null;
+            /** Net Rub */
+            net_rub: number | null;
+            /** Step Price Estimated */
+            step_price_estimated: boolean;
+            /** Ambiguous Bar */
+            ambiguous_bar: boolean;
+            /** Rolled */
+            rolled: boolean;
+        };
+        /** UnlockIn */
+        UnlockIn: {
+            /** Root Id */
+            root_id: number;
+            /** Timeframe */
+            timeframe: string;
+            /** Family */
+            family: string;
+            /**
+             * Note
+             * @description Причина — попадает в журнал
+             */
+            note: string;
+        };
+        /** UnlockOut */
+        UnlockOut: {
+            /** Unlocked */
+            unlocked: boolean;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -2516,6 +2973,72 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WalkForwardIn */
+        WalkForwardIn: {
+            /** Train Days */
+            train_days: number;
+            /** Valid Days */
+            valid_days: number;
+            /** Step Days */
+            step_days: number;
+            /**
+             * Grid
+             * @description Сетка параметров (stop_atr, target_atr, max_bars, quality_min); пусто — один набор
+             */
+            grid?: {
+                [key: string]: number[];
+            };
+            /**
+             * Objective
+             * @default profit_factor
+             * @enum {string}
+             */
+            objective?: "profit_factor" | "net";
+            /**
+             * Min Trades
+             * @default 10
+             */
+            min_trades?: number;
+        };
+        /** WindowOut */
+        WindowOut: {
+            /** Id */
+            id: number;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Train From
+             * Format: date
+             */
+            train_from: string;
+            /**
+             * Train To
+             * Format: date
+             */
+            train_to: string;
+            /**
+             * Valid From
+             * Format: date
+             */
+            valid_from: string;
+            /**
+             * Valid To
+             * Format: date
+             */
+            valid_to: string;
+            /** Params */
+            params: {
+                [key: string]: unknown;
+            };
+            /** Train Metrics */
+            train_metrics: {
+                [key: string]: unknown;
+            } | null;
+            /** Valid Metrics */
+            valid_metrics: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ZoneMember */
         ZoneMember: {
@@ -4867,6 +5390,295 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listBacktests: {
+        parameters: {
+            query?: {
+                root_id?: number | null;
+                timeframe?: string | null;
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacktestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createBacktest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BacktestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacktestOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listBacktestLog: {
+        parameters: {
+            query?: {
+                root_id?: number | null;
+                timeframe?: string | null;
+                family?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listBacktestLocks: {
+        parameters: {
+            query?: {
+                root_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlockBacktestTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlockIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnlockOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getBacktest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacktestOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listBacktestTrades: {
+        parameters: {
+            query?: {
+                segment?: ("single" | "validation" | "test") | null;
+                window_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                experiment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TradeOut"][];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listBacktestWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                experiment_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WindowOut"][];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
