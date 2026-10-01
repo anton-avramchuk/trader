@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+from trader_engine.analogues.search import AnalogueMatch
 from trader_engine.forecast.core import (
     HorizonForecast,
     forecast_horizon,
@@ -94,3 +95,40 @@ def empirical_forecast(
     if not sample:
         warnings.append("no_history")
     return MethodForecast("empirical", len(sample), result, warnings)
+
+
+def knn_forecast(
+    matches: Sequence[AnalogueMatch],
+    *,
+    horizons: Sequence[int] = DEFAULT_HORIZONS,
+    unit: Unit = "atr",
+    seed: int = 0,
+    min_effective: int = MIN_EFFECTIVE,
+) -> MethodForecast:
+    """Прогноз по ближайшим аналогам: равные веса, исходы в сыром направлении."""
+    result: list[HorizonForecast] = []
+    for horizon in horizons:
+        observations: list[Observation] = []
+        for match in matches:
+            candidate = match.candidate
+            series, entry = candidate.series, candidate.entry_index
+            outcome = compute_outcomes(
+                series.bars,
+                entry,
+                "bullish",
+                series.atrs[entry],
+                roll_times=series.roll_times,
+                horizons=(horizon,),
+            )[0]
+            observations.append(Observation((series.key, "raw"), entry, outcome))
+        result.append(
+            forecast_horizon(
+                observations,
+                horizon=horizon,
+                unit=unit,
+                seed=seed,
+                min_effective=min_effective,
+            )
+        )
+    warnings = [] if matches else ["no_matches"]
+    return MethodForecast("knn", len(matches), result, warnings)
