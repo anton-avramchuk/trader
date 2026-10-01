@@ -88,6 +88,7 @@ def _trade_row(priced: PricedTrade) -> dict[str, Any]:
     return {
         "side": trade.side,
         "ref": trade.ref,
+        "signal_price": trade.signal_price,
         "contracts": trade.contracts,
         "entry_time": trade.legs[0].entry_time,
         "exit_time": priced.exit_time,
@@ -180,7 +181,8 @@ def _load_data(
         for item in items
     ]
     rolls = [roll.rolled_at for roll in load_rolls(session, root.id)]
-    names = ("levels",) if spec.source != "pattern" else PATTERN_ENGINES
+    # levels всегда: по ним в drill-down сделки показывается ближайший уровень
+    names = ("levels", *(PATTERN_ENGINES if spec.source == "pattern" else ()))
     versions: dict[str, Any] = {"template": TEMPLATE_VERSION, "engines": {}}
     engine_events: list[tuple[str, Any]] = []
     for position, name in enumerate(names):

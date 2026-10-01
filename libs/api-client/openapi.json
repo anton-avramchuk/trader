@@ -9419,6 +9419,18 @@
             ],
             "title": "Ref"
           },
+          "signal_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Price",
+            "description": "Close сигнального бара в шкале continuous (для уровней)"
+          },
           "contracts": {
             "type": "integer",
             "title": "Contracts"
@@ -9516,6 +9528,7 @@
           "sequence",
           "side",
           "ref",
+          "signal_price",
           "contracts",
           "entry_time",
           "exit_time",

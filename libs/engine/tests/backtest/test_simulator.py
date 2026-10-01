@@ -63,6 +63,15 @@ def test_entry_at_next_bar_open_not_signal_close() -> None:
     assert trade.gross_ticks == pytest.approx(1.0)
 
 
+def test_signal_price_is_carried_to_the_trade() -> None:
+    bars = flat(5)
+
+    trade = run_one(bars, Signal(0, "long", max_bars=2, ref_price=123.5))
+
+    assert trade.signal_price == 123.5
+    assert run_one(bars, Signal(0, "long", max_bars=2)).signal_price is None
+
+
 def test_stop_is_hit_inside_the_entry_bar_too() -> None:
     bars = flat(5)
     bars[1] = sbar(1, 100, 101, 94, 99)  # бар входа: падает до 94

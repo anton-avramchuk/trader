@@ -4,17 +4,35 @@ import type {
   BacktestLock,
   BacktestTrade,
   BacktestWindow,
+  Forecast,
   Job,
+  OccurrenceOutcomes,
   Root,
 } from '@trader/api-client';
 import { ApiError, ApiService } from '../../core/api/api';
 import { JobsService } from '../../core/jobs/jobs';
+import { levelInfos } from '../chart/structure';
 import {
   type BacktestForm,
   buildRequest,
   defaultForm,
+  engineOf,
+  engineRuns,
   type MetricUnit,
+  type NearestLevel,
+  nearestLevel,
 } from './backtest-model';
+
+/** Состояние drill-down выбранной сделки: каждый блок грузится независимо. */
+export interface Drill {
+  trade: BacktestTrade;
+  loading: boolean;
+  occurrence: OccurrenceOutcomes | null;
+  level: NearestLevel | null;
+  levelsFound: number;
+  notes: string[];
+  forecast: { loading: boolean; error: string | null; data: Forecast | null };
+}
 
 const TRADES_LIMIT = 1000;
 const HISTORY_LIMIT = 20;
@@ -38,6 +56,8 @@ export class BacktestStore {
     null,
   );
   readonly error = signal<string | null>(null);
+  readonly drill = signal<Drill | null>(null);
+  private drillSequence = 0;
 
   async init(): Promise<void> {
     try {
@@ -160,6 +180,133 @@ export class BacktestStore {
       this.windows.set(windows);
     } catch (error) {
       this.error.set(message(error));
+    }
+  }
+
+  /**
+   * Drill-down сделки: вхождение и режим на входе, ближайший уровень (по прогону
+   * levels на момент входа) — сразу; прогноз на входе — по запросу (`loadForecast`).
+   */
+  async selectTrade(trade: BacktestTrade): Promise<void> {
+    const seq = ++this.drillSequence;
+    const backtest = this.current();
+    const runs = engineRuns(backtest);
+    const engine = engineOf(trade.ref);
+    const notes: string[] = [];
+    const base: Drill = {
+      trade,
+      loading: true,
+      occurrence: null,
+      level: null,
+      levelsFound: 0,
+      notes,
+      forecast: { loading: false, error: null, data: null },
+    };
+    this.drill.set(base);
+    const update = (changes: Partial<Drill>): void => {
+      if (seq === this.drillSequence) {
+        this.drill.update((d) => (d ? { ...d, ...changes } : d));
+      }
+    };
+    const occurrenceRun = engine ? runs[engine] : undefined;
+    const levelsRun = runs['levels'];
+    await Promise.all([
+      (async () => {
+        if (occurrenceRun === undefined || !trade.ref) {
+          notes.push('Прогон движка события не найден в версиях эксперимента');
+          return;
+        }
+        try {
+          update({
+            occurrence: await this.api.call(
+              this.api.client.GET('/stats/occurrence', {
+                params: {
+                  query: {
+                    run_id: occurrenceRun,
+                    key: trade.ref,
+                    as_of: trade.entry_time,
+                  },
+                },
+              }),
+            ),
+          });
+        } catch (error) {
+          notes.push(`Событие: ${message(error)}`);
+        }
+      })(),
+      (async () => {
+        if (levelsRun === undefined) {
+          notes.push('Прогон уровней не найден в версиях эксперимента');
+          return;
+        }
+        try {
+          const events = await this.api.call(
+            this.api.client.GET('/engine-runs/{run_id}/events', {
+              params: {
+                path: { run_id: levelsRun },
+                query: { view: 'current', as_of: trade.entry_time },
+              },
+            }),
+          );
+          const levels = levelInfos(events).filter((l) => l.state === 'active');
+          update({
+            levelsFound: levels.length,
+            level: nearestLevel(levels, trade.signal_price),
+          });
+        } catch (error) {
+          notes.push(`Уровни: ${message(error)}`);
+        }
+      })(),
+    ]);
+    update({ loading: false, notes });
+  }
+
+  closeTrade(): void {
+    this.drillSequence++;
+    this.drill.set(null);
+  }
+
+  /** Прогноз (Empirical и KNN) на момент входа выбранной сделки — по запросу. */
+  async loadForecast(): Promise<void> {
+    const drill = this.drill();
+    if (!drill) {
+      return;
+    }
+    const seq = this.drillSequence;
+    const runs = engineRuns(this.current());
+    const engine = engineOf(drill.trade.ref);
+    const queryRun = engine ? runs[engine] : undefined;
+    const set = (forecast: Drill['forecast']): void => {
+      if (seq === this.drillSequence) {
+        this.drill.update((d) => (d ? { ...d, forecast } : d));
+      }
+    };
+    if (queryRun === undefined || !drill.trade.ref) {
+      set({
+        loading: false,
+        error: 'Прогон движка события не найден',
+        data: null,
+      });
+      return;
+    }
+    set({ loading: true, error: null, data: null });
+    try {
+      const data = await this.api.call(
+        this.api.client.GET('/forecast', {
+          params: {
+            query: {
+              query_run_id: queryRun,
+              run_id: Object.values(runs),
+              key: drill.trade.ref,
+              unit: 'atr',
+              as_of: drill.trade.entry_time,
+            },
+          },
+        }),
+      );
+      set({ loading: false, error: null, data });
+    } catch (error) {
+      set({ loading: false, error: message(error), data: null });
     }
   }
 

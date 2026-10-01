@@ -1,4 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ActivatedRoute,
+  convertToParamMap,
+  provideRouter,
+} from '@angular/router';
 import { provideTaiga } from '@taiga-ui/core';
 import { provideEventPlugins } from '@taiga-ui/event-plugins';
 import { API_CLIENT } from '../../core/api/api';
@@ -53,7 +58,7 @@ function bar(index: number) {
 }
 
 describe('Replay', () => {
-  function setup() {
+  function setup(query: Record<string, string> = {}) {
     const client = {
       GET: vi.fn(
         (path: string, request?: { params: { query: { tail?: boolean } } }) => {
@@ -78,7 +83,12 @@ describe('Replay', () => {
       providers: [
         provideEventPlugins(),
         provideTaiga(),
+        provideRouter([]),
         { provide: API_CLIENT, useValue: client },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { queryParamMap: convertToParamMap(query) } },
+        },
       ],
     });
     return TestBed.createComponent(Replay);
@@ -106,6 +116,30 @@ describe('Replay', () => {
     await settle(fixture);
     return root;
   }
+
+  it('ссылка из бэктеста сразу начинает воспроизведение с дня входа', async () => {
+    const fixture = setup({ root: '1', tf: '15m', date: '2026-09-28' });
+
+    fixture.detectChanges();
+    await settle(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain('баров 2 из 5 (будущее скрыто)');
+    expect(
+      (root.querySelector('input[type="date"]') as HTMLInputElement).value,
+    ).toBe('2026-09-28');
+  });
+
+  it('ссылка с неизвестным инструментом ничего не запускает', async () => {
+    const fixture = setup({ root: '99', tf: '1h', date: '2026-09-28' });
+
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Выберите дату',
+    );
+  });
 
   it('без данных управление недоступно и есть подсказка', async () => {
     const fixture = setup();

@@ -1,13 +1,16 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { TuiButton } from '@taiga-ui/core';
 import type { BacktestLock } from '@trader/api-client';
 import {
   equityChart,
+  legRows,
   metricRows,
   metricWarnings,
   type MetricUnit,
+  replayLink,
   resolved,
   SOURCE_TITLES,
   STATUS_TITLES,
@@ -19,15 +22,23 @@ import {
   windowRows,
   GRID_KEYS,
 } from './backtest-model';
+import { forecastRows, METHOD_TITLES } from '../chart/forecast-layer';
 import { BacktestStore } from './backtest.store';
 
 const TIMEFRAMES = ['15m', '1h', '4h', '1d', '1w'];
 const MIN_NOTE = 5;
+const REASON_TITLES: Record<string, string> = {
+  stop: 'стоп',
+  target: 'цель',
+  time: 'время',
+  roll: 'ролл',
+  end_of_data: 'конец данных',
+};
 
 /** Backtest: параметры стратегии и издержек, walk-forward, результат и сделки (ADR-0027). */
 @Component({
   selector: 'app-backtest',
-  imports: [DecimalPipe, FormsModule, TuiButton],
+  imports: [DecimalPipe, FormsModule, RouterLink, TuiButton],
   providers: [BacktestStore],
   template: `
     <h1>Backtest</h1>
@@ -445,6 +456,7 @@ const MIN_NOTE = 5;
           }
 
           <h3>Сделки ({{ store.trades().length }})</h3>
+          <p class="hint">Нажмите на сделку — детали и переход к графику.</p>
           @if (!tradeList().length) {
             <p class="hint">Сделок нет.</p>
           } @else {
@@ -463,7 +475,11 @@ const MIN_NOTE = 5;
               </thead>
               <tbody>
                 @for (t of tradeList(); track t.id) {
-                  <tr>
+                  <tr
+                    class="pick"
+                    [class.selected]="store.drill()?.trade?.id === t.id"
+                    (click)="select(t.id)"
+                  >
                     <td>{{ t.segment }}</td>
                     <td>{{ t.side }}</td>
                     <td>{{ t.ref }}</td>
@@ -476,6 +492,183 @@ const MIN_NOTE = 5;
                 }
               </tbody>
             </table>
+          }
+          @if (store.drill(); as drill) {
+            <section class="drill" aria-label="Сделка">
+              <h3>
+                Сделка {{ drill.trade.side === 'long' ? 'лонг' : 'шорт' }} ·
+                {{ drill.trade.ref ?? '—' }}
+                <button type="button" class="unit" (click)="store.closeTrade()">
+                  Закрыть
+                </button>
+              </h3>
+              <table class="metrics">
+                <tbody>
+                  <tr>
+                    <th>Вход / выход</th>
+                    <td>
+                      {{ stamp(drill.trade.entry_time) }} →
+                      {{ stamp(drill.trade.exit_time) }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Причина выхода</th>
+                    <td>{{ reasonTitle(drill.trade.reason) }}</td>
+                  </tr>
+                  <tr>
+                    <th>Gross / издержки / net, тики</th>
+                    <td>
+                      {{ drill.trade.gross_ticks | number: '1.2-2' }} /
+                      {{ drill.trade.cost_ticks | number: '1.2-2' }} /
+                      {{
+                        drill.trade.gross_ticks - drill.trade.cost_ticks
+                          | number: '1.2-2'
+                      }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>MFE / MAE, тики</th>
+                    <td>
+                      {{ drill.trade.mfe_ticks | number: '1.2-2' }} /
+                      {{ drill.trade.mae_ticks | number: '1.2-2' }}
+                    </td>
+                  </tr>
+                  @if (drill.occurrence; as occ) {
+                    <tr>
+                      <th>Событие</th>
+                      <td>
+                        {{ occ.occurrence.group }} ·
+                        {{ occ.occurrence.direction }}
+                        @if (occ.occurrence.quality !== null) {
+                          · качество {{ occ.occurrence.quality }}
+                        }
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Режим на входе</th>
+                      <td>{{ occ.regime }}</td>
+                    </tr>
+                  }
+                  @if (drill.level; as nearest) {
+                    <tr>
+                      <th>Ближайший уровень</th>
+                      <td>
+                        {{ nearest.level.price | number: '1.0-6' }}
+                        ({{
+                          nearest.level.role === 'support'
+                            ? 'поддержка'
+                            : 'сопротивление'
+                        }}, {{ nearest.level.source }}, сила
+                        {{ nearest.level.score }}) · цена
+                        {{ nearest.above ? 'выше' : 'ниже' }} на
+                        {{ nearest.distancePct | number: '1.2-2' }}%
+                      </td>
+                    </tr>
+                  } @else if (!drill.loading) {
+                    <tr>
+                      <th>Ближайший уровень</th>
+                      <td>активных уровней на момент входа нет</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              @if (drill.loading) {
+                <p class="hint">Загрузка деталей…</p>
+              }
+              @for (note of drill.notes; track note) {
+                <p class="warning">⚠ {{ note }}</p>
+              }
+              <table>
+                <thead>
+                  <tr>
+                    <th>Контракт</th>
+                    <th>Вход</th>
+                    <th>Выход</th>
+                    <th>Цена входа</th>
+                    <th>Цена выхода</th>
+                    <th>Причина</th>
+                    <th>Тики</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (leg of legs(); track $index) {
+                    <tr>
+                      <td>{{ leg.contract }}</td>
+                      <td>{{ leg.entry }}</td>
+                      <td>{{ leg.exit }}</td>
+                      <td>{{ leg.entryPrice }}</td>
+                      <td>{{ leg.exitPrice }}</td>
+                      <td>{{ leg.reason }}</td>
+                      <td>{{ leg.ticks }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <div class="actions">
+                @if (link(); as target) {
+                  <a
+                    tuiButton
+                    size="xs"
+                    appearance="secondary"
+                    [routerLink]="target.path"
+                    [queryParams]="target.queryParams"
+                    >Открыть на графике (Replay)</a
+                  >
+                }
+                <button
+                  tuiButton
+                  type="button"
+                  size="xs"
+                  [disabled]="drill.forecast.loading"
+                  (click)="store.loadForecast()"
+                >
+                  Прогноз на момент входа
+                </button>
+              </div>
+              @if (drill.forecast.loading) {
+                <p class="hint">Расчёт прогноза…</p>
+              }
+              @if (drill.forecast.error; as forecastError) {
+                <p class="error" role="alert">{{ forecastError }}</p>
+              }
+              @for (method of forecastMethods(); track method.key) {
+                <div class="method">
+                  <div class="hint">
+                    {{ method.title }} · выборка {{ method.sample }}
+                  </div>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Горизонт</th>
+                        <th>Событий</th>
+                        <th>↑ ≥1</th>
+                        <th>↓ ≥1</th>
+                        <th>Медиана</th>
+                        <th>Разброс 10–90%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of method.rows; track row.horizon) {
+                        <tr [class.unreliable]="row.unreliable">
+                          <td>{{ row.horizon }}</td>
+                          <td>{{ row.sample }}</td>
+                          <td>{{ row.up[1] ?? '—' }}</td>
+                          <td>{{ row.down[1] ?? '—' }}</td>
+                          <td>{{ row.median }}</td>
+                          <td>{{ row.range }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+              @if (drill.forecast.data) {
+                <p class="hint">
+                  Прогноз построен только по данным, известным на момент входа.
+                  Статистика прошлого, а не гарантия.
+                </p>
+              }
+            </section>
           }
         }
       </section>
@@ -630,6 +823,21 @@ const MIN_NOTE = 5;
     .error {
       color: var(--tui-text-negative);
     }
+    .pick {
+      cursor: pointer;
+    }
+    .pick:hover,
+    .pick.selected {
+      background: var(--tui-background-neutral-1);
+    }
+    .drill {
+      margin-top: 0.75rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--tui-border-normal);
+    }
+    tr.unreliable td {
+      opacity: 0.5;
+    }
     .lock {
       margin: 0.2rem 0;
       font-size: 0.85rem;
@@ -682,6 +890,29 @@ export class Backtest implements OnInit {
   protected readonly testRows = computed(() =>
     metricRows(this.test()?.metrics),
   );
+  protected readonly legs = computed(() => {
+    const trade = this.store.drill()?.trade;
+    return trade ? legRows(trade) : [];
+  });
+  protected readonly link = computed(() => {
+    const backtest = this.store.current();
+    const trade = this.store.drill()?.trade;
+    return backtest && trade ? replayLink(backtest, trade) : null;
+  });
+  protected readonly forecastMethods = computed(() => {
+    const data = this.store.drill()?.forecast.data;
+    if (!data) {
+      return [];
+    }
+    return [data.empirical, data.knn]
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .map((m) => ({
+        key: m.method,
+        title: METHOD_TITLES[m.method] ?? m.method,
+        sample: m.sample,
+        rows: forecastRows(m, 'atr'),
+      }));
+  });
   protected readonly runsForSeries = computed(() => {
     const result = this.store.current()?.result as {
       runs_for_series?: number;
@@ -702,6 +933,21 @@ export class Backtest implements OnInit {
 
   ngOnInit(): void {
     void this.store.init();
+  }
+
+  protected select(id: number): void {
+    const trade = this.store.trades().find((t) => t.id === id);
+    if (trade) {
+      void this.store.selectTrade(trade);
+    }
+  }
+
+  protected stamp(iso: string): string {
+    return iso.slice(0, 16).replace('T', ' ');
+  }
+
+  protected reasonTitle(reason: string): string {
+    return REASON_TITLES[reason] ?? reason;
   }
 
   protected statusTitle(status: string): string {

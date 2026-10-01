@@ -48,6 +48,8 @@ class Signal:
     target: float | None = None
     max_bars: int | None = None
     ref: str | None = None
+    # close сигнального бара в шкале continuous — для связи сделки с уровнями
+    ref_price: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +96,7 @@ class Trade:
     mae_ticks: float
     commission: float
     ambiguous_bar: bool = False
+    signal_price: float | None = None
 
     @property
     def net_ticks(self) -> float:
@@ -256,6 +259,7 @@ class _Run:
             mae_ticks=self.mae,
             commission=fills * self.contracts * self.costs.commission_per_contract,
             ambiguous_bar=self.ambiguous,
+            signal_price=self.signal.ref_price,
         )
 
 
