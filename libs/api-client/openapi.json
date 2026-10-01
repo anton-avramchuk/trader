@@ -4055,6 +4055,148 @@
         }
       }
     },
+    "/forecast/calibration": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Калибровка Empirical-прогноза (walk-forward)",
+        "description": "Надёжность вероятностей: для каждого вхождения выбранных типа и направления прогноз строится только по более ранним вхождениям с уже закрытым исходом и сверяется с реальным исходом. Brier score, reliability по корзинам (интервал Уилсона) и сравнение с константой — общей частотой. Исходы в направлении события. `as_of` отсекает и события, и бары.",
+        "operationId": "getForecastCalibration",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "description": "Прогоны истории",
+              "title": "Run Id"
+            },
+            "description": "Прогоны истории"
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Тип паттерна",
+              "title": "Group"
+            },
+            "description": "Тип паттерна"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "bullish",
+                "bearish"
+              ],
+              "type": "string",
+              "title": "Direction"
+            }
+          },
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 10,
+              "title": "Horizon"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "atr",
+                "pct"
+              ],
+              "type": "string",
+              "default": "atr",
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Threshold"
+            }
+          },
+          {
+            "name": "min_history",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 5,
+              "default": 20,
+              "title": "Min History"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibrationOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -4162,6 +4304,78 @@
           "warnings"
         ],
         "title": "AnaloguesOut"
+      },
+      "BinOut": {
+        "properties": {
+          "low": {
+            "type": "number",
+            "title": "Low"
+          },
+          "high": {
+            "type": "number",
+            "title": "High"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "mean_predicted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Predicted"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "observed_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Low",
+            "description": "Интервал Уилсона 95%"
+          },
+          "observed_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed High"
+          }
+        },
+        "type": "object",
+        "required": [
+          "low",
+          "high",
+          "n",
+          "mean_predicted",
+          "observed",
+          "observed_low",
+          "observed_high"
+        ],
+        "title": "BinOut"
       },
       "BucketOut": {
         "properties": {
@@ -4358,6 +4572,83 @@
           "weekend_windows"
         ],
         "title": "CalendarRuleOut"
+      },
+      "CalibrationOut": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "bullish",
+              "bearish"
+            ],
+            "title": "Direction"
+          },
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "thresholds": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Thresholds"
+          },
+          "occurrences": {
+            "type": "integer",
+            "title": "Occurrences",
+            "description": "Вхождений выбранного типа и направления"
+          },
+          "tested": {
+            "type": "integer",
+            "title": "Tested",
+            "description": "Прогнозов, сверенных с исходом"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ThresholdCalibrationOut"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "direction",
+          "horizon",
+          "unit",
+          "thresholds",
+          "occurrences",
+          "tested",
+          "skipped",
+          "rows",
+          "warnings"
+        ],
+        "title": "CalibrationOut"
       },
       "CandleOut": {
         "properties": {
@@ -7882,6 +8173,66 @@
           "step_price"
         ],
         "title": "StepPriceOut"
+      },
+      "ThresholdCalibrationOut": {
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ],
+            "title": "Side",
+            "description": "Рост или падение ≥ порога"
+          },
+          "n": {
+            "type": "integer",
+            "title": "N"
+          },
+          "brier": {
+            "type": "number",
+            "title": "Brier"
+          },
+          "brier_climatology": {
+            "type": "number",
+            "title": "Brier Climatology",
+            "description": "Brier константы = общей частоте"
+          },
+          "skill": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill",
+            "description": "1 − Brier / Brier климатологии"
+          },
+          "bins": {
+            "items": {
+              "$ref": "#/components/schemas/BinOut"
+            },
+            "type": "array",
+            "title": "Bins"
+          }
+        },
+        "type": "object",
+        "required": [
+          "threshold",
+          "side",
+          "n",
+          "brier",
+          "brier_climatology",
+          "skill",
+          "bins"
+        ],
+        "title": "ThresholdCalibrationOut"
       },
       "ValidationError": {
         "properties": {

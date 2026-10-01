@@ -870,6 +870,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/forecast/calibration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Калибровка Empirical-прогноза (walk-forward)
+         * @description Надёжность вероятностей: для каждого вхождения выбранных типа и направления прогноз строится только по более ранним вхождениям с уже закрытым исходом и сверяется с реальным исходом. Brier score, reliability по корзинам (интервал Уилсона) и сравнение с константой — общей частотой. Исходы в направлении события. `as_of` отсекает и события, и бары.
+         */
+        get: operations["getForecastCalibration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -931,6 +951,26 @@ export interface components {
             trajectory_count: number;
             /** Warnings */
             warnings: string[];
+        };
+        /** BinOut */
+        BinOut: {
+            /** Low */
+            low: number;
+            /** High */
+            high: number;
+            /** N */
+            n: number;
+            /** Mean Predicted */
+            mean_predicted: number | null;
+            /** Observed */
+            observed: number | null;
+            /**
+             * Observed Low
+             * @description Интервал Уилсона 95%
+             */
+            observed_low: number | null;
+            /** Observed High */
+            observed_high: number | null;
         };
         /** BucketOut */
         BucketOut: {
@@ -1016,6 +1056,41 @@ export interface components {
             weekend_windows: {
                 [key: string]: unknown;
             }[];
+        };
+        /** CalibrationOut */
+        CalibrationOut: {
+            /** Group */
+            group: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "bullish" | "bearish";
+            /** Horizon */
+            horizon: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /** Thresholds */
+            thresholds: number[];
+            /**
+             * Occurrences
+             * @description Вхождений выбранного типа и направления
+             */
+            occurrences: number;
+            /**
+             * Tested
+             * @description Прогнозов, сверенных с исходом
+             */
+            tested: number;
+            /** Skipped */
+            skipped: number;
+            /** Rows */
+            rows: components["schemas"]["ThresholdCalibrationOut"][];
+            /** Warnings */
+            warnings: string[];
         };
         /** CandleOut */
         CandleOut: {
@@ -2401,6 +2476,33 @@ export interface components {
              * @description Стоимость шага цены в ₽
              */
             step_price: string;
+        };
+        /** ThresholdCalibrationOut */
+        ThresholdCalibrationOut: {
+            /** Threshold */
+            threshold: number;
+            /**
+             * Side
+             * @description Рост или падение ≥ порога
+             * @enum {string}
+             */
+            side: "up" | "down";
+            /** N */
+            n: number;
+            /** Brier */
+            brier: number;
+            /**
+             * Brier Climatology
+             * @description Brier константы = общей частоте
+             */
+            brier_climatology: number;
+            /**
+             * Skill
+             * @description 1 − Brier / Brier климатологии
+             */
+            skill: number | null;
+            /** Bins */
+            bins: components["schemas"]["BinOut"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -4705,6 +4807,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForecastOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getForecastCalibration: {
+        parameters: {
+            query: {
+                /** @description Прогоны истории */
+                run_id: number[];
+                /** @description Тип паттерна */
+                group: string;
+                direction: "bullish" | "bearish";
+                horizon?: number;
+                unit?: "atr" | "pct";
+                threshold?: number[] | null;
+                min_history?: number;
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalibrationOut"];
                 };
             };
             /** @description Не найдено */
