@@ -25,6 +25,7 @@ from trader_engine.analogues.library import (
 )
 from trader_engine.analogues.pip import DEFAULT_PIP_POINTS, Normalization
 from trader_engine.analogues.search import find_analogues
+from trader_engine.forecast.calibration import MIN_HISTORY, CalibrationReport, calibrate
 from trader_engine.forecast.core import THRESHOLDS
 from trader_engine.forecast.methods import (
     MethodForecast,
@@ -45,6 +46,7 @@ from trader_api.stats_api import (
     NOT_FOUND,
     IntervalOut,
     _horizons,  # pyright: ignore[reportPrivateUsage]
+    _items,  # pyright: ignore[reportPrivateUsage]
     _load,  # pyright: ignore[reportPrivateUsage]
     _runs,  # pyright: ignore[reportPrivateUsage]
 )
@@ -356,4 +358,143 @@ async def forecast(
         seed=seed,
     )
     _remember(cache_key, out)
+    return out
+
+
+class BinOut(Orm):
+    low: float
+    high: float
+    n: int
+    mean_predicted: float | None
+    observed: float | None
+    observed_low: float | None = Field(description="Интервал Уилсона 95%")
+    observed_high: float | None
+
+
+class ThresholdCalibrationOut(Orm):
+    threshold: float
+    side: Literal["up", "down"] = Field(description="Рост или падение ≥ порога")
+    n: int
+    brier: float
+    brier_climatology: float = Field(description="Brier константы = общей частоте")
+    skill: float | None = Field(description="1 − Brier / Brier климатологии")
+    bins: list[BinOut]
+
+
+class CalibrationOut(Orm):
+    group: str
+    direction: Literal["bullish", "bearish"]
+    horizon: int
+    unit: Literal["atr", "pct"]
+    thresholds: list[float]
+    occurrences: int = Field(description="Вхождений выбранного типа и направления")
+    tested: int = Field(description="Прогнозов, сверенных с исходом")
+    skipped: int
+    rows: list[ThresholdCalibrationOut]
+    warnings: list[str]
+
+
+_calibration_cache: OrderedDict[str, CalibrationOut] = OrderedDict()
+
+
+def _calibration(
+    runs: Sequence[EngineRun],
+    loaded: Any,
+    *,
+    group: str,
+    direction: str,
+    horizon: int,
+    unit: Literal["atr", "pct"],
+    thresholds: tuple[float, ...],
+    min_history: int,
+    as_of: datetime | None,
+) -> CalibrationOut:
+    items = [
+        i
+        for i in _items(runs, loaded, as_of, include_candidates=False)
+        if i.occurrence.group == group and i.occurrence.direction == direction
+    ]
+    report: CalibrationReport = calibrate(
+        items,
+        horizon=horizon,
+        unit=unit,
+        thresholds=thresholds,
+        min_history=min_history,
+        until=as_of,
+    )
+    return CalibrationOut(
+        group=group,
+        direction=direction,  # type: ignore[arg-type]
+        horizon=horizon,
+        unit=unit,
+        thresholds=list(thresholds),
+        occurrences=len(items),
+        tested=report.tested,
+        skipped=report.skipped,
+        rows=[ThresholdCalibrationOut.model_validate(r) for r in report.rows],
+        warnings=report.warnings,
+    )
+
+
+@router.get(
+    "/forecast/calibration",
+    response_model=CalibrationOut,
+    operation_id="getForecastCalibration",
+    summary="Калибровка Empirical-прогноза (walk-forward)",
+    description=(
+        "Надёжность вероятностей: для каждого вхождения выбранных типа и "
+        "направления прогноз строится только по более ранним вхождениям с уже "
+        "закрытым исходом и сверяется с реальным исходом. Brier score, reliability "
+        "по корзинам (интервал Уилсона) и сравнение с константой — общей частотой. "
+        "Исходы в направлении события. `as_of` отсекает и события, и бары."
+    ),
+    responses=NOT_FOUND | {422: {"description": "Неверные параметры"}},
+)
+async def forecast_calibration(
+    session: DbSession,
+    run_id: Annotated[list[int], Query(description="Прогоны истории")],
+    group: Annotated[str, Query(description="Тип паттерна")],
+    direction: Annotated[Literal["bullish", "bearish"], Query()],
+    horizon: Annotated[int, Query(ge=1, le=500)] = 10,
+    unit: Annotated[Literal["atr", "pct"], Query()] = "atr",
+    threshold: Annotated[list[float] | None, Query()] = None,
+    min_history: Annotated[int, Query(ge=5, le=500)] = MIN_HISTORY,
+    as_of: Annotated[AwareDatetime | None, Query()] = None,
+) -> CalibrationOut:
+    thresholds = tuple(sorted(set(threshold))) if threshold else THRESHOLDS
+    if len(thresholds) > MAX_THRESHOLDS or any(not 0 < t <= 50 for t in thresholds):
+        raise HTTPException(
+            422, f"Пороги: до {MAX_THRESHOLDS} значений, больше 0 и не больше 50"
+        )
+    runs = await _runs(session, run_id)
+    cache_key = _cache_key(
+        runs,
+        group=group,
+        direction=direction,
+        horizon=horizon,
+        unit=unit,
+        thresholds=thresholds,
+        min_history=min_history,
+        as_of=as_of,
+    )
+    cached = _calibration_cache.get(cache_key)
+    if cached is not None:
+        _calibration_cache.move_to_end(cache_key)
+        return cached
+    loaded = await session.run_sync(lambda sync: _load(sync, runs, as_of))
+    out = await run_in_threadpool(
+        _calibration,
+        runs,
+        loaded,
+        group=group,
+        direction=direction,
+        horizon=horizon,
+        unit=unit,
+        thresholds=thresholds,
+        min_history=min_history,
+        as_of=as_of,
+    )
+    _calibration_cache[cache_key] = out
+    while len(_calibration_cache) > CACHE_SIZE:
+        _calibration_cache.popitem(last=False)
     return out
