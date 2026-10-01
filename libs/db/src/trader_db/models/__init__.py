@@ -1,3 +1,10 @@
+from trader_db.models.backtest import (
+    BacktestExperiment,
+    BacktestLog,
+    BacktestTestLock,
+    BacktestTrade,
+    BacktestWindow,
+)
 from trader_db.models.base import Base
 from trader_db.models.calendars import (
     CalendarHoliday,
@@ -30,6 +37,11 @@ from trader_db.models.raw import (
 )
 
 __all__ = [
+    "BacktestExperiment",
+    "BacktestLog",
+    "BacktestTestLock",
+    "BacktestTrade",
+    "BacktestWindow",
     "Base",
     "CalendarHoliday",
     "CalendarRule",
