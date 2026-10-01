@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type { Backtest } from '@trader/api-client';
+import { provideRouter } from '@angular/router';
 import { provideTaiga } from '@taiga-ui/core';
 import { provideEventPlugins } from '@taiga-ui/event-plugins';
 import { of } from 'rxjs';
@@ -122,6 +123,7 @@ describe('Backtest page', () => {
       providers: [
         provideTaiga(),
         provideEventPlugins(),
+        provideRouter([]),
         { provide: API_CLIENT, useValue: client },
         {
           provide: JobsService,

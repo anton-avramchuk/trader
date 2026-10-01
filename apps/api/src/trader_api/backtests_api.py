@@ -175,6 +175,9 @@ class TradeOut(Orm):
     sequence: int
     side: str
     ref: str | None
+    signal_price: float | None = Field(
+        description="Close сигнального бара в шкале continuous (для уровней)"
+    )
     contracts: int
     entry_time: datetime
     exit_time: datetime

@@ -72,11 +72,13 @@ def test_single_run_stores_result_trades_and_versions(
     assert set(stored.result["equity"]) == {"ticks", "rub"}
     assert stored.versions["template"] == 1
     assert stored.versions["engines"]["levels"]["algorithm_version"] >= 1
+    assert stored.versions["engines"]["levels"]["run_id"] > 0
     with session_factory() as session:
         trades = list_trades(session, experiment_id)
     assert len(trades) == stored.result["metrics"]["ticks"]["trades"]
     for trade in trades:
         assert trade.segment == "single" and trade.exit_time >= trade.entry_time
+        assert trade.signal_price is not None  # close сигнального бара
 
 
 def test_repeated_run_is_reproducible(

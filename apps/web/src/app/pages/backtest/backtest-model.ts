@@ -4,6 +4,7 @@ import type {
   BacktestTrade,
   BacktestWindow,
 } from '@trader/api-client';
+import type { LevelInfo } from '../chart/structure';
 
 /** Форма бэктеста (ADR-0027): сборка запроса и представление результата. */
 
@@ -422,3 +423,97 @@ export const STATUS_TITLES: Record<string, string> = {
   succeeded: 'готово',
   failed: 'ошибка',
 };
+
+/** Прогоны движков эксперимента (`versions.engines`): имя → id прогона. */
+export function engineRuns(backtest: Backtest | null): Record<string, number> {
+  const engines = (
+    backtest?.versions as {
+      engines?: Record<string, { run_id: number }>;
+    } | null
+  )?.engines;
+  return Object.fromEntries(
+    Object.entries(engines ?? {}).map(([name, info]) => [name, info.run_id]),
+  );
+}
+
+/** Движок вхождения из ключа сделки: `движок:id` или `движок:id:seq`. */
+export const engineOf = (ref: string | null | undefined): string | null =>
+  ref ? (ref.split(':')[0] ?? null) : null;
+
+export interface NearestLevel {
+  level: LevelInfo;
+  /** Расстояние до цены сигнала, % от цены. */
+  distancePct: number;
+  /** Цена сигнала выше (+) или ниже (−) уровня. */
+  above: boolean;
+}
+
+/** Ближайший к цене сигнала уровень (в шкале continuous); `null` без уровней. */
+export function nearestLevel(
+  levels: LevelInfo[],
+  price: number | null | undefined,
+): NearestLevel | null {
+  if (price === null || price === undefined || !levels.length || price === 0) {
+    return null;
+  }
+  const best = levels.reduce((a, b) =>
+    Math.abs(b.price - price) < Math.abs(a.price - price) ? b : a,
+  );
+  return {
+    level: best,
+    distancePct: (Math.abs(best.price - price) / Math.abs(price)) * 100,
+    above: price >= best.price,
+  };
+}
+
+const MSK_OFFSET_MS = 3 * 3600_000;
+
+/** Дата (МСК, `YYYY-MM-DD`) момента ``iso`` — ключ перехода в Replay. */
+export function mskDate(iso: string): string {
+  return new Date(new Date(iso).getTime() + MSK_OFFSET_MS)
+    .toISOString()
+    .slice(0, 10);
+}
+
+export interface ReplayLink {
+  path: string[];
+  queryParams: { root: number; tf: string; date: string };
+}
+
+/** Переход к графику: Replay с началом в день входа (будущее скрыто). */
+export function replayLink(
+  backtest: Backtest,
+  trade: BacktestTrade,
+): ReplayLink {
+  return {
+    path: ['/replay'],
+    queryParams: {
+      root: backtest.root_id,
+      tf: backtest.timeframe_code,
+      date: mskDate(trade.entry_time),
+    },
+  };
+}
+
+export interface LegRow {
+  contract: number;
+  entry: string;
+  exit: string;
+  entryPrice: string;
+  exitPrice: string;
+  reason: string;
+  ticks: string;
+}
+
+/** Ноги сделки: на ролле их несколько, у каждой свой контракт. */
+export function legRows(trade: BacktestTrade): LegRow[] {
+  return trade.legs.map((leg) => ({
+    contract: Number(leg['contract_id']),
+    entry: stamp(String(leg['entry_time'])),
+    exit: stamp(String(leg['exit_time'])),
+    entryPrice: num(leg['entry_price'] as number | undefined, 4),
+    exitPrice: num(leg['exit_price'] as number | undefined, 4),
+    reason: REASONS[String(leg['reason'])] ?? String(leg['reason']),
+    ticks: num(leg['gross_ticks'] as number | undefined),
+  }));
+}

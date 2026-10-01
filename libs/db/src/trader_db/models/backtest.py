@@ -120,6 +120,7 @@ class BacktestTrade(Base):
     sequence: Mapped[int] = mapped_column(Integer)
     side: Mapped[str] = mapped_column(String(8))
     ref: Mapped[str | None] = mapped_column(String(128))
+    signal_price: Mapped[float | None] = mapped_column(Float)
     contracts: Mapped[int] = mapped_column(Integer)
     entry_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     exit_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))

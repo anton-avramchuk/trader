@@ -89,6 +89,7 @@ def trade_row(**kw: Any) -> dict[str, Any]:
     row: dict[str, Any] = {
         "side": "long",
         "ref": "double_triple:1",
+        "signal_price": 101.25,
         "contracts": 1,
         "entry_time": NOON,
         "exit_time": NOON,
@@ -315,3 +316,4 @@ def test_trade_model_defaults(session: Session, root_id: int) -> None:
     stored = session.scalars(select(BacktestTrade)).one()
     assert not stored.ambiguous_bar and not stored.rolled
     assert not stored.step_price_estimated and stored.segment == "single"
+    assert stored.signal_price == 101.25

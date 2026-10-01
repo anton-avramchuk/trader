@@ -8,6 +8,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { TuiButton, TuiInput } from '@taiga-ui/core';
 import { MskPipe } from '../../core/time/msk';
 import { describeBar } from '../chart/chart-data';
@@ -288,6 +289,7 @@ const REFRESH_DELAY_MS = 250;
   `,
 })
 export class Replay implements OnInit, OnDestroy {
+  private readonly route = inject(ActivatedRoute);
   protected readonly store = inject(ReplayStore);
   protected readonly indicators = inject(IndicatorsStore);
   protected readonly structure = inject(StructureStore);
@@ -346,8 +348,29 @@ export class Replay implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    void this.store.loadRoots();
+    void this.loadAndOpenLink();
     void this.indicators.loadCatalog();
+  }
+
+  /**
+   * Ссылка из бэктеста (`?root=&tf=&date=`): выбирает инструмент и TF и начинает
+   * воспроизведение с указанного дня — будущее скрыто, видно только известное.
+   */
+  private async loadAndOpenLink(): Promise<void> {
+    await this.store.loadRoots();
+    const query = this.route.snapshot.queryParamMap;
+    const root = Number(query.get('root'));
+    const date = query.get('date');
+    const timeframe = query.get('tf');
+    if (!root || !date || !this.store.roots().some((r) => r.id === root)) {
+      return;
+    }
+    this.date = date;
+    await this.store.selectRoot(root);
+    if ((REPLAY_TIMEFRAMES as readonly string[]).includes(timeframe ?? '')) {
+      this.store.selectTimeframe(timeframe as ReplayTimeframe);
+    }
+    await this.store.start(date);
   }
 
   ngOnDestroy(): void {

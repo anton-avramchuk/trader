@@ -2899,6 +2899,11 @@ export interface components {
             side: string;
             /** Ref */
             ref: string | null;
+            /**
+             * Signal Price
+             * @description Close сигнального бара в шкале continuous (для уровней)
+             */
+            signal_price: number | null;
             /** Contracts */
             contracts: number;
             /**

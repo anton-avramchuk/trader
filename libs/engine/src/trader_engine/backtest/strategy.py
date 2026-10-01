@@ -203,6 +203,14 @@ def build_signals(
                 bad += 1
                 continue
         signals.append(
-            Signal(index, side, stop, target, spec.max_bars, ref=occurrence.key)
+            Signal(
+                index,
+                side,
+                stop,
+                target,
+                spec.max_bars,
+                ref=occurrence.key,
+                ref_price=ref,
+            )
         )
     return BuiltSignals(signals, filtered, no_atr, bad)

@@ -66,6 +66,7 @@ def test_atr_stop_and_target_from_signal_close() -> None:
         "long",
         "e:pattern:double_bottom:20",
     )
+    assert signal.ref_price == pytest.approx(ref)
     assert signal.stop == pytest.approx(ref - 1.5 * 2.0)
     assert signal.target == pytest.approx(ref + 3.0 * 2.0)
 

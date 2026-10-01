@@ -189,6 +189,7 @@ def fabricate(database_url: str, experiment_id: int) -> int:
         row: dict[str, Any] = {
             "side": "long",
             "ref": "levels:1:3",
+            "signal_price": 99.5,
             "contracts": 2,
             "entry_time": NOON,
             "exit_time": NOON,
@@ -232,6 +233,7 @@ def test_results_trades_and_windows(
         ("validation", 0),
     ]
     assert trades[0]["net_rub"] == 50.0 and trades[0]["legs"] == [{"contract_id": 1}]
+    assert trades[0]["signal_price"] == 99.5
     assert len(client.get(f"{path}/trades", params={"segment": "single"}).json()) == 2
     assert (
         len(client.get(f"{path}/trades", params={"window_id": window_id}).json()) == 1
