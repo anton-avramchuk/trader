@@ -1,14 +1,14 @@
-"""Деньги, equity и метрики бэктеста (ADR-0027).
+"""Деньги, equity и метрики бэктеста (ADR-0027, ADR-0028).
 
-Сделки симулятора выражены в тиках на контракт. Здесь они переводятся в пункты
-цены (валюта котировки) и в ₽ по историческому ``step_price`` контракта на день
-выхода каждой ноги (на ролле — свой у каждой ноги), затем считаются метрики. Все
-метрики считаются по одной выбранной единице (``ticks``, ``points`` или ``rub``),
-чтобы Sharpe и просадка не смешивали разные валюты. Комиссия — в ₽: в единицах
-``ticks``/``points`` показывается отдельно, а в ``rub`` вычитается из результата.
+Сделки симулятора выражены в тиках на единицу. Здесь они переводятся в пункты цены
+и, если у инструмента задана ``tick_value`` (стоимость тика в валюте счёта на
+единицу), в деньги; затем считаются метрики. Все метрики считаются по одной выбранной
+единице (``ticks``, ``points`` или ``money``), чтобы Sharpe и просадка не смешивали
+разные величины. Комиссия — в валюте счёта: в ``ticks``/``points`` показывается
+отдельно, а в ``money`` вычитается из результата.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from math import sqrt
@@ -17,9 +17,7 @@ from typing import Literal
 
 from trader_engine.backtest.simulator import Trade
 
-Unit = Literal["ticks", "points", "rub"]
-# (стоимость шага в ₽, оценка ли это — на день нет собственной записи) или None.
-StepPriceLookup = Callable[[int, datetime], tuple[float, bool] | None]
+Unit = Literal["ticks", "points", "money"]
 
 TRADING_DAYS = 252
 MIN_TRADES = 30
@@ -27,53 +25,40 @@ MIN_TRADES = 30
 
 @dataclass(frozen=True, slots=True)
 class PricedTrade:
-    """Сделка в деньгах: пункты цены на все контракты и ₽ (``None`` без step_price)."""
+    """Сделка в деньгах: пункты на всё количество и деньги (``None`` без tick_value)."""
 
     trade: Trade
     exit_time: datetime
     gross_points: float
     net_points: float
-    commission_rub: float
-    gross_rub: float | None
-    net_rub: float | None
-    step_price_estimated: bool
+    commission: float
+    gross_money: float | None
+    net_money: float | None
     points_per_tick: float
-    # ₽ за тик на все контракты по step_price последней ноги (для MFE/MAE в ₽)
-    rub_per_tick: float | None
+    # деньги за тик на всё количество (для MFE/MAE в деньгах)
+    money_per_tick: float | None
 
 
 def price_trades(
-    trades: Sequence[Trade], *, tick_size: float, step_price: StepPriceLookup
+    trades: Sequence[Trade], *, tick_size: float, tick_value: float | None
 ) -> list[PricedTrade]:
-    """Деньги по сделкам: пункты — всегда, ₽ — если известен ``step_price`` всех ног."""
+    """Деньги по сделкам: пункты — всегда, деньги — если задана ``tick_value``."""
     priced: list[PricedTrade] = []
     for trade in trades:
-        per_leg_cost = trade.cost_ticks / len(trade.legs)
-        gross_rub = net_rub = 0.0
-        known, estimated = True, False
-        last_step = 0.0
-        for leg in trade.legs:
-            found = step_price(leg.contract_id, leg.exit_time)
-            if found is None:
-                known = False
-                break
-            value, is_estimate = found
-            last_step = value
-            estimated = estimated or is_estimate
-            gross_rub += leg.gross_ticks * value * trade.contracts
-            net_rub += (leg.gross_ticks - per_leg_cost) * value * trade.contracts
+        per_tick = None if tick_value is None else tick_value * trade.quantity
         priced.append(
             PricedTrade(
                 trade=trade,
-                exit_time=trade.legs[-1].exit_time,
-                gross_points=trade.gross_ticks * tick_size * trade.contracts,
-                net_points=trade.net_ticks * tick_size * trade.contracts,
-                commission_rub=trade.commission,
-                gross_rub=gross_rub if known else None,
-                net_rub=net_rub - trade.commission if known else None,
-                step_price_estimated=estimated,
-                points_per_tick=tick_size * trade.contracts,
-                rub_per_tick=last_step * trade.contracts if known else None,
+                exit_time=trade.exit_time,
+                gross_points=trade.gross_ticks * tick_size * trade.quantity,
+                net_points=trade.net_ticks * tick_size * trade.quantity,
+                commission=trade.commission,
+                gross_money=None if per_tick is None else trade.gross_ticks * per_tick,
+                net_money=None
+                if per_tick is None
+                else trade.net_ticks * per_tick - trade.commission,
+                points_per_tick=tick_size * trade.quantity,
+                money_per_tick=per_tick,
             )
         )
     return priced
@@ -89,11 +74,10 @@ class Record:
     mfe: float
     mae: float
     ambiguous: bool
-    rolled: bool
 
 
 def records(priced: Sequence[PricedTrade], unit: Unit) -> tuple[list[Record], int]:
-    """Записи в единице ``unit`` и число сделок без ₽ (для ``rub``)."""
+    """Записи в единице ``unit`` и число сделок без денег (для ``money``)."""
     found: list[Record] = []
     missing = 0
     for item in priced:
@@ -104,13 +88,13 @@ def records(priced: Sequence[PricedTrade], unit: Unit) -> tuple[list[Record], in
             gross, net, scale = item.gross_points, item.net_points, item.points_per_tick
         else:
             if (
-                item.gross_rub is None
-                or item.net_rub is None
-                or item.rub_per_tick is None
+                item.gross_money is None
+                or item.net_money is None
+                or item.money_per_tick is None
             ):
                 missing += 1
                 continue
-            gross, net, scale = item.gross_rub, item.net_rub, item.rub_per_tick
+            gross, net, scale = item.gross_money, item.net_money, item.money_per_tick
         found.append(
             Record(
                 item.exit_time.date(),
@@ -119,7 +103,6 @@ def records(priced: Sequence[PricedTrade], unit: Unit) -> tuple[list[Record], in
                 trade.mfe_ticks * scale,
                 trade.mae_ticks * scale,
                 trade.ambiguous_bar,
-                trade.rolled,
             )
         )
     return found, missing
@@ -149,7 +132,6 @@ class Metrics:
     average_mfe: float | None
     average_mae: float | None
     ambiguous_share: float | None
-    rolled_share: float | None
     warnings: list[str] = field(default_factory=list[str])
 
 
@@ -219,7 +201,6 @@ def compute_metrics(
             None,
             None,
             None,
-            None,
             ["no_trades"],
         )
     if count < MIN_TRADES:
@@ -244,6 +225,5 @@ def compute_metrics(
         average_mfe=mean(r.mfe for r in ordered),
         average_mae=mean(r.mae for r in ordered),
         ambiguous_share=sum(r.ambiguous for r in ordered) / count,
-        rolled_share=sum(r.rolled for r in ordered) / count,
         warnings=warnings,
     )

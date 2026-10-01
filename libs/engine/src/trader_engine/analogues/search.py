@@ -172,6 +172,5 @@ def _raw_outcomes(
         entry,
         "bullish",
         series.atrs[entry],
-        roll_times=series.roll_times,
         horizons=horizons,
     )

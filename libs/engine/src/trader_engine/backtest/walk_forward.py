@@ -20,7 +20,6 @@ from typing import Any, Literal
 from trader_engine.backtest.results import (
     Metrics,
     PricedTrade,
-    StepPriceLookup,
     compute_metrics,
     price_trades,
     records,
@@ -41,13 +40,13 @@ MIN_TRAIN_TRADES = 10
 
 @dataclass(frozen=True)
 class BacktestData:
-    """Данные прогона: ряд (ATR, режим), бары в ценах контракта и вхождения."""
+    """Данные прогона: ряд (ATR, режим), бары и вхождения."""
 
     series: Series
     sim_bars: Sequence[SimBar]
     items: Sequence[SeriesOccurrence]
     tick_size: float
-    step_price: StepPriceLookup
+    tick_value: float | None = None
 
 
 @dataclass(frozen=True)
@@ -73,7 +72,7 @@ def evaluate(
     end: date,
     *,
     costs: Costs | None = None,
-    contracts: int = 1,
+    quantity: int = 1,
 ) -> Evaluation:
     """Стратегия на периоде ``[start, end]`` без заглядывания за ``end``."""
     bars = data.series.bars
@@ -94,10 +93,10 @@ def evaluate(
         built.signals,
         tick_size=data.tick_size,
         costs=costs,
-        contracts=contracts,
+        quantity=quantity,
     )
     priced = price_trades(
-        result.trades, tick_size=data.tick_size, step_price=data.step_price
+        result.trades, tick_size=data.tick_size, tick_value=data.tick_value
     )
     return Evaluation(start, end, priced, built, result.skipped)
 
@@ -105,7 +104,7 @@ def evaluate(
 def summarize(
     evaluation: Evaluation,
     days: Sequence[date],
-    unit: Literal["ticks", "points", "rub"],
+    unit: Literal["ticks", "points", "money"],
 ) -> Metrics:
     """Метрики прогона в единице ``unit``; ``days`` — торговые дни всего ряда."""
     items, missing = records(evaluation.priced, unit)
@@ -115,7 +114,7 @@ def summarize(
         unit,
     )
     if missing:
-        metrics.warnings.append("step_price_missing")
+        metrics.warnings.append("tick_value_missing")
     return metrics
 
 
@@ -238,7 +237,7 @@ def select_params(
     days: Sequence[date],
     *,
     costs: Costs | None = None,
-    contracts: int = 1,
+    quantity: int = 1,
 ) -> tuple[dict[str, Any] | None, list[Candidate], Metrics | None]:
     """Лучший набор сетки по train (только по данным периода train)."""
     candidates: list[Candidate] = []
@@ -250,7 +249,7 @@ def select_params(
             train[0],
             train[1],
             costs=costs,
-            contracts=contracts,
+            quantity=quantity,
         )
         metrics = summarize(evaluation, days, "ticks")
         value = score(metrics, config.objective, config.min_trades)
@@ -294,7 +293,7 @@ def walk_forward(
     days: Sequence[date],
     *,
     costs: Costs | None = None,
-    contracts: int = 1,
+    quantity: int = 1,
 ) -> WalkForwardResult:
     """Walk-forward по заданным торговым дням (test-период вызывающий исключает)."""
     config.validate()
@@ -305,7 +304,7 @@ def walk_forward(
         days, config.train_days, config.valid_days, config.step_days
     ):
         params, candidates, train_metrics = select_params(
-            data, spec, window.train, config, all_days, costs=costs, contracts=contracts
+            data, spec, window.train, config, all_days, costs=costs, quantity=quantity
         )
         if params is None:
             results.append(WindowResult(window, None, candidates, None, None, None))
@@ -316,7 +315,7 @@ def walk_forward(
             window.valid[0],
             window.valid[1],
             costs=costs,
-            contracts=contracts,
+            quantity=quantity,
         )
         results.append(
             WindowResult(

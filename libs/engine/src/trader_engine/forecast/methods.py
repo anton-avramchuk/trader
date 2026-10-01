@@ -45,7 +45,6 @@ def _observation(item: SeriesOccurrence, horizon: int) -> Observation | None:
         entry,
         occurrence.direction,
         series.atrs[entry],
-        roll_times=series.roll_times,
         horizons=(horizon,),
     )[0]
     return Observation((series.key, occurrence.direction), entry, outcome)
@@ -121,7 +120,6 @@ def knn_forecast(
                 entry,
                 "bullish",
                 series.atrs[entry],
-                roll_times=series.roll_times,
                 horizons=(horizon,),
             )[0]
             observations.append(Observation((series.key, "raw"), entry, outcome))

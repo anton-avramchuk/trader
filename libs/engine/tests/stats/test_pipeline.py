@@ -40,14 +40,12 @@ def test_series_has_aligned_arrays() -> None:
     assert any(r is not None for r in series.regimes)
 
 
-def test_as_of_cuts_bars_and_rolls() -> None:
+def test_as_of_cuts_bars() -> None:
     cut = BARS[99].close_time
-    rolls = [BARS[10].close_time, BARS[200].close_time]
 
-    series = build_series("NG:15m", BARS, roll_times=rolls, as_of=cut)
+    series = build_series("NG:15m", BARS, as_of=cut)
 
     assert len(series.bars) == 100
-    assert list(series.roll_times) == [rolls[0]]
 
 
 def test_collect_finds_level_touches_and_breaks() -> None:

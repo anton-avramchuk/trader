@@ -54,14 +54,12 @@ class Series:
     atrs: Sequence[float | None]
     regimes: Sequence[Regime | None]
     index: dict[datetime, int]
-    roll_times: Sequence[datetime] = ()
 
 
 def build_series(
     key: str,
     bars: Sequence[BarInput],
     *,
-    roll_times: Sequence[datetime] = (),
     as_of: datetime | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
 ) -> Series:
@@ -75,7 +73,6 @@ def build_series(
         atrs=atrs,
         regimes=regime_series(known, atrs, trend),
         index=close_index(known),
-        roll_times=[t for t in roll_times if as_of is None or t <= as_of],
     )
 
 
@@ -264,7 +261,6 @@ def _outcome(item: SeriesOccurrence, entry: int, horizon: int) -> HorizonOutcome
         series.atrs[entry],
         target=o.target,
         invalidated_at=o.invalidated_at,
-        roll_times=series.roll_times,
         horizons=(horizon,),
     )[0]
 
@@ -306,7 +302,6 @@ def _baseline(
                     point.index,
                     point.direction,
                     series.atrs[point.index],
-                    roll_times=series.roll_times,
                     horizons=(horizon,),
                 )[0]
                 found[horizon].append(

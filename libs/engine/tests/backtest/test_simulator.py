@@ -1,4 +1,4 @@
-"""Симулятор: вход, стоп, цель, гэп, неоднозначный бар, время, ролл, издержки."""
+"""Симулятор: вход, стоп, цель, гэп, неоднозначный бар, время, издержки."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -10,6 +10,7 @@ from trader_engine.backtest.simulator import (
     Costs,
     Signal,
     SimBar,
+    Trade,
     simulate,
 )
 
@@ -22,9 +23,6 @@ def sbar(
     h: float | None = None,
     low: float | None = None,
     c: float | None = None,
-    *,
-    contract: int = 1,
-    factor: float = 1.0,
 ) -> SimBar:
     start = START + timedelta(hours=i)
     close = o if c is None else c
@@ -35,16 +33,14 @@ def sbar(
         max(o, close) if h is None else h,
         min(o, close) if low is None else low,
         close,
-        contract,
-        factor,
     )
 
 
-def flat(n: int, price: float = 100.0, **kw: int | float) -> list[SimBar]:
-    return [sbar(i, price, **kw) for i in range(n)]  # type: ignore[arg-type]
+def flat(n: int, price: float = 100.0) -> list[SimBar]:
+    return [sbar(i, price) for i in range(n)]
 
 
-def run_one(bars: list[SimBar], signal: Signal, **kw: object):  # type: ignore[no-untyped-def]
+def run_one(bars: list[SimBar], signal: Signal, **kw: object) -> Trade:
     result = simulate(bars, [signal], tick_size=1.0, **kw)  # type: ignore[arg-type]
     assert len(result.trades) == 1
     return result.trades[0]
@@ -57,10 +53,11 @@ def test_entry_at_next_bar_open_not_signal_close() -> None:
 
     trade = run_one(bars, Signal(2, "long", max_bars=1))
 
-    leg = trade.legs[0]
-    assert leg.entry_bar == 3 and leg.entry_price == 105
-    assert leg.exit_price == 106 and trade.reason == "time"
+    assert trade.entry_bar == 3 and trade.entry_price == 105
+    assert trade.exit_price == 106 and trade.reason == "time"
     assert trade.gross_ticks == pytest.approx(1.0)
+    assert trade.entry_time == bars[3].timestamp
+    assert trade.exit_time == bars[3].close_time
 
 
 def test_signal_price_is_carried_to_the_trade() -> None:
@@ -78,7 +75,7 @@ def test_stop_is_hit_inside_the_entry_bar_too() -> None:
 
     trade = run_one(bars, Signal(0, "long", stop=96.0))
 
-    assert trade.reason == "stop" and trade.legs[0].exit_bar == 1
+    assert trade.reason == "stop" and trade.exit_bar == 1
     assert trade.gross_ticks == pytest.approx(-4.0)
     assert not trade.ambiguous_bar
 
@@ -89,7 +86,7 @@ def test_target_for_short_and_side_sign() -> None:
 
     trade = run_one(bars, Signal(0, "short", stop=105.0, target=97.0))
 
-    assert trade.reason == "target" and trade.legs[0].exit_bar == 2
+    assert trade.reason == "target" and trade.exit_bar == 2
     assert trade.gross_ticks == pytest.approx(3.0)  # шорт: 100 → 97
 
 
@@ -99,8 +96,7 @@ def test_gap_through_stop_fills_at_open() -> None:
 
     trade = run_one(bars, Signal(0, "long", stop=96.0))
 
-    assert trade.reason == "stop"
-    assert trade.legs[0].exit_price == 90
+    assert trade.reason == "stop" and trade.exit_price == 90
     assert trade.gross_ticks == pytest.approx(-10.0)
 
 
@@ -110,7 +106,7 @@ def test_gap_through_target_fills_at_open() -> None:
 
     trade = run_one(bars, Signal(0, "long", stop=95.0, target=105.0))
 
-    assert trade.reason == "target" and trade.legs[0].exit_price == 110
+    assert trade.reason == "target" and trade.exit_price == 110
 
 
 def test_stop_and_target_in_one_bar_is_pessimistic_and_flagged() -> None:
@@ -129,8 +125,8 @@ def test_time_exit_counts_bars_like_mvp5_horizon() -> None:
     trade = run_one(bars, Signal(1, "long", max_bars=3))
 
     # вход по open бара 2 (=102), выход по close бара 4 (=104): горизонт 3 бара
-    assert trade.legs[0].entry_bar == 2 and trade.legs[0].exit_bar == 4
-    assert trade.legs[0].exit_price == 104 and trade.reason == "time"
+    assert trade.entry_bar == 2 and trade.exit_bar == 4
+    assert trade.exit_price == 104 and trade.reason == "time"
 
 
 def test_end_of_data_closes_at_last_close() -> None:
@@ -139,7 +135,7 @@ def test_end_of_data_closes_at_last_close() -> None:
     trade = run_one(bars, Signal(1, "long"))
 
     assert trade.reason == "end_of_data"
-    assert trade.legs[0].exit_bar == 4 and trade.legs[0].exit_price == 104
+    assert trade.exit_bar == 4 and trade.exit_price == 104
 
 
 def test_costs_in_ticks_and_commission_per_side() -> None:
@@ -149,17 +145,15 @@ def test_costs_in_ticks_and_commission_per_side() -> None:
     trade = run_one(
         bars,
         Signal(0, "long", stop=90.0, target=105.0),
-        costs=Costs(
-            half_spread_ticks=0.5, slippage_ticks=0.5, commission_per_contract=7
-        ),
-        contracts=3,
+        costs=Costs(half_spread_ticks=0.5, slippage_ticks=0.5, commission_per_unit=7),
+        quantity=3,
     )
 
     assert trade.gross_ticks == pytest.approx(5.0)
     assert trade.cost_ticks == pytest.approx(2.0)  # 2 стороны × (0.5 + 0.5)
     assert trade.net_ticks == pytest.approx(3.0)
     assert trade.commission == pytest.approx(2 * 3 * 7)
-    assert trade.contracts == 3
+    assert trade.quantity == 3
 
 
 def test_mfe_and_mae_follow_the_path() -> None:
@@ -172,65 +166,6 @@ def test_mfe_and_mae_follow_the_path() -> None:
 
     assert trade.mfe_ticks == pytest.approx(9.0)
     assert trade.mae_ticks == pytest.approx(-8.0)
-
-
-def test_roll_splits_trade_into_legs_with_contract_prices() -> None:
-    # старый контракт 100, новый — в два раза дороже (factor 0.5 до шкалы continuous
-    # не нужен: проверяем перевод уровня по factor нового бара)
-    bars = [
-        sbar(0, 100),
-        sbar(1, 100),
-        sbar(2, 102, c=102, contract=1),
-        sbar(3, 210, 214, 208, 212, contract=2, factor=1.0),
-        sbar(4, 212, 213, 211, 212, contract=2),
-    ]
-
-    trade = run_one(bars, Signal(1, "long", max_bars=3))
-
-    assert trade.rolled and [leg.contract_id for leg in trade.legs] == [1, 2]
-    first, second = trade.legs
-    assert first.reason == "roll" and first.exit_bar == 2 and first.exit_price == 102
-    assert second.entry_bar == 3 and second.entry_price == 210
-    assert trade.reason == "time"
-    assert trade.cost_ticks == 0 and trade.gross_ticks == pytest.approx(
-        (102 - 102) + (212 - 210)
-    )
-
-
-def test_levels_are_converted_by_bar_factor_after_roll() -> None:
-    # стоп 40 в шкале continuous: у старого контракта (factor 0.5) это цена 80,
-    # у нового (factor 1.0) — 40
-    bars = [
-        sbar(0, 100, factor=0.5),
-        sbar(1, 100, factor=0.5),
-        sbar(2, 100, factor=0.5),
-        sbar(3, 50, 51, 39, 45, contract=2, factor=1.0),
-    ]
-
-    trade = run_one(bars, Signal(0, "long", stop=40.0))
-
-    assert trade.rolled
-    assert trade.legs[0].reason == "roll"
-    assert trade.legs[-1].reason == "stop" and trade.legs[-1].exit_price == 40
-
-
-def test_roll_commission_and_costs_for_both_legs() -> None:
-    bars = [
-        sbar(0, 100),
-        sbar(1, 100),
-        sbar(2, 100, contract=2),
-        sbar(3, 100, contract=2),
-    ]
-
-    trade = run_one(
-        bars,
-        Signal(0, "long", max_bars=3),
-        costs=Costs(slippage_ticks=1, commission_per_contract=5),
-    )
-
-    assert len(trade.legs) == 2
-    assert trade.cost_ticks == pytest.approx(4.0)  # 4 стороны × 1 тик
-    assert trade.commission == pytest.approx(4 * 5)
 
 
 def test_one_position_signals_while_open_are_skipped() -> None:
@@ -254,7 +189,7 @@ def test_argument_validation() -> None:
     with pytest.raises(ValueError):
         simulate(flat(3), [], tick_size=0)
     with pytest.raises(ValueError):
-        simulate(flat(3), [], tick_size=1, contracts=0)
+        simulate(flat(3), [], tick_size=1, quantity=0)
 
 
 @given(
@@ -290,5 +225,5 @@ def test_invariants_on_random_walks(
         assert trade.exit_bar >= trade.entry_bar
         assert trade.mfe_ticks >= max(0.0, trade.gross_ticks) - 1e-9
         assert trade.mae_ticks <= min(0.0, trade.gross_ticks) + 1e-9
-        assert trade.cost_ticks == pytest.approx(2.0 * len(trade.legs))
+        assert trade.cost_ticks == pytest.approx(2.0)
         last_exit = trade.exit_bar

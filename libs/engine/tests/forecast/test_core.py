@@ -27,7 +27,6 @@ def outcome(
         ambiguous_bar=False,
         crosses_session_gap=False,
         crosses_weekend=False,
-        crosses_roll=False,
     )
 
 

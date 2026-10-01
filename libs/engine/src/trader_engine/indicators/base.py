@@ -17,7 +17,7 @@ from typing import ClassVar, Literal
 
 from pydantic import BaseModel
 
-from trader_engine.aggregation import Bar
+from trader_engine.bars import Bar
 
 
 @dataclass(frozen=True, slots=True)

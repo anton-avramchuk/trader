@@ -171,7 +171,7 @@ def test_invalidation_outside_window_or_before_entry_is_not_a_hit() -> None:
 def test_no_crossings_inside_a_continuous_session() -> None:
     [out] = compute_outcomes(flat(4), 0, "bullish", 1.0, horizons=(3,))
 
-    assert not (out.crosses_session_gap or out.crosses_weekend or out.crosses_roll)
+    assert not (out.crosses_session_gap or out.crosses_weekend)
 
 
 def test_session_gap_is_a_pause_between_bars() -> None:
@@ -199,23 +199,6 @@ def test_weekend_crossing_detected_by_trading_day_week() -> None:
 
     assert out.crosses_weekend
     assert not inside.crosses_weekend
-
-
-def test_roll_inside_window_only() -> None:
-    bars = flat(6)
-    roll = bars[2].close_time
-
-    inside = compute_outcomes(bars, 0, "bullish", 1.0, roll_times=[roll], horizons=(3,))
-    after_entry = compute_outcomes(
-        bars, 3, "bullish", 1.0, roll_times=[roll], horizons=(2,)
-    )
-    at_entry = compute_outcomes(
-        bars, 2, "bullish", 1.0, roll_times=[roll], horizons=(2,)
-    )
-
-    assert inside[0].crosses_roll
-    assert not after_entry[0].crosses_roll
-    assert not at_entry[0].crosses_roll  # ролл в момент входа — до входа
 
 
 def test_entry_index_matches_close_time_exactly() -> None:
