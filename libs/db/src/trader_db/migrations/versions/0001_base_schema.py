@@ -225,7 +225,6 @@ def _seed_reference_data() -> None:
         providers,
         [
             {"code": "moex_iss", "name": "MOEX ISS"},
-            {"code": "tinvest", "name": "T-Invest"},
             {"code": "csv", "name": "CSV / файл"},
         ],
     )
