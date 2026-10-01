@@ -2,8 +2,6 @@ name: trader
 
 x-database-url: &database-url
   TRADER_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-trader}:${POSTGRES_PASSWORD:-trader}@postgres:5432/${POSTGRES_DB:-trader}
-  # Каталог загруженных файлов; общий для api и worker.
-  TRADER_IMPORT_DIR: /data/imports
 
 services:
   postgres:
@@ -59,10 +57,11 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       <<: *database-url
-    volumes:
-      - imports:/data/imports
+      TRADER_IMPORTER_URL: http://importer:8100
     depends_on:
       postgres:
+        condition: service_healthy
+      importer:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
@@ -93,10 +92,11 @@ services:
       dockerfile: apps/worker/Dockerfile
     environment:
       <<: *database-url
-    volumes:
-      - imports:/data/imports
+      TRADER_IMPORTER_URL: http://importer:8100
     depends_on:
       postgres:
+        condition: service_healthy
+      importer:
         condition: service_healthy
     restart: unless-stopped
 
@@ -133,5 +133,4 @@ configs:
 
 volumes:
   pgdata:
-  imports:
   pgadmin:
