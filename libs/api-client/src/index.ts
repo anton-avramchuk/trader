@@ -46,3 +46,5 @@ export type OutcomeStats = components['schemas']['StatsOut'];
 export type OutcomeBucket = components['schemas']['BucketOut'];
 export type HorizonStats = components['schemas']['HorizonStatsOut'];
 export type OccurrenceOutcomes = components['schemas']['OccurrenceDetailOut'];
+export type Analogues = components['schemas']['AnaloguesOut'];
+export type AnalogueMatch = components['schemas']['MatchOut'];

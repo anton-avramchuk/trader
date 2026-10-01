@@ -456,4 +456,138 @@ describe('StructureStore', () => {
       expect(store.statsViews()).toEqual([]);
     });
   });
+
+  describe('блок «Аналоги»', () => {
+    const ANALOGUES = {
+      matches: [],
+      percentiles: [],
+      warnings: [],
+      considered: 0,
+    };
+    const patternEvent = (): EngineEvent => ({
+      seq: 0,
+      kind: 'pattern',
+      status: 'confirmed',
+      payload: {
+        id: 1,
+        pattern: 'double_top',
+        direction: 'bearish',
+        state: 'confirmed',
+        end: '2026-09-28T05:00:00Z',
+        points: [
+          { role: 'top1', price: 10, ts: '2026-09-28T04:00:00Z', index: 1 },
+        ],
+        line: { p1: 9, p2: 9, t1: null, t2: null },
+        height: 1,
+        target: 8,
+        features: {},
+        quality: { score: 50, components: {} },
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: '2026-09-28T05:00:00Z',
+      available_at: '2026-09-28T05:00:00Z',
+      revises: null,
+    });
+
+    function withAnalogues() {
+      const ctx = setup();
+      ctx.client.GET.mockImplementation((path: string) => {
+        if (path === '/analogues') {
+          return ok(ANALOGUES);
+        }
+        return ok(
+          path === '/engine-runs/{run_id}/events' ? [patternEvent()] : [],
+        );
+      });
+      return ctx;
+    }
+
+    const analogueCalls = (client: ReturnType<typeof setup>['client']) =>
+      calls(client.GET).filter(([path]) => path === '/analogues');
+
+    it('без слоёв и прогонов — подсказка, запроса нет', async () => {
+      const { store, client } = withAnalogues();
+      await store.refresh(CONTEXT);
+
+      await store.findAnalogues('window');
+
+      expect(analogueCalls(client)).toHaveLength(0);
+      expect(store.analogues()?.error).toBe(
+        'Включите слой паттернов или уровней',
+      );
+    });
+
+    it('паттерн: запрос по его ключу, прогоны серии и as-of', async () => {
+      const { store, client } = withAnalogues();
+      await store.refresh({ ...CONTEXT, asOf: '2026-09-28T06:00:00Z' });
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+
+      await store.findAnalogues('pattern');
+
+      const [request] = analogueCalls(client);
+      expect(request?.[1]?.params?.query).toMatchObject({
+        key: 'double_triple:1',
+        normalization: 'atr',
+        as_of: '2026-09-28T06:00:00Z',
+      });
+      const query = request?.[1]?.params?.query as {
+        run_id: number[];
+        query_run_id: number;
+      };
+      expect(query.run_id.length).toBe(4); // движки паттернов серии
+      expect(query.run_id).toContain(query.query_run_id);
+      expect(store.analogues()).toMatchObject({
+        mode: 'pattern',
+        loading: false,
+      });
+      expect(store.analogues()?.data).toEqual(ANALOGUES);
+    });
+
+    it('режим паттерна без выбранного паттерна — подсказка', async () => {
+      const { store, client } = withAnalogues();
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+
+      await store.findAnalogues('pattern');
+
+      expect(analogueCalls(client)).toHaveLength(0);
+      expect(store.analogues()?.error).toBe('Выберите паттерн на графике');
+    });
+
+    it('окно: без ключа; смена единиц повторяет поиск; обновление данных сбрасывает', async () => {
+      const { store, client } = withAnalogues();
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+
+      await store.findAnalogues('window');
+      expect(analogueCalls(client)[0]?.[1]?.params?.query).toMatchObject({
+        key: undefined,
+      });
+
+      store.setStatsUnit('pct');
+      await vi.waitFor(() => expect(analogueCalls(client)).toHaveLength(2));
+      expect(analogueCalls(client)[1]?.[1]?.params?.query).toMatchObject({
+        normalization: 'percent',
+      });
+
+      await store.refresh();
+      expect(store.analogues()).toBeNull();
+    });
+
+    it('ошибка запроса показывается в блоке', async () => {
+      const { store, client } = withAnalogues();
+      client.GET.mockImplementation((path: string) =>
+        path === '/analogues'
+          ? Promise.reject(new Error('Нет связи с сервером'))
+          : ok(path === '/engine-runs/{run_id}/events' ? [patternEvent()] : []),
+      );
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+
+      await store.findAnalogues('window');
+
+      expect(store.analogues()?.error).toBe('Нет связи с сервером');
+    });
+  });
 });

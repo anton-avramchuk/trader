@@ -1898,10 +1898,7 @@ export interface components {
              * Path
              * @description Выравнивание точек (запрос, аналог)
              */
-            path: [
-                number,
-                number
-            ][];
+            path: number[][];
             /** Outcomes */
             outcomes: components["schemas"]["HorizonOutcomeOut"][];
             /**

@@ -6,6 +6,7 @@ import { MskPipe } from '../../core/time/msk';
 import { allowedSourceTimeframes } from './indicators';
 import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
 import { PatternGallery } from './pattern-gallery';
+import { AnaloguesBlock } from './analogues-block';
 import { StatsBlock } from './stats-block';
 import { LAYER_TITLES, LAYERS } from './structure';
 import { StructureStore } from './structure.store';
@@ -41,6 +42,7 @@ const REASONS: Record<string, string> = {
     FormsModule,
     MskPipe,
     PatternGallery,
+    AnaloguesBlock,
     StatsBlock,
     TuiButton,
   ],
@@ -191,6 +193,14 @@ const REASONS: Record<string, string> = {
         [views]="store.statsViews()"
         [unit]="store.statsUnit()"
         (unitChange)="store.setStatsUnit($event)"
+      />
+    }
+    @if (store.layers().patterns || store.layers().levels) {
+      <app-analogues-block
+        [view]="store.analogues()"
+        [unit]="store.statsUnit()"
+        [canPattern]="!!store.selectedPatternInfo()"
+        (lookup)="store.findAnalogues($event)"
       />
     }
     @if (store.layers().patterns) {
