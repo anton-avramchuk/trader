@@ -26,7 +26,7 @@ function profile(
   return {
     id,
     name,
-    root_id: null,
+    instrument_id: null,
     config: {
       chart_timeframe: '15m',
       indicators: [
@@ -89,13 +89,15 @@ const calls = (mock: ReturnType<typeof vi.fn>) =>
   mock.mock.calls as unknown as Call[];
 
 describe('ProfilesStore', () => {
-  it('загружает профили root и глобальные', async () => {
+  it('загружает профили инструмента и глобальные', async () => {
     const { store, client } = setup([profile(1, 'A')]);
 
     await store.load(7);
 
     expect(store.profiles().map((p) => p.name)).toEqual(['A']);
-    expect(calls(client.GET)[0][1]?.params?.query).toEqual({ root_id: 7 });
+    expect(calls(client.GET)[0][1]?.params?.query).toEqual({
+      instrument_id: 7,
+    });
   });
 
   it('при первой загрузке применяет последний использованный профиль', async () => {
@@ -134,7 +136,7 @@ describe('ProfilesStore', () => {
     expect(store.selectedId()).toBeNull();
   });
 
-  it('смена root снова разрешает автоприменение', async () => {
+  it('смена инструмента снова разрешает автоприменение', async () => {
     const { store, indicators } = setup([
       profile(2, 'B', { last_used_at: '2026-09-29T00:00:00Z' }),
     ]);
@@ -146,10 +148,10 @@ describe('ProfilesStore', () => {
     expect(store.selectedId()).toBe(2);
   });
 
-  it('глобальный выбранный профиль остаётся при смене root, чужой — сбрасывается', async () => {
+  it('глобальный выбранный профиль остаётся при смене инструмента, чужой — сбрасывается', async () => {
     const { store, setStored } = setup([
       profile(1, 'Глобальный'),
-      profile(2, 'Для NG', { root_id: 7 }),
+      profile(2, 'Для NG', { instrument_id: 7 }),
     ]);
     await store.load(7);
     await store.apply(1);
@@ -159,7 +161,7 @@ describe('ProfilesStore', () => {
     expect(store.selectedId()).toBe(1);
 
     await store.apply(1);
-    setStored([profile(3, 'Другой', { root_id: 8 })]);
+    setStored([profile(3, 'Другой', { instrument_id: 8 })]);
     await store.load(9);
     expect(store.selectedId()).toBeNull();
   });
@@ -169,14 +171,14 @@ describe('ProfilesStore', () => {
     await store.load(7);
     await indicators.add(EMA, { period: 50 }, '1h');
 
-    await store.saveNew('  Мой  ', 'root', '15m');
+    await store.saveNew('  Мой  ', 'instrument', '15m');
 
     const created = calls(client.POST).find(
       ([path]) => path === '/chart-profiles',
     );
     expect(created?.[1]?.body).toEqual({
       name: 'Мой',
-      root_id: 7,
+      instrument_id: 7,
       config: {
         chart_timeframe: '15m',
         indicators: [
@@ -189,7 +191,7 @@ describe('ProfilesStore', () => {
     expect(store.selectedId()).toBe(99);
   });
 
-  it('глобальный профиль сохраняется без root', async () => {
+  it('глобальный профиль сохраняется без инструмента', async () => {
     const { store, client } = setup([]);
     await store.load(7);
 
@@ -199,7 +201,7 @@ describe('ProfilesStore', () => {
       ([path]) => path === '/chart-profiles',
     );
     expect(
-      (created?.[1]?.body as { root_id: number | null }).root_id,
+      (created?.[1]?.body as { instrument_id: number | null }).instrument_id,
     ).toBeNull();
   });
 

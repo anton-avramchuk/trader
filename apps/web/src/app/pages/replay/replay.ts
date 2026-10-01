@@ -1,12 +1,11 @@
-import type { Candle, Roll } from '@trader/api-client';
+import type { Candle } from '@trader/api-client';
 
 /**
  * Чистая логика Visual replay (без Angular): что видно при курсоре `cursor`.
  *
- * Таймлайн — бары по возрастанию времени в текущем масштабе continuous. Чтобы
- * показать серию «как её видели на момент t», цены делятся на ratio роллов,
- * которые к моменту `t` ещё не были известны (`available_at > t`) и лежат после
- * бара. Так масштаб совпадает с серверным `snapshot?as_of=t` (ADR-0019).
+ * Таймлайн — свечи по возрастанию времени. Свечи хранятся как есть, без склеек и
+ * поправок, поэтому видимая часть — просто первые `cursor` свечей; будущие (за
+ * курсором) не возвращаются вовсе (ADR-0028).
  */
 
 const MSK_OFFSET_MS = 3 * 3600_000;
@@ -27,60 +26,9 @@ export function knownAt(timeline: Candle[], cursor: number): string | null {
   return cursor > 0 ? (timeline[cursor - 1]?.close_time ?? null) : null;
 }
 
-function scaled(candle: Candle, divisor: number): Candle {
-  if (divisor === 1) {
-    return candle;
-  }
-  const fix = (value: string) => String(Number(value) / divisor);
-  return {
-    ...candle,
-    open: fix(candle.open),
-    high: fix(candle.high),
-    low: fix(candle.low),
-    close: fix(candle.close),
-  };
-}
-
-/**
- * Первые `cursor` баров таймлайна в масштабе на момент знания. Будущие бары
- * (за курсором) не возвращаются вовсе.
- */
-export function visibleCandles(
-  timeline: Candle[],
-  rolls: Roll[],
-  cursor: number,
-): Candle[] {
-  const shown = timeline.slice(0, Math.max(0, cursor));
-  const moment = knownAt(timeline, cursor);
-  if (moment === null) {
-    return [];
-  }
-  const now = Date.parse(moment);
-  const unknown = rolls.filter((roll) => Date.parse(roll.available_at) > now);
-  if (!unknown.length) {
-    return shown;
-  }
-  return shown.map((candle) => {
-    const closed = Date.parse(candle.close_time);
-    const divisor = unknown
-      .filter((roll) => Date.parse(roll.rolled_at) >= closed)
-      .reduce((product, roll) => product * Number(roll.ratio), 1);
-    return scaled(candle, divisor);
-  });
-}
-
-/** Роллы, известные на момент курсора (для показа «что система знала»). */
-export function knownRolls(
-  timeline: Candle[],
-  rolls: Roll[],
-  cursor: number,
-): Roll[] {
-  const moment = knownAt(timeline, cursor);
-  if (moment === null) {
-    return [];
-  }
-  const now = Date.parse(moment);
-  return rolls.filter((roll) => Date.parse(roll.available_at) <= now);
+/** Первые `cursor` свечей таймлайна; будущие (за курсором) не возвращаются вовсе. */
+export function visibleCandles(timeline: Candle[], cursor: number): Candle[] {
+  return timeline.slice(0, Math.max(0, cursor));
 }
 
 export function clampCursor(cursor: number, length: number): number {

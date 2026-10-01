@@ -59,8 +59,7 @@ import {
 const CALIBRATION_HORIZON = 10;
 
 export interface StructureContext {
-  root_id?: number;
-  contract_id?: number;
+  instrument_id: number;
   chartTimeframe: string;
   asOf?: string;
 }
@@ -304,19 +303,12 @@ export class StructureStore {
     return this.refresh();
   }
 
-  private seriesQuery(): { root_id?: number; contract_id?: number } {
-    const context = this.context;
-    if (!context) {
-      return {};
-    }
-    return context.contract_id !== undefined
-      ? { contract_id: context.contract_id }
-      : { root_id: context.root_id };
+  private seriesQuery(): { instrument_id: number } {
+    return { instrument_id: this.context?.instrument_id as number };
   }
 
   private seriesKey(): string {
-    const q = this.seriesQuery();
-    return q.contract_id !== undefined ? `c${q.contract_id}` : `r${q.root_id}`;
+    return `i${this.context?.instrument_id}`;
   }
 
   /** Обновляет данные включённых слоёв для контекста (или прежнего). */

@@ -10,7 +10,7 @@ import type { LevelInfo } from '../chart/structure';
 import {
   engineOf,
   engineRuns,
-  legRows,
+  fillRow,
   mskDate,
   nearestLevel,
   replayLink,
@@ -25,7 +25,7 @@ const backtest = {
   id: 7,
   kind: 'single',
   status: 'succeeded',
-  root_id: 3,
+  instrument_id: 3,
   timeframe_code: '15m',
   family: 'pattern',
   job_id: 70,
@@ -57,18 +57,10 @@ const trade = (overrides: Partial<BacktestTrade> = {}): BacktestTrade =>
     mfe_ticks: 15,
     mae_ticks: -3,
     net_points: 0.1,
-    net_rub: 80,
-    legs: [
-      {
-        contract_id: 9,
-        entry_time: '2020-10-05T21:30:00Z',
-        exit_time: '2020-10-06T07:15:00Z',
-        entry_price: 100.5,
-        exit_price: 101.7,
-        reason: 'target',
-        gross_ticks: 12,
-      },
-    ],
+    net_money: 80,
+    quantity: 1,
+    entry_price: 100.5,
+    exit_price: 101.7,
     ...overrides,
   }) as BacktestTrade;
 
@@ -118,13 +110,13 @@ describe('модель drill-down', () => {
     expect(mskDate('2020-10-05T10:00:00Z')).toBe('2020-10-05');
     expect(replayLink(backtest, trade())).toEqual({
       path: ['/replay'],
-      queryParams: { root: 3, tf: '15m', date: '2020-10-06' },
+      queryParams: { instrument: 3, tf: '15m', date: '2020-10-06' },
     });
   });
 
-  it('ноги сделки', () => {
-    expect(legRows(trade())[0]).toEqual({
-      contract: 9,
+  it('исполнение сделки', () => {
+    expect(fillRow(trade())).toEqual({
+      quantity: 1,
       entry: '2020-10-05 21:30',
       exit: '2020-10-06 07:15',
       entryPrice: '100.5000',
@@ -329,8 +321,8 @@ describe('drill-down на странице', () => {
     const client = {
       GET: vi.fn((path: string) => {
         switch (path) {
-          case '/roots':
-            return ok([{ id: 3, code: 'NG' }]);
+          case '/instruments':
+            return ok([{ id: 3, ticker: 'SBER' }]);
           case '/backtests':
             return ok([backtest]);
           case '/backtests/{experiment_id}':
@@ -393,7 +385,7 @@ describe('drill-down на странице', () => {
     expect(text).toContain('активных уровней на момент входа нет');
     const link = el.querySelector<HTMLAnchorElement>('.drill a');
     expect(link?.getAttribute('href')).toBe(
-      '/replay?root=3&tf=15m&date=2020-10-06',
+      '/replay?instrument=3&tf=15m&date=2020-10-06',
     );
     expect(text).not.toContain('Прогноз построен');
 

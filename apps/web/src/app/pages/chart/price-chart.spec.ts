@@ -1,6 +1,6 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { Candle, Roll } from '@trader/api-client';
+import type { Candle } from '@trader/api-client';
 import type { ChartIndicator } from './indicators';
 import { EMPTY_OVERLAY, type Overlay } from './structure';
 import { PriceChart } from './price-chart';
@@ -60,7 +60,7 @@ function candle(timestamp: string): Candle {
     low: '1',
     close: '2',
     volume: '5',
-    is_partial: false,
+    trading_day: '2026-09-28',
   };
 }
 
@@ -68,8 +68,6 @@ function candle(timestamp: string): Candle {
   imports: [PriceChart],
   template: `<app-price-chart
     [candles]="candles"
-    [rolls]="rolls()"
-    [labels]="labels"
     [datasetKey]="key"
     [indicators]="indicators()"
     [overlay]="overlay()"
@@ -83,11 +81,9 @@ class Host {
     candle('2026-09-28T04:00:00Z'),
     candle('2026-09-28T04:15:00Z'),
   ];
-  rolls = signal<Roll[]>([]);
   indicators = signal<ChartIndicator[]>([]);
   overlay = signal<Overlay>(EMPTY_OVERLAY);
   picked: { time: number; price: number } | undefined;
-  labels = { 1: 'A', 2: 'B' };
   key = 'a';
   older = 0;
   hovered: Candle | null | undefined;
@@ -122,30 +118,7 @@ describe('PriceChart', () => {
     expect(lib.timeScale.fitContent).toHaveBeenCalled();
   });
 
-  it('ставит маркеры роллов', async () => {
-    const fixture = await mount();
-    fixture.componentInstance.rolls.set([
-      {
-        from_contract_id: 1,
-        to_contract_id: 2,
-        rolled_at: '2026-09-28T04:05:00Z',
-        ratio: '1.01',
-        available_at: '2026-09-28T04:05:00Z',
-      },
-    ]);
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const markers = lib.markers.setMarkers.mock.calls.at(-1)?.[0] as {
-      text: string;
-    }[];
-    expect(markers).toHaveLength(1);
-    expect(markers[0].text).toContain('Ролл A→B');
-  });
-
-  it('слои структуры: маркеры сливаются с роллами по времени, примитив подключён', async () => {
+  it('слои структуры: маркеры и примитив подключены', async () => {
     const fixture = await mount();
     fixture.componentInstance.overlay.set({
       markers: [

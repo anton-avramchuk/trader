@@ -45,18 +45,8 @@ describe('Chart', () => {
         if (path === '/indicators' || path === '/chart-profiles') {
           return ok([]);
         }
-        if (path === '/roots') {
-          return ok([{ id: 1, code: 'NG', name: 'Gas' }]);
-        }
-        if (path === '/roots/{root_id}/contracts') {
-          return ok([
-            {
-              id: 10,
-              root_id: 1,
-              secid: 'NGZ6',
-              expiration_date: '2026-12-29',
-            },
-          ]);
+        if (path === '/instruments') {
+          return ok([{ id: 1, ticker: 'SBER', name: 'Сбербанк' }]);
         }
         return ok({
           candles: [
@@ -68,12 +58,9 @@ describe('Chart', () => {
               low: '3.0',
               close: '3.2',
               volume: '100',
-              is_partial: true,
-              contract_id: 10,
-              price_factor: '1.0054',
+              trading_day: '2026-09-28',
             },
           ],
-          rolls: [],
           truncated: true,
         });
       }),
@@ -89,7 +76,7 @@ describe('Chart', () => {
     return { client, fixture: TestBed.createComponent(Chart) };
   }
 
-  it('показывает выбор серии, таймфреймы и легенду последнего бара в МСК', async () => {
+  it('показывает выбор инструмента, таймфреймы и легенду последнего бара в МСК', async () => {
     const { fixture } = setup();
     fixture.detectChanges();
     await settle(fixture);
@@ -98,10 +85,8 @@ describe('Chart', () => {
     for (const tf of ['15m', '1h', '4h', '1d', '1w']) {
       expect(text).toContain(tf);
     }
-    expect(text).toContain('Continuous');
-    expect(text).toContain('NGZ6 (в своих ценах)');
+    expect(text).toContain('SBER');
     expect(text).toContain('28.09.2026, 07:00 МСК');
-    expect(text).toContain('неполный бар');
     expect(text).toContain('TradingView');
     expect(text).toContain('Прокрутите влево');
   });

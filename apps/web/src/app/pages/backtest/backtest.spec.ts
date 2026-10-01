@@ -31,7 +31,6 @@ const metrics = {
   average_mfe: 6,
   average_mae: -2,
   ambiguous_share: 0,
-  rolled_share: 0,
   warnings: ['small_sample'],
 };
 
@@ -47,8 +46,8 @@ const done = (kind: 'single' | 'walk_forward'): Backtest =>
     period_to: '2026-06-30',
     params_hash: 'abcdef012345',
     result: {
-      metrics: { ticks: metrics, points: metrics, rub: metrics },
-      equity: { ticks: [{ day: '2026-01-02', equity: 5 }], rub: [] },
+      metrics: { ticks: metrics, points: metrics, money: metrics },
+      equity: { ticks: [{ day: '2026-01-02', equity: 5 }], money: [] },
       runs_for_series: 4,
       walk_forward: { final_params: { stop_atr: 1.5 } },
       test: { status: 'rejected' },
@@ -60,15 +59,15 @@ describe('Backtest page', () => {
     const client = {
       GET: vi.fn((path: string) => {
         switch (path) {
-          case '/roots':
-            return ok([{ id: 1, code: 'NG' }]);
+          case '/instruments':
+            return ok([{ id: 1, ticker: 'SBER' }]);
           case '/backtests':
             return ok([done(kind)]);
           case '/backtest-locks':
             return ok([
               {
                 id: 1,
-                root_id: 1,
+                instrument_id: 1,
                 timeframe_code: '1h',
                 family: 'pattern',
                 test_from: '2026-07-01',
@@ -90,10 +89,8 @@ describe('Backtest page', () => {
                 gross_ticks: 5,
                 cost_ticks: 1,
                 net_points: 0.04,
-                net_rub: 80,
+                net_money: 80,
                 ambiguous_bar: true,
-                rolled: false,
-                step_price_estimated: false,
               },
             ]);
           case '/backtests/{experiment_id}/windows':
@@ -168,7 +165,7 @@ describe('Backtest page', () => {
     expect(client.POST).toHaveBeenCalledWith(
       '/backtests',
       expect.objectContaining({
-        body: expect.objectContaining({ kind: 'single', root_id: 1 }),
+        body: expect.objectContaining({ kind: 'single', instrument_id: 1 }),
       }),
     );
     const text = el.textContent ?? '';
@@ -189,10 +186,10 @@ describe('Backtest page', () => {
     el.querySelector<HTMLButtonElement>('.history button')!.click();
     await settle(fixture);
 
-    const rub = Array.from(
+    const money = Array.from(
       el.querySelectorAll<HTMLButtonElement>('.unit'),
-    ).find((b) => b.textContent?.trim() === '₽');
-    rub!.click();
+    ).find((b) => b.textContent?.trim() === 'деньги');
+    money!.click();
     fixture.detectChanges();
 
     expect(el.querySelector('.trades')?.textContent).toContain('80.00');

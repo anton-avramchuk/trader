@@ -225,8 +225,7 @@ describe('Fibonacci', () => {
   it('ручные сетки рисуются отдельным цветом', () => {
     const manual: FibGrid = {
       id: 1,
-      contract_id: 5,
-      root_id: null,
+      instrument_id: 5,
       timeframe: '15m',
       start: { time: T0, price: 100 },
       end: { time: '2026-09-28T06:00:00Z', price: 120 },

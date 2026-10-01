@@ -15,8 +15,7 @@ import {
 
 /** Что запрашивать: серия, chart TF, диапазон и (для replay) момент знания. */
 export interface IndicatorContext {
-  root_id?: number;
-  contract_id?: number;
+  instrument_id: number;
   chartTimeframe: string;
   start?: string;
   end?: string;
@@ -80,9 +79,7 @@ export class IndicatorsStore {
         body: {
           type: 'verify.indicators',
           params: {
-            ...(context.contract_id !== undefined
-              ? { contract_id: context.contract_id }
-              : { root_id: context.root_id }),
+            instrument_id: context.instrument_id,
             timeframe: context.chartTimeframe,
             start: context.start,
             end: context.asOf ?? context.end,
@@ -196,8 +193,7 @@ export class IndicatorsStore {
                   chart_timeframe: current.chartTimeframe,
                   source_timeframe: indicator.sourceTimeframe,
                   params: JSON.stringify(indicator.params),
-                  root_id: current.root_id,
-                  contract_id: current.contract_id,
+                  instrument_id: current.instrument_id,
                   start: current.start,
                   end: current.end,
                   as_of: current.asOf,

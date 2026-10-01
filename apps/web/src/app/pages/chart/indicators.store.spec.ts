@@ -54,7 +54,7 @@ interface Query {
   params: string;
   as_of?: string;
   start?: string;
-  root_id?: number;
+  instrument_id?: number;
 }
 
 function setup(failFor?: string) {
@@ -111,7 +111,7 @@ describe('IndicatorsStore', () => {
     await store.add(EMA, { period: 50 }, '1h');
 
     await store.refresh({
-      root_id: 1,
+      instrument_id: 1,
       chartTimeframe: '15m',
       start: '2026-09-28T00:00:00Z',
     });
@@ -122,7 +122,7 @@ describe('IndicatorsStore', () => {
         chart_timeframe: '15m',
         source_timeframe: '1h',
         params: '{"period":50}',
-        root_id: 1,
+        instrument_id: 1,
         start: '2026-09-28T00:00:00Z',
       }),
     ]);
@@ -132,7 +132,7 @@ describe('IndicatorsStore', () => {
 
   it('добавление после контекста считает сразу', async () => {
     const { store, queries } = setup();
-    await store.refresh({ contract_id: 5, chartTimeframe: '1h' });
+    await store.refresh({ instrument_id: 5, chartTimeframe: '1h' });
 
     await store.add(EMA, {}, '1h');
 
@@ -145,7 +145,7 @@ describe('IndicatorsStore', () => {
     await store.add(EMA, {}, '15m');
 
     await store.refresh({
-      root_id: 1,
+      instrument_id: 1,
       chartTimeframe: '15m',
       asOf: '2026-09-28T10:00:00Z',
     });
@@ -155,7 +155,7 @@ describe('IndicatorsStore', () => {
 
   it('remove убирает индикатор, его значения и ошибку', async () => {
     const { store } = setup();
-    await store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    await store.refresh({ instrument_id: 1, chartTimeframe: '15m' });
     await store.add(EMA, {}, '15m');
     const id = store.active()[0].id;
 
@@ -168,7 +168,7 @@ describe('IndicatorsStore', () => {
 
   it('ошибка одного индикатора не мешает остальным и показывается по его id', async () => {
     const { store } = setup('bad');
-    await store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    await store.refresh({ instrument_id: 1, chartTimeframe: '15m' });
     await store.add(EMA, {}, '15m');
     await store.add({ ...EMA, name: 'bad' }, {}, '15m');
 
@@ -182,7 +182,7 @@ describe('IndicatorsStore', () => {
     const { store, queries } = setup();
     await store.add(EMA, {}, '15m');
 
-    await store.refresh({ root_id: 1, chartTimeframe: '4h' });
+    await store.refresh({ instrument_id: 1, chartTimeframe: '4h' });
 
     expect(store.active()[0].sourceTimeframe).toBe('4h');
     expect(queries().at(-1)?.source_timeframe).toBe('4h');
@@ -190,7 +190,7 @@ describe('IndicatorsStore', () => {
 
   it('replaceAll заменяет набор (загрузка профиля)', async () => {
     const { store } = setup();
-    await store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    await store.refresh({ instrument_id: 1, chartTimeframe: '15m' });
     await store.add(EMA, {}, '15m');
 
     await store.replaceAll(
@@ -280,7 +280,7 @@ describe('IndicatorsStore.verify', () => {
     const { store, client } = setupVerify(() => of(job()));
     await store.add(EMA, { period: 20 }, '15m');
     store.refresh({
-      root_id: 3,
+      instrument_id: 3,
       chartTimeframe: '15m',
       start: '2026-09-28T04:00:00Z',
     });
@@ -294,7 +294,7 @@ describe('IndicatorsStore.verify', () => {
     expect(path).toBe('/jobs');
     expect(request.body.type).toBe('verify.indicators');
     expect(request.body.params).toMatchObject({
-      root_id: 3,
+      instrument_id: 3,
       timeframe: '15m',
       start: '2026-09-28T04:00:00Z',
       indicators: [{ name: 'ema', params: { period: 20 } }],
@@ -306,7 +306,7 @@ describe('IndicatorsStore.verify', () => {
   it('без активных индикаторов проверяются все (список не передаётся); в replay конец — as_of', async () => {
     const { store, client } = setupVerify(() => of(job()));
     store.refresh({
-      contract_id: 8,
+      instrument_id: 8,
       chartTimeframe: '1h',
       start: '2026-09-28T04:00:00Z',
       asOf: '2026-09-28T12:00:00Z',
@@ -320,7 +320,7 @@ describe('IndicatorsStore.verify', () => {
     ];
     expect(request.body.params).not.toHaveProperty('indicators');
     expect(request.body.params).toMatchObject({
-      contract_id: 8,
+      instrument_id: 8,
       end: '2026-09-28T12:00:00Z',
     });
   });
@@ -335,7 +335,7 @@ describe('IndicatorsStore.verify', () => {
         }),
       ),
     );
-    failed.store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    failed.store.refresh({ instrument_id: 1, chartTimeframe: '15m' });
     await failed.store.verify();
     expect(failed.store.verifyError()).toBe('В выбранном диапазоне нет баров');
     expect(failed.store.verifyResult()).toBeNull();
@@ -344,7 +344,7 @@ describe('IndicatorsStore.verify', () => {
     const dropped = setupVerify(() =>
       throwError(() => new Error('Соединение с сервером прервано')),
     );
-    dropped.store.refresh({ root_id: 1, chartTimeframe: '15m' });
+    dropped.store.refresh({ instrument_id: 1, chartTimeframe: '15m' });
     await dropped.store.verify();
     expect(dropped.store.verifyError()).toContain('прервано');
   });

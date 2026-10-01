@@ -49,22 +49,11 @@ const REFRESH_DELAY_MS = 250;
       <label class="check">
         Инструмент:
         <select
-          [ngModel]="store.rootId()"
-          (ngModelChange)="store.selectRoot($event)"
+          [ngModel]="store.instrumentId()"
+          (ngModelChange)="store.selectInstrument($event)"
         >
-          @for (r of store.roots(); track r.id) {
-            <option [ngValue]="r.id">{{ r.code }}</option>
-          }
-        </select>
-      </label>
-      <label class="check">
-        Серия:
-        <select [ngModel]="targetKey()" (ngModelChange)="onTarget($event)">
-          <option value="root">Continuous</option>
-          @for (c of store.contracts(); track c.id) {
-            <option [value]="'c' + c.id">
-              {{ c.secid ?? c.expiration_date }}
-            </option>
+          @for (i of store.instruments(); track i.id) {
+            <option [ngValue]="i.id">{{ i.ticker }}</option>
           }
         </select>
       </label>
@@ -197,7 +186,7 @@ const REFRESH_DELAY_MS = 250;
     </div>
 
     <app-profile-bar
-      [rootId]="store.rootId()"
+      [instrumentId]="store.instrumentId()"
       [chartTimeframe]="store.timeframe()"
       (timeframeRequested)="onProfileTimeframe($event)"
     />
@@ -208,8 +197,7 @@ const REFRESH_DELAY_MS = 250;
       @if (store.asOf(); as t) {
         <strong>Система знает на {{ t | msk: 'full' }} МСК:</strong>
         баров {{ store.visible().length }} из
-        {{ store.timeline().length }} (будущее скрыто), роллов
-        {{ store.known().length }}.
+        {{ store.timeline().length }} (будущее скрыто).
         @if (store.atEnd()) {
           Данные закончились.
         }
@@ -222,8 +210,6 @@ const REFRESH_DELAY_MS = 250;
     <div class="chart">
       <app-price-chart
         [candles]="store.visible()"
-        [rolls]="store.known()"
-        [labels]="store.labels()"
         [datasetKey]="store.datasetKey()"
         [follow]="true"
         [indicators]="indicators.series()"
@@ -300,14 +286,9 @@ export class Replay implements OnInit, OnDestroy {
 
   protected readonly ready = computed(() => this.store.timeline().length > 0);
 
-  protected readonly targetKey = computed(() => {
-    const target = this.store.target();
-    return target.kind === 'root' ? 'root' : `c${target.id}`;
-  });
-
   protected readonly legend = computed(() => {
     const candle = this.store.visible().at(-1);
-    return candle ? describeBar(candle, this.store.labels()) : '';
+    return candle ? describeBar(candle) : '';
   });
 
   constructor() {
@@ -316,10 +297,9 @@ export class Replay implements OnInit, OnDestroy {
     effect(() => {
       const asOf = this.store.asOf();
       const first = this.store.visible()[0];
-      const target = this.store.target();
-      const rootId = this.store.rootId();
+      const instrumentId = this.store.instrumentId();
       const timeframe = this.store.timeframe();
-      if (!asOf || !first || rootId === null) {
+      if (!asOf || !first || instrumentId === null) {
         return;
       }
       untracked(() => {
@@ -327,10 +307,7 @@ export class Replay implements OnInit, OnDestroy {
           clearTimeout(this.refreshTimer);
         }
         this.refreshTimer = setTimeout(() => {
-          const series =
-            target.kind === 'contract'
-              ? { contract_id: target.id }
-              : { root_id: rootId };
+          const series = { instrument_id: instrumentId };
           void this.indicators.refresh({
             ...series,
             chartTimeframe: timeframe,
@@ -353,20 +330,24 @@ export class Replay implements OnInit, OnDestroy {
   }
 
   /**
-   * Ссылка из бэктеста (`?root=&tf=&date=`): выбирает инструмент и TF и начинает
+   * Ссылка из бэктеста (`?instrument=&tf=&date=`): выбирает инструмент и TF и начинает
    * воспроизведение с указанного дня — будущее скрыто, видно только известное.
    */
   private async loadAndOpenLink(): Promise<void> {
-    await this.store.loadRoots();
+    await this.store.loadInstruments();
     const query = this.route.snapshot.queryParamMap;
-    const root = Number(query.get('root'));
+    const instrument = Number(query.get('instrument'));
     const date = query.get('date');
     const timeframe = query.get('tf');
-    if (!root || !date || !this.store.roots().some((r) => r.id === root)) {
+    if (
+      !instrument ||
+      !date ||
+      !this.store.instruments().some((i) => i.id === instrument)
+    ) {
       return;
     }
     this.date = date;
-    await this.store.selectRoot(root);
+    this.store.selectInstrument(instrument);
     if ((REPLAY_TIMEFRAMES as readonly string[]).includes(timeframe ?? '')) {
       this.store.selectTimeframe(timeframe as ReplayTimeframe);
     }
@@ -383,13 +364,5 @@ export class Replay implements OnInit, OnDestroy {
     if ((REPLAY_TIMEFRAMES as readonly string[]).includes(timeframe)) {
       this.store.selectTimeframe(timeframe as ReplayTimeframe);
     }
-  }
-
-  protected onTarget(key: string): void {
-    this.store.selectTarget(
-      key === 'root'
-        ? { kind: 'root' }
-        : { kind: 'contract', id: Number(key.slice(1)) },
-    );
   }
 }

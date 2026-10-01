@@ -7,7 +7,7 @@ import type {
   Forecast,
   Job,
   OccurrenceOutcomes,
-  Root,
+  Instrument,
 } from '@trader/api-client';
 import { ApiError, ApiService } from '../../core/api/api';
 import { JobsService } from '../../core/jobs/jobs';
@@ -43,7 +43,7 @@ export class BacktestStore {
   private readonly api = inject(ApiService);
   private readonly jobs = inject(JobsService);
 
-  readonly roots = signal<Root[]>([]);
+  readonly instruments = signal<Instrument[]>([]);
   readonly form = signal<BacktestForm>(defaultForm());
   readonly unit = signal<MetricUnit>('ticks');
   readonly current = signal<Backtest | null>(null);
@@ -61,10 +61,12 @@ export class BacktestStore {
 
   async init(): Promise<void> {
     try {
-      this.roots.set(await this.api.call(this.api.client.GET('/roots')));
-      const first = this.roots()[0];
-      if (this.form().rootId === null && first) {
-        this.patch({ rootId: first.id });
+      this.instruments.set(
+        await this.api.call(this.api.client.GET('/instruments')),
+      );
+      const first = this.instruments()[0];
+      if (this.form().instrumentId === null && first) {
+        this.patch({ instrumentId: first.id });
       }
       await Promise.all([this.loadHistory(), this.loadLocks()]);
     } catch (error) {
@@ -316,7 +318,7 @@ export class BacktestStore {
       const done = await this.api.call(
         this.api.client.POST('/backtest-locks/unlock', {
           body: {
-            root_id: lock.root_id,
+            instrument_id: lock.instrument_id,
             timeframe: lock.timeframe_code,
             family: lock.family,
             note,

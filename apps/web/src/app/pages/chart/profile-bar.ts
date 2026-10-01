@@ -27,7 +27,7 @@ import { ProfilesStore, type ProfileScope } from './profiles.store';
           <option [ngValue]="null">— без профиля —</option>
           @for (p of store.profiles(); track p.id) {
             <option [ngValue]="p.id">
-              {{ p.name }}{{ p.root_id === null ? ' (глобальный)' : '' }}
+              {{ p.name }}{{ p.instrument_id === null ? ' (глобальный)' : '' }}
             </option>
           }
         </select>
@@ -80,7 +80,7 @@ import { ProfilesStore, type ProfileScope } from './profiles.store';
         Область
         <select [(ngModel)]="scope" aria-label="Область профиля">
           <option value="global">Глобальный</option>
-          <option value="root" [disabled]="rootId() === null">
+          <option value="instrument" [disabled]="instrumentId() === null">
             Для этого инструмента
           </option>
         </select>
@@ -115,7 +115,7 @@ import { ProfilesStore, type ProfileScope } from './profiles.store';
 export class ProfileBar {
   protected readonly store = inject(ProfilesStore);
 
-  readonly rootId = input<number | null>(null);
+  readonly instrumentId = input<number | null>(null);
   readonly chartTimeframe = input.required<string>();
   /** Профиль просит другой TF графика (родитель решает, можно ли). */
   readonly timeframeRequested = output<string>();
@@ -127,12 +127,12 @@ export class ProfileBar {
 
   constructor() {
     effect(() => {
-      const rootId = this.rootId();
-      if (rootId === null) {
+      const instrumentId = this.instrumentId();
+      if (instrumentId === null) {
         return;
       }
       untracked(() =>
-        this.store.load(rootId, (timeframe) =>
+        this.store.load(instrumentId, (timeframe) =>
           this.timeframeRequested.emit(timeframe),
         ),
       );

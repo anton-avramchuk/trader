@@ -11,15 +11,6 @@ export const appRoutes: Route[] = [
       import('./pages/instruments/instruments').then((m) => m.Instruments),
   },
   {
-    path: 'data/import',
-    loadComponent: () => import('./pages/import/import').then((m) => m.Import),
-  },
-  {
-    path: 'data/quality',
-    loadComponent: placeholder,
-    data: { title: 'Quality', note: 'Покрытие, пропуски и конфликты данных.' },
-  },
-  {
     path: 'chart',
     loadComponent: () => import('./pages/chart/chart').then((m) => m.Chart),
   },

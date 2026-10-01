@@ -9,14 +9,12 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-/** Разделы приложения: Data (Instruments, Import, Quality), Chart и заготовки. */
+/** Разделы приложения: Data (Instruments), Chart и заготовки. */
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Data',
     items: [
       { path: '/data/instruments', title: 'Instruments', icon: '@tui.layers' },
-      { path: '/data/import', title: 'Import', icon: '@tui.upload' },
-      { path: '/data/quality', title: 'Quality', icon: '@tui.shield-check' },
     ],
   },
   {

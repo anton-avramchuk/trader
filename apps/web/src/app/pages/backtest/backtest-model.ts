@@ -10,7 +10,7 @@ import type { LevelInfo } from '../chart/structure';
 
 export type BacktestKind = 'single' | 'walk_forward';
 export type Source = 'pattern' | 'level_touch' | 'level_break';
-export type MetricUnit = 'ticks' | 'points' | 'rub';
+export type MetricUnit = 'ticks' | 'points' | 'money';
 
 export const SOURCE_TITLES: Record<Source, string> = {
   pattern: 'Подтверждённый паттерн',
@@ -37,7 +37,7 @@ export const GRID_KEYS = [
 ] as const;
 
 export interface BacktestForm {
-  rootId: number | null;
+  instrumentId: number | null;
   timeframe: string;
   kind: BacktestKind;
   periodFrom: string;
@@ -54,7 +54,7 @@ export interface BacktestForm {
   halfSpread: number;
   slippage: number;
   commission: number;
-  contracts: number;
+  quantity: number;
   trainDays: number;
   validDays: number;
   stepDays: number;
@@ -67,7 +67,7 @@ export interface BacktestForm {
 }
 
 export const defaultForm = (): BacktestForm => ({
-  rootId: null,
+  instrumentId: null,
   timeframe: '1h',
   kind: 'single',
   periodFrom: '',
@@ -84,7 +84,7 @@ export const defaultForm = (): BacktestForm => ({
   halfSpread: 0,
   slippage: 0,
   commission: 0,
-  contracts: 1,
+  quantity: 1,
   trainDays: 60,
   validDays: 20,
   stepDays: 20,
@@ -123,7 +123,7 @@ export function parseGrid(text: string): Record<string, number[]> | string {
 
 /** Запрос к `POST /backtests` или текст ошибки формы. */
 export function buildRequest(form: BacktestForm): BacktestCreate | string {
-  if (form.rootId === null) {
+  if (form.instrumentId === null) {
     return 'Выберите инструмент';
   }
   if (!form.periodFrom || !form.periodTo) {
@@ -137,7 +137,7 @@ export function buildRequest(form: BacktestForm): BacktestCreate | string {
     .map((g) => g.trim())
     .filter(Boolean);
   const request: BacktestCreate = {
-    root_id: form.rootId,
+    instrument_id: form.instrumentId,
     timeframe: form.timeframe,
     kind: form.kind,
     strategy: {
@@ -152,9 +152,9 @@ export function buildRequest(form: BacktestForm): BacktestCreate | string {
     costs: {
       half_spread_ticks: form.halfSpread,
       slippage_ticks: form.slippage,
-      commission_per_contract: form.commission,
+      commission_per_unit: form.commission,
     },
-    contracts: form.contracts,
+    quantity: form.quantity,
     period_from: form.periodFrom,
     period_to: form.periodTo,
   };
@@ -188,7 +188,7 @@ export function buildRequest(form: BacktestForm): BacktestCreate | string {
 export const WARNING_TITLES: Record<string, string> = {
   no_trades: 'сделок нет',
   small_sample: 'мало сделок — метрики ненадёжны',
-  step_price_missing: 'у части сделок нет step_price — ₽ посчитаны не по всем',
+  tick_value_missing: 'не задана стоимость тика — деньги не посчитаны',
   no_windows: 'период короче одного окна',
   no_qualifying_params:
     'ни один набор параметров не набрал нужного числа сделок',
@@ -198,7 +198,7 @@ export const WARNING_TITLES: Record<string, string> = {
 export const UNIT_TITLES: Record<MetricUnit, string> = {
   ticks: 'тики',
   points: 'пункты',
-  rub: '₽',
+  money: 'деньги',
 };
 
 const num = (v: number | null | undefined, digits = 2): string =>
@@ -232,7 +232,6 @@ export function metricRows(metrics: MetricsDict | undefined): MetricRow[] {
     { title: 'Средний MFE', value: num(n('average_mfe')) },
     { title: 'Средний MAE', value: num(n('average_mae')) },
     { title: 'Неоднозначных баров', value: pct(n('ambiguous_share')) },
-    { title: 'Сделок через ролл', value: pct(n('rolled_share')) },
   ];
 }
 
@@ -271,7 +270,6 @@ const REASONS: Record<string, string> = {
   stop: 'стоп',
   target: 'цель',
   time: 'время',
-  roll: 'ролл',
   end_of_data: 'конец данных',
 };
 
@@ -287,12 +285,8 @@ export function tradeRows(
         ? t.gross_ticks - t.cost_ticks
         : unit === 'points'
           ? t.net_points
-          : t.net_rub;
-    const flags = [
-      t.ambiguous_bar ? 'неоднозначный бар' : '',
-      t.rolled ? 'ролл' : '',
-      unit === 'rub' && t.step_price_estimated ? 'step_price оценён' : '',
-    ]
+          : t.net_money;
+    const flags = [t.ambiguous_bar ? 'неоднозначный бар' : '']
       .filter(Boolean)
       .join(', ');
     return {
@@ -477,7 +471,7 @@ export function mskDate(iso: string): string {
 
 export interface ReplayLink {
   path: string[];
-  queryParams: { root: number; tf: string; date: string };
+  queryParams: { instrument: number; tf: string; date: string };
 }
 
 /** Переход к графику: Replay с началом в день входа (будущее скрыто). */
@@ -488,15 +482,15 @@ export function replayLink(
   return {
     path: ['/replay'],
     queryParams: {
-      root: backtest.root_id,
+      instrument: backtest.instrument_id,
       tf: backtest.timeframe_code,
       date: mskDate(trade.entry_time),
     },
   };
 }
 
-export interface LegRow {
-  contract: number;
+export interface FillRow {
+  quantity: number;
   entry: string;
   exit: string;
   entryPrice: string;
@@ -505,15 +499,15 @@ export interface LegRow {
   ticks: string;
 }
 
-/** Ноги сделки: на ролле их несколько, у каждой свой контракт. */
-export function legRows(trade: BacktestTrade): LegRow[] {
-  return trade.legs.map((leg) => ({
-    contract: Number(leg['contract_id']),
-    entry: stamp(String(leg['entry_time'])),
-    exit: stamp(String(leg['exit_time'])),
-    entryPrice: num(leg['entry_price'] as number | undefined, 4),
-    exitPrice: num(leg['exit_price'] as number | undefined, 4),
-    reason: REASONS[String(leg['reason'])] ?? String(leg['reason']),
-    ticks: num(leg['gross_ticks'] as number | undefined),
-  }));
+/** Исполнение сделки: время и цены входа/выхода, причина выхода, результат в тиках. */
+export function fillRow(trade: BacktestTrade): FillRow {
+  return {
+    quantity: trade.quantity,
+    entry: stamp(trade.entry_time),
+    exit: stamp(trade.exit_time),
+    entryPrice: num(trade.entry_price, 4),
+    exitPrice: num(trade.exit_price, 4),
+    reason: REASONS[trade.reason] ?? trade.reason,
+    ticks: num(trade.gross_ticks),
+  };
 }
