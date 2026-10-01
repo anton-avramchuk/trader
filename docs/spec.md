@@ -513,8 +513,8 @@ Experiment ссылается на конкретную версию dataset (н
 - **MVP-6 — DTW / Historical Analogues**: PIP, Normalization, DTW, Similarity, Trajectories.
 - **MVP-7 — Forecast**: Empirical, Nearest Neighbours, Distribution Visualization (ML — позже).
 - **MVP-8 — Backtesting**: Event-driven, Commission, Slippage, Spread, Walk-forward, Out-of-sample.
-- **MVP-9 — Paper Trading**: Paper Broker, Orders, Positions, PnL, Risk, Alerts.
-- **MVP-10 — Live Trading** (только после paper): Real-time WebSocket, Broker Adapter, Live Orders, Position Management, Risk limits, Kill switch.
+- ~~**MVP-9 — Paper Trading**~~ — исключён из проекта ([ADR-0027](adr/0027-backtesting-mvp8.md)).
+- ~~**MVP-10 — Live Trading**~~ — исключён из проекта ([ADR-0027](adr/0027-backtesting-mvp8.md), [ADR-0024](adr/0024-drop-t-invest.md)).
 
 # 79. Что не делать в первой версии
 
