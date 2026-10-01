@@ -2,12 +2,14 @@
 
 import time
 from collections.abc import Callable
-from threading import Thread
+from threading import Event, Thread
 from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 from trader_db import enqueue_job, get_job
 from trader_db.models import Job
+
+from trader_worker.runner import Worker
 
 
 def enqueue(
@@ -40,3 +42,16 @@ def in_thread(target: Callable[..., object], *args: object) -> Thread:
     thread = Thread(target=target, args=args, daemon=True)
     thread.start()
     return thread
+
+
+def run_job(
+    worker: Worker, factory: sessionmaker[Session], job_type: str, **params: Any
+) -> Job:
+    """Ставит задачу и прогоняет worker, пока она не завершится."""
+    job_id = enqueue(factory, job_type, params)
+    for _ in range(20):
+        worker.run_once(Event())
+        job = load(factory, job_id)
+        if job.status not in ("queued", "running"):
+            return job
+    raise AssertionError(f"задача {job_type} не выполнена")
