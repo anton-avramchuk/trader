@@ -4197,6 +4197,540 @@
         }
       }
     },
+    "/backtests": {
+      "post": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Запустить бэктест",
+        "description": "Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (root, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.",
+        "operationId": "createBacktest",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Список бэктестов",
+        "description": "Новые первыми; фильтры по root, таймфрейму и статусу.",
+        "operationId": "listBacktests",
+        "parameters": [
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          },
+          {
+            "name": "timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timeframe"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BacktestOut"
+                  },
+                  "title": "Response Listbacktests"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtest-log": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Журнал запусков бэктестов",
+        "description": "Все запуски (включая неудачные), открытия, отклонения и разблокировки test: по нему видно, сколько вариантов перебрано. Новые первыми.",
+        "operationId": "listBacktestLog",
+        "parameters": [
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          },
+          {
+            "name": "timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timeframe"
+            }
+          },
+          {
+            "name": "family",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogOut"
+                  },
+                  "title": "Response Listbacktestlog"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtest-locks": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Заблокированные test-периоды",
+        "description": "Test-периоды связок (root, TF, семейство), уже открытые один раз.",
+        "operationId": "listBacktestLocks",
+        "parameters": [
+          {
+            "name": "root_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Root Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LockOut"
+                  },
+                  "title": "Response Listbacktestlocks"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtest-locks/unlock": {
+      "post": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Разблокировать test-период",
+        "description": "Явная разблокировка связки (root, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.",
+        "operationId": "unlockBacktestTest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnlockIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnlockOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtests/{experiment_id}": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Результат бэктеста",
+        "description": "Состояние, версии и результат: метрики в тиках, пунктах и ₽, equity, walk-forward и test.",
+        "operationId": "getBacktest",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Experiment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtests/{experiment_id}/trades": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Сделки бэктеста",
+        "description": "В порядке сегмента, окна и номера; фильтры по сегменту и окну.",
+        "operationId": "listBacktestTrades",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "single",
+                    "validation",
+                    "test"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Segment"
+            }
+          },
+          {
+            "name": "window_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Window Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 1000,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TradeOut"
+                  },
+                  "title": "Response Listbacktesttrades"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backtests/{experiment_id}/windows": {
+      "get": {
+        "tags": [
+          "backtests"
+        ],
+        "summary": "Окна walk-forward",
+        "description": "Периоды окон, выбранные параметры и метрики train/validation.",
+        "operationId": "listBacktestWindows",
+        "parameters": [
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Experiment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WindowOut"
+                  },
+                  "title": "Response Listbacktestwindows"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -4304,6 +4838,268 @@
           "warnings"
         ],
         "title": "AnaloguesOut"
+      },
+      "BacktestCreate": {
+        "properties": {
+          "root_id": {
+            "type": "integer",
+            "title": "Root Id"
+          },
+          "timeframe": {
+            "type": "string",
+            "title": "Timeframe"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "single",
+              "walk_forward"
+            ],
+            "title": "Kind",
+            "default": "single"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/StrategyIn"
+          },
+          "costs": {
+            "$ref": "#/components/schemas/CostsIn"
+          },
+          "contracts": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Contracts",
+            "default": 1
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Period To"
+          },
+          "walk_forward": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WalkForwardIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "test_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test From",
+            "description": "Финальный test: после period_to, открывается один раз"
+          },
+          "test_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_id",
+          "timeframe",
+          "strategy",
+          "period_from",
+          "period_to"
+        ],
+        "title": "BacktestCreate"
+      },
+      "BacktestOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "queued, running, succeeded, failed"
+          },
+          "root_id": {
+            "type": "integer",
+            "title": "Root Id"
+          },
+          "timeframe_code": {
+            "type": "string",
+            "title": "Timeframe Code"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "strategy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Strategy"
+          },
+          "costs": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Costs"
+          },
+          "contracts": {
+            "type": "integer",
+            "title": "Contracts"
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Period To"
+          },
+          "test_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test From"
+          },
+          "test_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test To"
+          },
+          "walk_forward": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Walk Forward"
+          },
+          "versions": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Versions"
+          },
+          "params_hash": {
+            "type": "string",
+            "title": "Params Hash"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "root_id",
+          "timeframe_code",
+          "family",
+          "strategy",
+          "costs",
+          "contracts",
+          "period_from",
+          "period_to",
+          "test_from",
+          "test_to",
+          "walk_forward",
+          "versions",
+          "params_hash",
+          "result",
+          "error",
+          "job_id",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "BacktestOut"
       },
       "BinOut": {
         "properties": {
@@ -5108,6 +5904,33 @@
         "type": "object",
         "title": "ContractPatch"
       },
+      "CostsIn": {
+        "properties": {
+          "half_spread_ticks": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Half Spread Ticks",
+            "description": "Тики на сторону",
+            "default": 0.0
+          },
+          "slippage_ticks": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Slippage Ticks",
+            "description": "Тики на сторону",
+            "default": 0.0
+          },
+          "commission_per_contract": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Commission Per Contract",
+            "description": "₽ за контракт на сторону",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "title": "CostsIn"
+      },
       "DatetimeSpec": {
         "properties": {
           "columns": {
@@ -5380,6 +6203,27 @@
           "updated_at"
         ],
         "title": "EngineRunOut"
+      },
+      "ExitRuleIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Стоп: none/atr/structure; цель: none/atr/pattern"
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Value",
+            "description": "Для atr — размер в ATR",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "ExitRuleIn"
       },
       "FibGridIn": {
         "properties": {
@@ -7106,6 +7950,191 @@
         "title": "JobOut",
         "description": "Состояние задачи. Статусы: queued, running, succeeded, failed, cancelled."
       },
+      "LockOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "root_id": {
+            "type": "integer",
+            "title": "Root Id"
+          },
+          "timeframe_code": {
+            "type": "string",
+            "title": "Timeframe Code"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "test_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Test From"
+          },
+          "test_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Test To"
+          },
+          "experiment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "root_id",
+          "timeframe_code",
+          "family",
+          "test_from",
+          "test_to",
+          "experiment_id",
+          "created_at"
+        ],
+        "title": "LockOut"
+      },
+      "LogOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "event": {
+            "type": "string",
+            "title": "Event"
+          },
+          "root_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Id"
+          },
+          "timeframe_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe Code"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "experiment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment Id"
+          },
+          "params_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params Hash"
+          },
+          "period_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period From"
+          },
+          "period_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period To"
+          },
+          "touches_test": {
+            "type": "boolean",
+            "title": "Touches Test"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "event",
+          "root_id",
+          "timeframe_code",
+          "family",
+          "experiment_id",
+          "params_hash",
+          "period_from",
+          "period_to",
+          "touches_test",
+          "note"
+        ],
+        "title": "LogOut"
+      },
       "MatchOut": {
         "properties": {
           "occurrence": {
@@ -8174,6 +9203,122 @@
         ],
         "title": "StepPriceOut"
       },
+      "StrategyIn": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "pattern",
+              "level_touch",
+              "level_break"
+            ],
+            "title": "Source",
+            "default": "pattern"
+          },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Groups",
+            "description": "Типы; пусто — все"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "follow",
+              "fade"
+            ],
+            "title": "Side",
+            "default": "follow"
+          },
+          "quality_min": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Min"
+          },
+          "quality_max": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Max"
+          },
+          "trends": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Trends"
+          },
+          "volatilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Volatilities"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
+          },
+          "stop": {
+            "$ref": "#/components/schemas/ExitRuleIn"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ExitRuleIn"
+          },
+          "max_bars": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bars"
+          }
+        },
+        "type": "object",
+        "title": "StrategyIn",
+        "description": "Шаблон «вход по событию» (ADR-0027)."
+      },
       "ThresholdCalibrationOut": {
         "properties": {
           "threshold": {
@@ -8234,6 +9379,206 @@
         ],
         "title": "ThresholdCalibrationOut"
       },
+      "TradeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "segment": {
+            "type": "string",
+            "title": "Segment"
+          },
+          "window_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "side": {
+            "type": "string",
+            "title": "Side"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "contracts": {
+            "type": "integer",
+            "title": "Contracts"
+          },
+          "entry_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Entry Time"
+          },
+          "exit_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Exit Time"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "legs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Legs"
+          },
+          "gross_ticks": {
+            "type": "number",
+            "title": "Gross Ticks"
+          },
+          "cost_ticks": {
+            "type": "number",
+            "title": "Cost Ticks"
+          },
+          "mfe_ticks": {
+            "type": "number",
+            "title": "Mfe Ticks"
+          },
+          "mae_ticks": {
+            "type": "number",
+            "title": "Mae Ticks"
+          },
+          "gross_points": {
+            "type": "number",
+            "title": "Gross Points"
+          },
+          "net_points": {
+            "type": "number",
+            "title": "Net Points"
+          },
+          "commission_rub": {
+            "type": "number",
+            "title": "Commission Rub"
+          },
+          "gross_rub": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gross Rub"
+          },
+          "net_rub": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Rub"
+          },
+          "step_price_estimated": {
+            "type": "boolean",
+            "title": "Step Price Estimated"
+          },
+          "ambiguous_bar": {
+            "type": "boolean",
+            "title": "Ambiguous Bar"
+          },
+          "rolled": {
+            "type": "boolean",
+            "title": "Rolled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "segment",
+          "window_id",
+          "sequence",
+          "side",
+          "ref",
+          "contracts",
+          "entry_time",
+          "exit_time",
+          "reason",
+          "legs",
+          "gross_ticks",
+          "cost_ticks",
+          "mfe_ticks",
+          "mae_ticks",
+          "gross_points",
+          "net_points",
+          "commission_rub",
+          "gross_rub",
+          "net_rub",
+          "step_price_estimated",
+          "ambiguous_bar",
+          "rolled"
+        ],
+        "title": "TradeOut"
+      },
+      "UnlockIn": {
+        "properties": {
+          "root_id": {
+            "type": "integer",
+            "title": "Root Id"
+          },
+          "timeframe": {
+            "type": "string",
+            "title": "Timeframe"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 5,
+            "title": "Note",
+            "description": "Причина — попадает в журнал"
+          }
+        },
+        "type": "object",
+        "required": [
+          "root_id",
+          "timeframe",
+          "family",
+          "note"
+        ],
+        "title": "UnlockIn"
+      },
+      "UnlockOut": {
+        "properties": {
+          "unlocked": {
+            "type": "boolean",
+            "title": "Unlocked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unlocked"
+        ],
+        "title": "UnlockOut"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -8273,6 +9618,135 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WalkForwardIn": {
+        "properties": {
+          "train_days": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Train Days"
+          },
+          "valid_days": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Valid Days"
+          },
+          "step_days": {
+            "type": "integer",
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Step Days"
+          },
+          "grid": {
+            "additionalProperties": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Grid",
+            "description": "Сетка параметров (stop_atr, target_atr, max_bars, quality_min); пусто — один набор"
+          },
+          "objective": {
+            "type": "string",
+            "enum": [
+              "profit_factor",
+              "net"
+            ],
+            "title": "Objective",
+            "default": "profit_factor"
+          },
+          "min_trades": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Min Trades",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "train_days",
+          "valid_days",
+          "step_days"
+        ],
+        "title": "WalkForwardIn"
+      },
+      "WindowOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "train_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Train From"
+          },
+          "train_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Train To"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "train_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Train Metrics"
+          },
+          "valid_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Metrics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sequence",
+          "train_from",
+          "train_to",
+          "valid_from",
+          "valid_to",
+          "params",
+          "train_metrics",
+          "valid_metrics"
+        ],
+        "title": "WindowOut"
       },
       "ZoneMember": {
         "properties": {
