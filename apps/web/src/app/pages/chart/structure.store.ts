@@ -46,8 +46,18 @@ import {
   type AnaloguesMode,
   type AnaloguesView,
 } from './analogues-layer';
+import {
+  calibrationQuery,
+  type CalibrationView,
+  forecastQuery,
+  type ForecastMode,
+  type ForecastView,
+} from './forecast-layer';
 
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
+/** Горизонт проверки калибровки, баров. */
+const CALIBRATION_HORIZON = 10;
+
 export interface StructureContext {
   root_id?: number;
   contract_id?: number;
@@ -85,6 +95,11 @@ export class StructureStore {
   /** Поиск аналогов (ADR-0025): последний результат; сбрасывается при обновлении данных. */
   readonly analogues = signal<AnaloguesView | null>(null);
   private analoguesSequence = 0;
+  /** Прогноз и проверка его калибровки (ADR-0026); сбрасываются вместе с аналогами. */
+  readonly forecast = signal<ForecastView | null>(null);
+  readonly calibration = signal<CalibrationView | null>(null);
+  private forecastSequence = 0;
+  private calibrationSequence = 0;
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   /** Режим рисования ручной сетки: первая и вторая точки. */
@@ -207,6 +222,13 @@ export class StructureStore {
     const shown = this.analogues();
     if (shown) {
       void this.findAnalogues(shown.mode);
+    }
+    const forecast = this.forecast();
+    if (forecast) {
+      void this.findForecast(forecast.mode);
+    }
+    if (this.calibration()) {
+      void this.findCalibration();
     }
   }
 
@@ -342,6 +364,10 @@ export class StructureStore {
       this.error.set(null);
       this.analoguesSequence++;
       this.analogues.set(null);
+      this.forecastSequence++;
+      this.calibrationSequence++;
+      this.forecast.set(null);
+      this.calibration.set(null);
       void this.loadStats();
     } catch (error) {
       if (seq === this.sequence) {
@@ -395,6 +421,99 @@ export class StructureStore {
       ...(pattern ? patternStatsRequests(pattern) : []),
       ...(level ? levelStatsRequests(level) : []),
     ];
+  }
+
+  /** Прогноз выбранного паттерна или текущего окна: Empirical и KNN рядом. */
+  async findForecast(mode: ForecastMode): Promise<void> {
+    const seq = ++this.forecastSequence;
+    const context = this.context;
+    const runs = this.seriesRuns();
+    const pattern = mode === 'pattern' ? this.selectedPatternInfo() : null;
+    const state = (rest: Partial<ForecastView>): void => {
+      if (seq === this.forecastSequence) {
+        this.forecast.set({
+          mode,
+          loading: false,
+          error: null,
+          data: null,
+          ...rest,
+        });
+      }
+    };
+    if (!context || (mode === 'pattern' && !pattern)) {
+      state({ error: 'Выберите паттерн на графике' });
+      return;
+    }
+    const queryRun = pattern
+      ? runs.find(([engine]) => engine === pattern.engine)?.[1]
+      : runs[0]?.[1];
+    if (queryRun === undefined) {
+      state({ error: 'Включите слой паттернов или уровней' });
+      return;
+    }
+    state({ loading: true });
+    try {
+      const data = await this.api.call(
+        this.api.client.GET('/forecast', {
+          params: {
+            query: forecastQuery(
+              queryRun,
+              runs.map(([, id]) => id),
+              this.statsUnit(),
+              pattern?.key,
+              context.asOf,
+            ),
+          },
+        }),
+      );
+      state({ data });
+    } catch (error) {
+      state({ error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  /** Walk-forward проверка Empirical для типа и направления выбранного паттерна. */
+  async findCalibration(): Promise<void> {
+    const seq = ++this.calibrationSequence;
+    const context = this.context;
+    const pattern = this.selectedPatternInfo();
+    const state = (rest: Partial<CalibrationView>): void => {
+      if (seq === this.calibrationSequence) {
+        this.calibration.set({
+          loading: false,
+          error: null,
+          data: null,
+          ...rest,
+        });
+      }
+    };
+    if (!context || !pattern) {
+      state({ error: 'Выберите паттерн на графике' });
+      return;
+    }
+    const runIds = this.seriesRuns()
+      .filter(([engine]) => PATTERN_ENGINES.includes(engine))
+      .map(([, id]) => id);
+    state({ loading: true });
+    try {
+      const data = await this.api.call(
+        this.api.client.GET('/forecast/calibration', {
+          params: {
+            query: calibrationQuery(
+              runIds,
+              pattern.pattern,
+              pattern.direction,
+              this.statsUnit(),
+              CALIBRATION_HORIZON,
+              context.asOf,
+            ),
+          },
+        }),
+      );
+      state({ data });
+    } catch (error) {
+      state({ error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   private async loadStats(): Promise<void> {

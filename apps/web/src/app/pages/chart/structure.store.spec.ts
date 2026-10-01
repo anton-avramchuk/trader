@@ -590,4 +590,160 @@ describe('StructureStore', () => {
       expect(store.analogues()?.error).toBe('Нет связи с сервером');
     });
   });
+
+  describe('блок «Прогноз»', () => {
+    const FORECAST = { knn: { method: 'knn', sample: 0, horizons: [] } };
+    const CALIBRATION = { rows: [], warnings: [], tested: 0, occurrences: 0 };
+    const patternEvent = (): EngineEvent => ({
+      seq: 0,
+      kind: 'pattern',
+      status: 'confirmed',
+      payload: {
+        id: 1,
+        pattern: 'double_top',
+        direction: 'bearish',
+        state: 'confirmed',
+        end: '2026-09-28T05:00:00Z',
+        points: [
+          { role: 'top1', price: 10, ts: '2026-09-28T04:00:00Z', index: 1 },
+        ],
+        line: { p1: 9, p2: 9, t1: null, t2: null },
+        height: 1,
+        target: 8,
+        features: {},
+        quality: { score: 50, components: {} },
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: '2026-09-28T05:00:00Z',
+      available_at: '2026-09-28T05:00:00Z',
+      revises: null,
+    });
+
+    function withForecast() {
+      const ctx = setup();
+      ctx.client.GET.mockImplementation((path: string) => {
+        if (path === '/forecast') {
+          return ok(FORECAST);
+        }
+        if (path === '/forecast/calibration') {
+          return ok(CALIBRATION);
+        }
+        return ok(
+          path === '/engine-runs/{run_id}/events' ? [patternEvent()] : [],
+        );
+      });
+      return ctx;
+    }
+
+    const callsTo = (
+      client: ReturnType<typeof setup>['client'],
+      path: string,
+    ) => calls(client.GET).filter(([p]) => p === path);
+
+    it('без прогонов — подсказка, запроса нет', async () => {
+      const { store, client } = withForecast();
+      await store.refresh(CONTEXT);
+
+      await store.findForecast('window');
+
+      expect(callsTo(client, '/forecast')).toHaveLength(0);
+      expect(store.forecast()?.error).toBe(
+        'Включите слой паттернов или уровней',
+      );
+    });
+
+    it('паттерн: ключ, прогоны серии, as-of и единицы', async () => {
+      const { store, client } = withForecast();
+      await store.refresh({ ...CONTEXT, asOf: '2026-09-28T06:00:00Z' });
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+
+      await store.findForecast('pattern');
+
+      const query = callsTo(client, '/forecast')[0]?.[1]?.params?.query;
+      expect(query).toMatchObject({
+        key: 'double_triple:1',
+        unit: 'atr',
+        as_of: '2026-09-28T06:00:00Z',
+      });
+      expect((query as { run_id: number[] }).run_id).toHaveLength(4);
+      expect(store.forecast()).toMatchObject({
+        mode: 'pattern',
+        loading: false,
+      });
+      expect(store.forecast()?.data).toEqual(FORECAST);
+    });
+
+    it('режим паттерна без выбора — подсказка', async () => {
+      const { store, client } = withForecast();
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+
+      await store.findForecast('pattern');
+      await store.findCalibration();
+
+      expect(callsTo(client, '/forecast')).toHaveLength(0);
+      expect(callsTo(client, '/forecast/calibration')).toHaveLength(0);
+      expect(store.forecast()?.error).toBe('Выберите паттерн на графике');
+      expect(store.calibration()?.error).toBe('Выберите паттерн на графике');
+    });
+
+    it('калибровка: тип, направление и прогоны паттернов; единицы повторяют обе выборки', async () => {
+      const { store, client } = withForecast();
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+
+      await store.findForecast('window');
+      await store.findCalibration();
+
+      const query = callsTo(client, '/forecast/calibration')[0]?.[1]?.params
+        ?.query;
+      expect(query).toMatchObject({
+        group: 'double_top',
+        direction: 'bearish',
+        horizon: 10,
+        unit: 'atr',
+      });
+      expect(store.calibration()?.data).toEqual(CALIBRATION);
+
+      store.setStatsUnit('pct');
+      await vi.waitFor(() =>
+        expect(callsTo(client, '/forecast/calibration')).toHaveLength(2),
+      );
+      expect(callsTo(client, '/forecast')).toHaveLength(2);
+      expect(
+        callsTo(client, '/forecast/calibration')[1]?.[1]?.params?.query,
+      ).toMatchObject({ unit: 'pct' });
+    });
+
+    it('обновление данных сбрасывает прогноз и калибровку', async () => {
+      const { store } = withForecast();
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+      store.selectPattern('double_triple:1');
+      await store.findForecast('pattern');
+      await store.findCalibration();
+
+      await store.refresh();
+
+      expect(store.forecast()).toBeNull();
+      expect(store.calibration()).toBeNull();
+    });
+
+    it('ошибка запроса показывается в блоке', async () => {
+      const { store, client } = withForecast();
+      client.GET.mockImplementation((path: string) =>
+        path === '/forecast'
+          ? Promise.reject(new Error('Нет связи с сервером'))
+          : ok(path === '/engine-runs/{run_id}/events' ? [patternEvent()] : []),
+      );
+      await store.refresh(CONTEXT);
+      await store.setLayer('patterns', true);
+
+      await store.findForecast('window');
+
+      expect(store.forecast()?.error).toBe('Нет связи с сервером');
+    });
+  });
 });
