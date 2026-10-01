@@ -77,7 +77,7 @@ def test_reference_data_is_seeded(session: Session) -> None:
 
     assert [t.code for t in timeframes] == ["1m", "15m", "1h", "4h", "1d", "1w"]
     assert [t.code for t in timeframes if t.is_internal] == ["1m"]
-    assert set(providers) == {"moex_iss", "tinvest", "csv"}
+    assert set(providers) == {"moex_iss", "csv"}
 
 
 def test_root_defaults(session: Session) -> None:
