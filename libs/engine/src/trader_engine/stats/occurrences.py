@@ -117,7 +117,10 @@ def pattern_occurrences(
                     and cancel.payload.get("reason") == "false_breakout"
                 ),
                 quality=_number(last.payload["quality"]["score"]),
-                meta={"points": len(first_payload["points"])},
+                meta={
+                    "points": len(first_payload["points"]),
+                    "extreme": _extreme(first_payload),
+                },
             )
         )
     return sorted(found, key=lambda o: (o.available_at, o.key))
@@ -160,6 +163,14 @@ def level_occurrences(engine: str, events: Iterable[EventLike]) -> list[Occurren
             )
         )
     return sorted(found, key=lambda o: (o.available_at, o.key))
+
+
+def _extreme(payload: dict[str, Any]) -> float | None:
+    """Экстремум паттерна: минимум точек у бычьего, максимум у медвежьего."""
+    prices = [float(p["price"]) for p in payload["points"] if "price" in p]
+    if not prices:
+        return None
+    return min(prices) if payload["direction"] == "bullish" else max(prices)
 
 
 def _direction(value: Any) -> Direction:
