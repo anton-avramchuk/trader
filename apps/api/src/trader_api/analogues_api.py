@@ -11,6 +11,7 @@
 import json
 from collections import OrderedDict
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
@@ -30,7 +31,12 @@ from trader_engine.analogues.pip import DEFAULT_PIP_POINTS, Normalization
 from trader_engine.analogues.search import AnalogueResult, find_analogues
 from trader_engine.stats.occurrences import level_occurrences, pattern_occurrences
 from trader_engine.stats.outcomes import DEFAULT_HORIZONS
-from trader_engine.stats.pipeline import Series, build_series, collect
+from trader_engine.stats.pipeline import (
+    Series,
+    SeriesOccurrence,
+    build_series,
+    collect,
+)
 
 from trader_api.deps import DbSession
 from trader_api.stats_api import (
@@ -140,6 +146,79 @@ def _entry_time(events: Sequence[Any], engine: str, key: str) -> datetime | None
     return None
 
 
+@dataclass(frozen=True)
+class Prepared:
+    """Ряды, вхождения истории и запрос, собранные на момент ``as_of``."""
+
+    items: list[SeriesOccurrence]
+    query_series: Series
+    query: Formation
+    query_item: SeriesOccurrence | None
+
+
+def prepare(
+    history: Sequence[EngineRun],
+    query_run: EngineRun,
+    loaded: _Loaded,
+    *,
+    key: str | None,
+    as_of: datetime,
+    window: int,
+    pip_points: int,
+    normalization: Normalization,
+    include_candidates: bool,
+) -> Prepared:
+    """Общая часть поиска аналогов и Forecast: ряды, вхождения, формация запроса."""
+    series: dict[str, Series] = {}
+    for run in (query_run, *history):
+        series_key = _series_key(run)
+        if series_key not in series:
+            series[series_key] = build_series(
+                series_key,
+                loaded.bars[series_key],
+                roll_times=loaded.rolls[series_key],
+                as_of=as_of,
+            )
+    items: list[SeriesOccurrence] = []
+    for run in history:
+        events = [e for e in loaded.events[run.id] if e.available_at <= as_of]
+        items += collect(
+            series[_series_key(run)],
+            [(run.engine, events)],
+            include_candidates=include_candidates,
+        )
+    query_series = series[_series_key(query_run)]
+    query_item: SeriesOccurrence | None = None
+    if key is None:
+        end = len(query_series.bars) - 1
+    else:
+        entry = query_series.index.get(_entry_at(loaded, query_run, key, as_of))
+        if entry is None:
+            raise HTTPException(422, "У вхождения-запроса нет бара входа в данных")
+        end = entry
+        own = [e for e in loaded.events[query_run.id] if e.available_at <= as_of]
+        query_item = next(
+            (
+                i
+                for i in collect(
+                    query_series, [(query_run.engine, own)], include_candidates=True
+                )
+                if i.occurrence.key == key
+            ),
+            None,
+        )
+    query = (
+        formation_at(query_series, end, window=window, k=pip_points, mode=normalization)
+        if end >= 0
+        else None
+    )
+    if query is None:
+        raise HTTPException(
+            422, "Для запроса не хватает баров или ATR (окно и прогрев индикатора)"
+        )
+    return Prepared(items, query_series, query, query_item)
+
+
 def _search(
     history: Sequence[EngineRun],
     query_run: EngineRun,
@@ -157,42 +236,23 @@ def _search(
     horizons: tuple[int, ...],
     seed: int,
 ) -> AnaloguesOut:
-    series: dict[str, Series] = {}
-    for run in (query_run, *history):
-        series_key = _series_key(run)
-        if series_key not in series:
-            series[series_key] = build_series(
-                series_key,
-                loaded.bars[series_key],
-                roll_times=loaded.rolls[series_key],
-                as_of=as_of,
-            )
-    items = []
-    for run in history:
-        events = [e for e in loaded.events[run.id] if e.available_at <= as_of]
-        items += collect(
-            series[_series_key(run)],
-            [(run.engine, events)],
-            include_candidates=include_candidates,
-        )
-    query_series = series[_series_key(query_run)]
-    if key is None:
-        end = len(query_series.bars) - 1
-    else:
-        entry = query_series.index.get(_entry_at(loaded, query_run, key, as_of))
-        if entry is None:
-            raise HTTPException(422, "У вхождения-запроса нет бара входа в данных")
-        end = entry
     unit: Literal["atr", "pct"] = "atr" if normalization == "atr" else "pct"
-    query = (
-        formation_at(query_series, end, window=window, k=pip_points, mode=normalization)
-        if end >= 0
-        else None
+    prepared = prepare(
+        history,
+        query_run,
+        loaded,
+        key=key,
+        as_of=as_of,
+        window=window,
+        pip_points=pip_points,
+        normalization=normalization,
+        include_candidates=include_candidates,
     )
-    if query is None:
-        raise HTTPException(
-            422, "Для запроса не хватает баров или ATR (окно и прогрев индикатора)"
-        )
+    items, query_series, query = (
+        prepared.items,
+        prepared.query_series,
+        prepared.query,
+    )
     candidates = build_candidates(
         items,
         as_of=as_of,

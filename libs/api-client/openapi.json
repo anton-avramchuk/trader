@@ -3791,6 +3791,270 @@
         }
       }
     },
+    "/forecast": {
+      "get": {
+        "tags": [
+          "forecast"
+        ],
+        "summary": "Прогноз исходов: Empirical и KNN",
+        "description": "Вероятности роста и падения на порогах (в ATR или %), квантили дохода, медианные MFE/MAE и 95% CI на горизонтах. Два метода рядом, в ценовой системе (вверх — плюс): **Empirical** — исходы вхождений того же типа и направления (только для вхождения-запроса `key`), **KNN** — исходы ближайших по DTW аналогов (и для вхождения, и для окна последних `window` баров). Только то, что известно на `as_of` (у вхождения по умолчанию — момент подтверждения). Это статистика прошлого, а не гарантия: смотрите N, эффективный N и предупреждения. Результат кэшируется.",
+        "operationId": "getForecast",
+        "parameters": [
+          {
+            "name": "query_run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Прогон, чей ряд — запрос",
+              "title": "Query Run Id"
+            },
+            "description": "Прогон, чей ряд — запрос"
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Прогоны истории (по умолчанию — запроса)",
+              "title": "Run Id"
+            },
+            "description": "Прогоны истории (по умолчанию — запроса)"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ключ вхождения-запроса; без него — окно",
+              "title": "Key"
+            },
+            "description": "Ключ вхождения-запроса; без него — окно"
+          },
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Горизонты, баров",
+              "title": "Horizon"
+            },
+            "description": "Горизонты, баров"
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "atr",
+                "pct"
+              ],
+              "type": "string",
+              "default": "atr",
+              "title": "Unit"
+            }
+          },
+          {
+            "name": "threshold",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Пороги в единицах прогноза",
+              "title": "Threshold"
+            },
+            "description": "Пороги в единицах прогноза"
+          },
+          {
+            "name": "same_regime",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Empirical: только тот же режим (тренд × волатильность)",
+              "default": false,
+              "title": "Same Regime"
+            },
+            "description": "Empirical: только тот же режим (тренд × волатильность)"
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 10,
+              "default": 60,
+              "title": "Window"
+            }
+          },
+          {
+            "name": "pip_points",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "default": 9,
+              "title": "Pip Points"
+            }
+          },
+          {
+            "name": "normalization",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "atr",
+                "percent"
+              ],
+              "type": "string",
+              "default": "atr",
+              "title": "Normalization"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "K"
+            }
+          },
+          {
+            "name": "max_distance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Distance"
+            }
+          },
+          {
+            "name": "band",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "minimum": 0,
+              "default": 0.2,
+              "title": "Band"
+            }
+          },
+          {
+            "name": "include_candidates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Candidates"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Seed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -5283,6 +5547,94 @@
         ],
         "title": "FilePreview"
       },
+      "ForecastOut": {
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/FormationOut"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key"
+          },
+          "direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "bullish",
+                  "bearish"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction",
+            "description": "Направление вхождения-запроса; у окна нет"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "thresholds": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Thresholds"
+          },
+          "empirical": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MethodOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Только для вхождения-запроса; у окна — null"
+          },
+          "knn": {
+            "$ref": "#/components/schemas/MethodOut"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "occurrence_key",
+          "direction",
+          "as_of",
+          "unit",
+          "thresholds",
+          "empirical",
+          "knn",
+          "warnings"
+        ],
+        "title": "ForecastOut"
+      },
       "FormationOut": {
         "properties": {
           "series_key": {
@@ -5326,6 +5678,135 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HorizonForecastOut": {
+        "properties": {
+          "horizon": {
+            "type": "integer",
+            "title": "Horizon",
+            "description": "Горизонт, баров торгового времени TF ряда"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "n_raw": {
+            "type": "integer",
+            "title": "N Raw"
+          },
+          "n_effective": {
+            "type": "integer",
+            "title": "N Effective",
+            "description": "После de-overlap (окно = горизонт)"
+          },
+          "censored": {
+            "type": "integer",
+            "title": "Censored"
+          },
+          "missing_atr": {
+            "type": "integer",
+            "title": "Missing Atr"
+          },
+          "mean_ret": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Ret"
+          },
+          "median_ret": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Ret"
+          },
+          "ret_ci": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantiles": {
+            "items": {
+              "$ref": "#/components/schemas/QuantileOut"
+            },
+            "type": "array",
+            "title": "Quantiles"
+          },
+          "median_mfe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Mfe",
+            "description": "Медианный максимальный рост по цене"
+          },
+          "median_mae": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Mae",
+            "description": "Медианное максимальное падение"
+          },
+          "probabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ProbabilityOut"
+            },
+            "type": "array",
+            "title": "Probabilities"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "horizon",
+          "unit",
+          "n_raw",
+          "n_effective",
+          "censored",
+          "missing_atr",
+          "mean_ret",
+          "median_ret",
+          "ret_ci",
+          "quantiles",
+          "median_mfe",
+          "median_mae",
+          "probabilities",
+          "warnings"
+        ],
+        "title": "HorizonForecastOut"
       },
       "HorizonOutcomeOut": {
         "properties": {
@@ -6403,6 +6884,45 @@
         ],
         "title": "MatchOut"
       },
+      "MethodOut": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "empirical",
+              "knn"
+            ],
+            "title": "Method"
+          },
+          "sample": {
+            "type": "integer",
+            "title": "Sample",
+            "description": "Вхождений (empirical) или аналогов (KNN)"
+          },
+          "horizons": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonForecastOut"
+            },
+            "type": "array",
+            "title": "Horizons"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "sample",
+          "horizons",
+          "warnings"
+        ],
+        "title": "MethodOut"
+      },
       "OccurrenceDetailOut": {
         "properties": {
           "occurrence": {
@@ -6638,6 +7158,54 @@
         ],
         "title": "PresetOut"
       },
+      "ProbabilityOut": {
+        "properties": {
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "Порог в единицах прогноза (ATR или %)"
+          },
+          "up": {
+            "type": "number",
+            "title": "Up",
+            "description": "P(доход ≥ +порог) по цене"
+          },
+          "down": {
+            "type": "number",
+            "title": "Down",
+            "description": "P(доход ≤ −порог) по цене"
+          },
+          "up_ci": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "down_ci": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntervalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "threshold",
+          "up",
+          "down",
+          "up_ci",
+          "down_ci"
+        ],
+        "title": "ProbabilityOut"
+      },
       "ProfileConfig": {
         "properties": {
           "chart_timeframe": {
@@ -6841,6 +7409,24 @@
           "external_id"
         ],
         "title": "ProviderIdOut"
+      },
+      "QuantileOut": {
+        "properties": {
+          "q": {
+            "type": "integer",
+            "title": "Q"
+          },
+          "value": {
+            "type": "number",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q",
+          "value"
+        ],
+        "title": "QuantileOut"
       },
       "ResolveIn": {
         "properties": {

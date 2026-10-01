@@ -13,6 +13,7 @@ from typing import Literal
 
 from trader_engine.analogues.search import AnalogueMatch
 from trader_engine.forecast.core import (
+    THRESHOLDS,
     HorizonForecast,
     forecast_horizon,
     to_price_frame,
@@ -57,6 +58,7 @@ def empirical_forecast(
     as_of: datetime,
     horizons: Sequence[int] = DEFAULT_HORIZONS,
     unit: Unit = "atr",
+    thresholds: Sequence[float] = THRESHOLDS,
     same_regime: bool = False,
     seed: int = 0,
     min_effective: int = MIN_EFFECTIVE,
@@ -86,6 +88,7 @@ def empirical_forecast(
             observations,
             horizon=horizon,
             unit=unit,
+            thresholds=thresholds,
             seed=seed,
             min_effective=min_effective,
         )
@@ -102,6 +105,7 @@ def knn_forecast(
     *,
     horizons: Sequence[int] = DEFAULT_HORIZONS,
     unit: Unit = "atr",
+    thresholds: Sequence[float] = THRESHOLDS,
     seed: int = 0,
     min_effective: int = MIN_EFFECTIVE,
 ) -> MethodForecast:
@@ -126,6 +130,7 @@ def knn_forecast(
                 observations,
                 horizon=horizon,
                 unit=unit,
+                thresholds=thresholds,
                 seed=seed,
                 min_effective=min_effective,
             )
