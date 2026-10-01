@@ -20,9 +20,9 @@ from trader_db.models.base import Base, CreatedAtMixin
 
 
 class ChartProfile(CreatedAtMixin, Base):
-    """Именованный профиль графика: глобальный (``root_id`` пуст) или для root.
+    """Именованный профиль графика: глобальный (``instrument_id`` пуст) или инструмента.
 
-    Имена уникальны в своей области: среди глобальных и среди профилей одного root.
+    Имена уникальны в своей области: среди глобальных и в рамках инструмента.
     ``last_used_at`` запоминает последний применённый профиль.
     """
 
@@ -32,21 +32,21 @@ class ChartProfile(CreatedAtMixin, Base):
             "uq_chart_profiles_global_name",
             "name",
             unique=True,
-            postgresql_where=text("root_id IS NULL"),
+            postgresql_where=text("instrument_id IS NULL"),
         ),
         Index(
-            "uq_chart_profiles_root_name",
-            "root_id",
+            "uq_chart_profiles_instrument_name",
+            "instrument_id",
             "name",
             unique=True,
-            postgresql_where=text("root_id IS NOT NULL"),
+            postgresql_where=text("instrument_id IS NOT NULL"),
         ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
-    root_id: Mapped[int | None] = mapped_column(
-        ForeignKey("roots.id", ondelete="CASCADE")
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE")
     )
     config: Mapped[dict[str, Any]] = mapped_column(
         JSONB, server_default=text("'{}'::jsonb")

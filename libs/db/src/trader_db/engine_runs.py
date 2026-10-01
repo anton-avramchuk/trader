@@ -1,7 +1,7 @@
 """Прогоны движков событий: запуск, инкрементальное продолжение, выборка (ADR-0021).
 
 Прогон детерминирован: ключ — движок, версия алгоритма, отпечаток параметров, ряд
-(контракт или continuous-серия root) и таймфрейм. Если бары, обработанные раньше,
+(инструмент) и таймфрейм. Если бары, обработанные раньше,
 не изменились, прогон продолжается на новых барах и результат совпадает с прогоном
 «с нуля». Иначе (правка данных, новый ролл continuous, другая версия датасета с
 изменившимися барами) создаётся новый прогон, а старые события остаются нетронутыми.
@@ -43,8 +43,7 @@ def find_latest_run(
     algorithm_version: int,
     timeframe: str,
     *,
-    contract_id: int | None = None,
-    root_id: int | None = None,
+    instrument_id: int,
     lock: bool = False,
 ) -> EngineRun | None:
     query = (
@@ -54,9 +53,7 @@ def find_latest_run(
             EngineRun.params_hash == params_hash,
             EngineRun.algorithm_version == algorithm_version,
             EngineRun.timeframe_code == timeframe,
-            EngineRun.contract_id == contract_id
-            if contract_id is not None
-            else EngineRun.root_id == root_id,
+            EngineRun.instrument_id == instrument_id,
         )
         .order_by(EngineRun.id.desc())
         .limit(1)
@@ -66,7 +63,7 @@ def find_latest_run(
     return session.scalars(query).one_or_none()
 
 
-def _row(run_id: int, event: Event, dataset_version_id: int | None) -> dict[str, Any]:
+def _row(run_id: int, event: Event) -> dict[str, Any]:
     return {
         "run_id": run_id,
         "seq": event.seq,
@@ -77,7 +74,6 @@ def _row(run_id: int, event: Event, dataset_version_id: int | None) -> dict[str,
         "confirmed_at": event.confirmed_at,
         "available_at": event.available_at,
         "revises_seq": event.revises,
-        "dataset_version_id": dataset_version_id,
     }
 
 
@@ -103,9 +99,7 @@ def advance_run(
     bars: Sequence[BarInput],
     timeframe: str,
     *,
-    contract_id: int | None = None,
-    root_id: int | None = None,
-    dataset_version_id: int | None = None,
+    instrument_id: int,
     mode: RunMode = "auto",
 ) -> RunOutcome:
     """Довести прогон до конца ``bars``: продолжить прежний или начать новый.
@@ -113,8 +107,6 @@ def advance_run(
     ``bars`` — полный ряд от начала истории (отпечаток сверяет обработанную часть).
     ``mode="full"`` всегда начинает новый прогон.
     """
-    if (contract_id is None) == (root_id is None):
-        raise ValueError("Укажите ровно один из: contract_id или root_id")
     if not bars:
         raise ValueError("Нет баров для прогона")
     engine = create(engine_name, params)
@@ -128,8 +120,7 @@ def advance_run(
             phash,
             engine.version,
             timeframe,
-            contract_id=contract_id,
-            root_id=root_id,
+            instrument_id=instrument_id,
             lock=True,
         )
     )
@@ -154,10 +145,8 @@ def advance_run(
             algorithm_version=engine.version,
             params=engine.params.model_dump(mode="json"),
             params_hash=phash,
-            contract_id=contract_id,
-            root_id=root_id,
+            instrument_id=instrument_id,
             timeframe_code=timeframe,
-            dataset_version_id=dataset_version_id,
             bars_processed=0,
             state={},
         )
@@ -172,15 +161,12 @@ def advance_run(
         events.extend(engine.update(bar))
     for start in range(0, len(events), INSERT_CHUNK):
         chunk = events[start : start + INSERT_CHUNK]
-        session.execute(
-            insert(EngineEvent), [_row(run.id, e, dataset_version_id) for e in chunk]
-        )
+        session.execute(insert(EngineEvent), [_row(run.id, e) for e in chunk])
 
     run.state = engine.dump_state()
     run.bars_processed += len(new_bars)
     run.last_close_time = new_bars[-1].close_time
     run.input_fingerprint = fingerprint(new_bars, seed)
-    run.dataset_version_id = dataset_version_id
     session.flush()
     return RunOutcome(
         run.id,

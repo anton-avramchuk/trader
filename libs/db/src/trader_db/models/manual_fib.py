@@ -24,26 +24,19 @@ class ManualFibGrid(CreatedAtMixin, Base):
     """Сетка, построенная вручную по двум точкам; в статистике не участвует.
 
     Хранится отдельно от прогонов движков (автосетки — события ``fib_grid``).
-    Ряд — контракт или continuous-серия root, как у прогонов.
+    Ряд — инструмент и таймфрейм, как у прогонов.
     """
 
     __tablename__ = "manual_fib_grids"
     __table_args__ = (
-        CheckConstraint(
-            "(contract_id IS NULL) <> (root_id IS NULL)", name="one_subject"
-        ),
         CheckConstraint("start_time <> end_time", name="distinct_times"),
         CheckConstraint("start_price <> end_price", name="distinct_prices"),
-        Index("ix_manual_fib_grids_contract", "contract_id", "timeframe_code"),
-        Index("ix_manual_fib_grids_root", "root_id", "timeframe_code"),
+        Index("ix_manual_fib_grids_instrument", "instrument_id", "timeframe_code"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    contract_id: Mapped[int | None] = mapped_column(
-        ForeignKey("contracts.id", ondelete="CASCADE")
-    )
-    root_id: Mapped[int | None] = mapped_column(
-        ForeignKey("roots.id", ondelete="CASCADE")
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE")
     )
     timeframe_code: Mapped[str] = mapped_column(
         ForeignKey("timeframes.code", ondelete="RESTRICT")

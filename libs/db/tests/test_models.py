@@ -4,28 +4,12 @@ from sqlalchemy.orm import configure_mappers
 from trader_db.models import Base
 
 EXPECTED_TABLES = {
-    "trading_calendars",
-    "roots",
-    "contracts",
-    "data_providers",
-    "contract_provider_ids",
     "timeframes",
-    "contract_step_prices",
-    "trading_calendar_rules",
-    "trading_calendar_holidays",
-    "trading_calendar_special_days",
-    "data_imports",
-    "data_import_errors",
-    "raw_candles_1m",
-    "import_conflicts",
-    "dataset_versions",
-    "dataset_version_imports",
+    "instruments",
+    "candles",
+    "candle_loads",
     "jobs",
     "job_schedules",
-    "import_presets",
-    "derived_candles",
-    "derived_builds",
-    "roll_events",
     "backtest_experiments",
     "backtest_log",
     "backtest_test_locks",
@@ -44,12 +28,21 @@ def test_mappers_configure_and_tables_registered() -> None:
     assert set(Base.metadata.tables) == EXPECTED_TABLES
 
 
-def test_contract_key_is_root_and_expiration() -> None:
-    contracts = Base.metadata.tables["contracts"]
-    unique_columns = {
+def test_candle_primary_key_is_instrument_timeframe_open_time() -> None:
+    key = Base.metadata.tables["candles"].primary_key
+    assert [column.name for column in key.columns] == [
+        "instrument_id",
+        "timeframe_code",
+        "open_time",
+    ]
+
+
+def test_instrument_ticker_is_unique() -> None:
+    table = Base.metadata.tables["instruments"]
+    unique = {
         tuple(column.name for column in constraint.columns)
-        for constraint in contracts.constraints
+        for constraint in table.constraints
         if isinstance(constraint, UniqueConstraint)
     }
 
-    assert ("root_id", "expiration_date") in unique_columns
+    assert ("ticker",) in unique

@@ -25,7 +25,7 @@ from trader_db.models.base import Base, CreatedAtMixin
 
 
 class EngineRun(CreatedAtMixin, Base):
-    """Прогон движка по ряду баров: контракт или continuous-серия root + таймфрейм.
+    """Прогон движка по ряду свечей инструмента на таймфрейме.
 
     Ключ прогона — движок, версия алгоритма, отпечаток параметров, ряд и TF.
     Прогон можно продолжить на новых барах, если ранее обработанные бары не
@@ -36,9 +36,6 @@ class EngineRun(CreatedAtMixin, Base):
 
     __tablename__ = "engine_runs"
     __table_args__ = (
-        CheckConstraint(
-            "(contract_id IS NULL) <> (root_id IS NULL)", name="one_subject"
-        ),
         CheckConstraint("bars_processed >= 0", name="bars_non_negative"),
         Index(
             "ix_engine_runs_key",
@@ -55,19 +52,11 @@ class EngineRun(CreatedAtMixin, Base):
     algorithm_version: Mapped[int] = mapped_column(Integer)
     params: Mapped[dict[str, Any]] = mapped_column(JSONB)
     params_hash: Mapped[str] = mapped_column(String(64))
-    contract_id: Mapped[int | None] = mapped_column(
-        ForeignKey("contracts.id", ondelete="RESTRICT")
-    )
-    root_id: Mapped[int | None] = mapped_column(
-        ForeignKey("roots.id", ondelete="RESTRICT")
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE")
     )
     timeframe_code: Mapped[str] = mapped_column(
         ForeignKey("timeframes.code", ondelete="RESTRICT")
-    )
-    # Версия минутного датасета контракта, по которой посчитан последний бар
-    # (для continuous-серии пусто: ряд склеен из нескольких контрактов).
-    dataset_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("dataset_versions.id", ondelete="RESTRICT")
     )
     bars_processed: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
     last_close_time: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
@@ -127,7 +116,3 @@ class EngineEvent(Base):
     confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     available_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     revises_seq: Mapped[int | None] = mapped_column(Integer)
-    # Версия датасета, по которой событие получено (у продолжений прогона разная).
-    dataset_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("dataset_versions.id", ondelete="RESTRICT")
-    )

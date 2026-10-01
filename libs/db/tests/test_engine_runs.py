@@ -18,8 +18,9 @@ from trader_engine.events import (
 )
 from trader_engine.indicators import BarInput
 
+from tests.conftest import make_instrument
 from trader_db import advance_run, find_latest_run, load_events
-from trader_db.models import Contract, EngineEvent, EngineRun
+from trader_db.models import EngineEvent, EngineRun
 
 START = datetime(2026, 9, 28, 4, tzinfo=UTC)
 CLOSES = [10.0, 11, 12, 11, 10, 13, 12, 11, 15, 14, 13, 12, 16, 15, 14, 13, 17, 16]
@@ -81,11 +82,11 @@ def make_bars(closes: list[float]) -> list[BarInput]:
     return bars
 
 
-def test_new_run_stores_events_and_state(session: Session, contract_id: int) -> None:
+def test_new_run_stores_events_and_state(session: Session, instrument_id: int) -> None:
     bars = make_bars(CLOSES)
 
     result = advance_run(
-        session, "db_highs", None, bars, "15m", contract_id=contract_id
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
     )
 
     assert result.outcome == "created" and result.bars_new == len(bars)
@@ -106,16 +107,16 @@ def test_new_run_stores_events_and_state(session: Session, contract_id: int) -> 
     assert [e.payload["price"] for e in events] == [10.0, 11, 12, 13, 15, 16, 17]
 
 
-def test_continuation_equals_a_full_run(session: Session, contract_id: int) -> None:
+def test_continuation_equals_a_full_run(session: Session, instrument_id: int) -> None:
     bars = make_bars(CLOSES)
     first = advance_run(
-        session, "db_highs", None, bars[:9], "15m", contract_id=contract_id
+        session, "db_highs", None, bars[:9], "15m", instrument_id=instrument_id
     )
     second = advance_run(
-        session, "db_highs", None, bars, "15m", contract_id=contract_id
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
     )
     fresh = advance_run(
-        session, "db_highs", None, bars, "15m", contract_id=contract_id, mode="full"
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id, mode="full"
     )
 
     assert second.run_id == first.run_id and second.outcome == "continued"
@@ -129,11 +130,15 @@ def test_continuation_equals_a_full_run(session: Session, contract_id: int) -> N
     assert run.state == other.state
 
 
-def test_same_bars_change_nothing(session: Session, contract_id: int) -> None:
+def test_same_bars_change_nothing(session: Session, instrument_id: int) -> None:
     bars = make_bars(CLOSES)
-    first = advance_run(session, "db_highs", None, bars, "15m", contract_id=contract_id)
+    first = advance_run(
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
+    )
 
-    again = advance_run(session, "db_highs", None, bars, "15m", contract_id=contract_id)
+    again = advance_run(
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
+    )
 
     assert (again.run_id, again.outcome, again.bars_new) == (
         first.run_id,
@@ -152,10 +157,12 @@ def test_same_bars_change_nothing(session: Session, contract_id: int) -> None:
     ],
 )
 def test_changed_history_starts_a_new_run_and_keeps_the_old_one(
-    session: Session, contract_id: int, edit: str, reason: str
+    session: Session, instrument_id: int, edit: str, reason: str
 ) -> None:
     bars = make_bars(CLOSES)
-    old = advance_run(session, "db_highs", None, bars, "15m", contract_id=contract_id)
+    old = advance_run(
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
+    )
     before = load_events(session, old.run_id)
 
     if edit == "edited":
@@ -167,7 +174,7 @@ def test_changed_history_starts_a_new_run_and_keeps_the_old_one(
             replace(bar, close_time=bar.close_time + timedelta(1)) for bar in bars
         ]
     new = advance_run(
-        session, "db_highs", None, changed, "15m", contract_id=contract_id
+        session, "db_highs", None, changed, "15m", instrument_id=instrument_id
     )
 
     assert new.outcome == "created" and new.run_id != old.run_id
@@ -179,23 +186,23 @@ def test_changed_history_starts_a_new_run_and_keeps_the_old_one(
         session.get(EngineRun, new.run_id).params_hash,  # type: ignore[union-attr]
         1,
         "15m",
-        contract_id=contract_id,
+        instrument_id=instrument_id,
     )
     assert latest is not None and latest.id == new.run_id
 
 
 def test_different_params_and_subjects_have_separate_runs(
-    session: Session, contract_id: int
+    session: Session, instrument_id: int
 ) -> None:
     bars = make_bars(CLOSES)
-    root_id = session.get(Contract, contract_id).root_id  # type: ignore[union-attr]
+    other = make_instrument(session, "GAZP")
 
-    a = advance_run(session, "db_highs", None, bars, "15m", contract_id=contract_id)
+    a = advance_run(session, "db_highs", None, bars, "15m", instrument_id=instrument_id)
     b = advance_run(
-        session, "db_highs", {"min_step": 1.5}, bars, "15m", contract_id=contract_id
+        session, "db_highs", {"min_step": 1.5}, bars, "15m", instrument_id=instrument_id
     )
-    c = advance_run(session, "db_highs", None, bars, "15m", root_id=root_id)
-    d = advance_run(session, "db_highs", None, bars, "1h", contract_id=contract_id)
+    c = advance_run(session, "db_highs", None, bars, "15m", instrument_id=other)
+    d = advance_run(session, "db_highs", None, bars, "1h", instrument_id=instrument_id)
 
     assert len({a.run_id, b.run_id, c.run_id, d.run_id}) == 4
     assert all(r.outcome == "created" for r in (a, b, c, d))
@@ -203,11 +210,11 @@ def test_different_params_and_subjects_have_separate_runs(
 
 
 def test_events_as_of_show_only_what_was_known(
-    session: Session, contract_id: int
+    session: Session, instrument_id: int
 ) -> None:
     bars = make_bars(CLOSES)
     result = advance_run(
-        session, "db_highs", None, bars, "15m", contract_id=contract_id
+        session, "db_highs", None, bars, "15m", instrument_id=instrument_id
     )
 
     moment = bars[5].close_time  # бар с максимумом 13 закрылся ровно сейчас
@@ -221,9 +228,9 @@ def test_events_as_of_show_only_what_was_known(
     assert load_events(session, result.run_id, kinds=["nope"]) == []
 
 
-def test_events_are_immutable(session: Session, contract_id: int) -> None:
+def test_events_are_immutable(session: Session, instrument_id: int) -> None:
     result = advance_run(
-        session, "db_highs", None, make_bars(CLOSES), "15m", contract_id=contract_id
+        session, "db_highs", None, make_bars(CLOSES), "15m", instrument_id=instrument_id
     )
     session.commit()
 
@@ -251,10 +258,10 @@ def test_events_are_immutable(session: Session, contract_id: int) -> None:
     ],
 )
 def test_event_rules_are_enforced_by_the_database(
-    session: Session, contract_id: int, row: dict[str, Any]
+    session: Session, instrument_id: int, row: dict[str, Any]
 ) -> None:
     result = advance_run(
-        session, "db_highs", None, make_bars(CLOSES), "15m", contract_id=contract_id
+        session, "db_highs", None, make_bars(CLOSES), "15m", instrument_id=instrument_id
     )
     at = START + timedelta(days=1)
 
@@ -273,20 +280,19 @@ def test_event_rules_are_enforced_by_the_database(
         session.flush()
 
 
-def test_bad_arguments_are_rejected(session: Session, contract_id: int) -> None:
+def test_bad_arguments_are_rejected(session: Session, instrument_id: int) -> None:
     bars = make_bars(CLOSES)
 
-    with pytest.raises(ValueError, match="ровно один"):
-        advance_run(session, "db_highs", None, bars, "15m")
-    with pytest.raises(ValueError, match="ровно один"):
-        advance_run(
-            session, "db_highs", None, bars, "15m", contract_id=contract_id, root_id=1
-        )
     with pytest.raises(ValueError, match="Нет баров"):
-        advance_run(session, "db_highs", None, [], "15m", contract_id=contract_id)
+        advance_run(session, "db_highs", None, [], "15m", instrument_id=instrument_id)
     with pytest.raises(KeyError, match="Неизвестный движок"):
-        advance_run(session, "nope", None, bars, "15m", contract_id=contract_id)
+        advance_run(session, "nope", None, bars, "15m", instrument_id=instrument_id)
     with pytest.raises(ValueError, match="Некорректные параметры"):
         advance_run(
-            session, "db_highs", {"min_step": "x"}, bars, "15m", contract_id=contract_id
+            session,
+            "db_highs",
+            {"min_step": "x"},
+            bars,
+            "15m",
+            instrument_id=instrument_id,
         )
