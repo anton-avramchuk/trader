@@ -46,7 +46,7 @@ def in_thread(target: Callable[..., object], *args: object) -> Thread:
 
 def run_job(
     worker: Worker, factory: sessionmaker[Session], job_type: str, **params: Any
-) -> Job:
+) -> Any:
     """Ставит задачу и прогоняет worker, пока она не завершится."""
     job_id = enqueue(factory, job_type, params)
     for _ in range(20):
