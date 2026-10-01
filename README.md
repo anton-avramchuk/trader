@@ -1,6 +1,6 @@
 # trader
 
-Исследовательская торговая платформа для фьючерсов MOEX: данные, мульти-таймфреймные индикаторы, структура рынка, уровни, паттерны, статистика и бэктест.
+Исследовательская торговая платформа: данные, мульти-таймфреймные индикаторы, структура рынка, уровни, паттерны, статистика и бэктест.
 
 - Требования и решения: [`docs/spec.md`](docs/spec.md)
 - Глоссарий домена: [`CONTEXT.md`](CONTEXT.md)
@@ -14,6 +14,7 @@
 | `apps/web-e2e` | Playwright e2e для `web` |
 | `apps/api` | FastAPI (Python) |
 | `apps/worker` | Фоновый worker (Python) |
+| `apps/importer` | Сервис истории: тикеры и готовые свечи (прокси к MOEX ISS, ADR-0028) |
 | `libs/engine` | Аналитические движки (Python) |
 | `libs/db` | Доступ к PostgreSQL: настройки, движки SQLAlchemy, миграции Alembic |
 
@@ -76,44 +77,29 @@ curl -X POST http://127.0.0.1:8000/jobs/1/cancel
 
 Новый обработчик регистрируется в `apps/worker/src/trader_worker/handlers.py` (`default_registry`) и должен быть идемпотентным: задача потерянного worker'а выполняется заново.
 
-## Импорт файлов
+## Данные: importer и инструменты
 
-Файл кладётся в каталог импорта (`TRADER_IMPORT_DIR`; в Compose — том `imports`), затем ставится задача `import.file`:
+Платформа работает с абстрактными инструментами и готовыми свечами (ADR-0028): ни контрактов, ни склейки, ни роллов. Историю отдаёт отдельный сервис `apps/importer` (`GET /tickers`, `/history`, `/health`; в Compose — `importer`, адрес для API и worker — `TRADER_IMPORTER_URL`).
+
+1. В UI (Data → Instruments) или `POST /instruments {"ticker": "SBER"}` заводится инструмент: название, валюта, шаг цены и часовой пояс берутся у importer; стоимость тика (`tick_value`) задаётся вручную — только для денег в бэктесте.
+2. Свечи подгружаются за период задачей `candles.load` (`POST /instruments/{id}/load`); повторная загрузка перезаписывает свечи, журнал — `GET /instruments/{id}/loads`.
 
 ```bash
-docker compose cp finam.csv worker:/data/imports/finam.csv
-
-curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json' -d '{
-  "type": "import.file",
-  "params": {"contract_id": 1, "file": "finam.csv", "preset": "finam"}
-}'
+curl -X POST http://127.0.0.1:8000/instruments -H 'content-type: application/json' -d '{"ticker": "SBER"}'
+curl -X POST http://127.0.0.1:8000/instruments/1/load -H 'content-type: application/json' -d '{"period_from": "2025-01-01", "period_to": "2026-01-01"}'
 ```
-
-Встроенные пресеты: `finam`, `finam_no_header`, `iso_utc`. Свой формат — `mapping` вместо `preset`, поправка пресета — `overrides` (например, `{"timezone": "UTC", "encoding": "cp1251"}`). Форматы: CSV, JSON (массив или NDJSON), Parquet. Отчёт (вставлено, дубликаты, конфликты, ошибки строк, пропуски, диапазон, min/max цена) — в результате задачи. Подробности — ADR-0015 и ADR-0016.
-
-## Continuous-серия
-
-Ролл происходит в начале торговой недели за N торговых дней до экспирации, склейка ratio (ADR-0019). События `roll_events` пересчитываются в конце задачи `aggregate.contract`; склеенные бары строятся при чтении (`trader_db.read_continuous`).
 
 ## Что умеет API
 
-Справочники: `/roots`, `/roots/{id}/contracts`, `/calendars`. Контракты ISS: `POST /roots/{id}/iss-preview` (задача `dry_run`, результат — список для подтверждения), затем `POST /roots/{id}/contracts/from-iss`. Импорты: `POST /contracts/{id}/imports/iss|file`, файлы — `PUT /import-files/{name}` (тело — содержимое файла), пресеты — `/import-presets`, отчёты — `/imports`, конфликты — `/imports/{id}/conflicts` и `.../resolve`. Полный список — в Swagger.
+Инструменты: `GET/POST /instruments`, `PATCH /instruments/{id}`, `GET /importer/tickers`, `POST /instruments/{id}/load`, `GET /instruments/{id}/loads`. Полный список — в Swagger.
 
-Свечи: `GET /candles` (контракт или continuous по `root_id`, TF `1m/15m/1h/4h/1d/1w`, диапазон, `limit` + `next_start`) и `GET /snapshot?as_of=…` — только бары, закрытые к моменту, и только известные к нему роллы (масштаб такой, каким его видел бы наблюдатель тогда).
+Свечи: `GET /candles` (`instrument_id`, TF `15m/1h/4h/1d/1w`, диапазон, `limit` + `next_start`, `tail` для подгрузки истории) и `GET /snapshot?as_of=…` — только свечи, закрытые к моменту.
 
 TS-клиент — `libs/api-client` (`@trader/api-client`, типы генерируются из OpenAPI: `npx nx run api-client:generate`; тест API падает, если закоммиченная схема устарела).
 
-## Регрессионный датасет
-
-`tests/fixtures/ng_2026_03.csv.gz` — реальные минуты NGH6/NGJ6 с ISS (09–31.03.2026: ролл и смена режима сессий 23.03). Тест `apps/api/tests/test_regression_dataset.py` прогоняет импорт → бары → ролл → API и сверяет с `ng_2026_03.expected.json`. Осознанное обновление: `UPDATE_REGRESSION=1 pytest tests/test_regression_dataset.py`; перезагрузка данных — `scripts/build_regression_fixture.py`.
-
 ## Веб-интерфейс
 
-http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксирует `/api` (REST и WebSocket) на API, адрес — переменная `API_URL` (в Compose `http://api:8000`, локально по умолчанию `http://127.0.0.1:8000`). Разделы: Data (Instruments, Import, Quality), Chart, Research, Backtest. Время в UI — МСК.
-
-## Стоимость шага цены
-
-Выводится из дневных итогов ISS (ADR-0007) задачей `iss.step_prices` (раз в сутки по расписанию `iss-step-prices-daily`; вручную — кнопка «Обновить шаг» в Instruments или `POST /contracts/{id}/step-prices/refresh`). История — `GET /contracts/{id}/step-prices`, последняя — в карточке контракта.
+http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксирует `/api` (REST и WebSocket) на API, адрес — переменная `API_URL` (в Compose `http://api:8000`, локально по умолчанию `http://127.0.0.1:8000`). Разделы: Data (Instruments), Chart, Replay, Research, Backtest. Время в UI — МСК.
 
 ## Индикаторы и профили графика
 
@@ -124,28 +110,3 @@ http://127.0.0.1:4200 (Angular + Taiga UI). Dev-сервер проксируе�
 ## Документация API (Swagger)
 
 При запущенном стеке: Swagger UI — http://127.0.0.1:8000/docs, ReDoc — http://127.0.0.1:8000/redoc, схема — http://127.0.0.1:8000/openapi.json. У операций стабильные `operationId` (`createJob`, `getJob`…) — по схеме генерируется клиент для UI. WebSocket `/ws/jobs/{id}` в OpenAPI не входит и описан в тексте схемы.
-
-## Загрузка истории с MOEX ISS
-
-Root (например, `NG`) заводится в БД; его `code` — код базового актива ISS. Затем:
-
-```bash
-# найти контракты 2020–2021 и поставить загрузку истории по каждому
-curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "iss.sync_root", "params": {"root_id": 2, "from_year": 2020}}'
-
-# история одного контракта за период (без from/till — вся доступная)
-curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "import.iss", "params": {"contract_id": 12, "from": "2020-11-01", "till": "2020-11-30"}}'
-```
-
-Загрузка возобновляемая: повторный запуск догружает только недостающее; сегодняшний день не грузится. Подробности — ADR-0017. Проверка на настоящем ISS: `TRADER_LIVE_TESTS=1 uv run pytest tests/test_iss_live.py` в `libs/providers`.
-
-## Бары 15m / 1h / 4h / 1d / 1w
-
-Бары строятся из минутных свечей по торговому календарю (ADR-0018). Импорт, добавивший свечи, сам ставит задачу `aggregate.contract`; вручную:
-
-```bash
-curl -X POST http://127.0.0.1:8000/jobs -H 'content-type: application/json'   -d '{"type": "aggregate.contract", "params": {"contract_id": 12, "timeframes": ["1d"], "force": true}}'
-```
-
-Пересборка инкрементальная (от торговой недели с новыми данными); формирующийся бар не публикуется.
-

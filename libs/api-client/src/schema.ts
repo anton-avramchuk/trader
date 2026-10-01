@@ -1511,23 +1511,25 @@ export interface components {
          * @description Новая фоновая задача.
          * @example {
          *       "params": {
-         *         "contract_id": 12
+         *         "instrument_id": 1,
+         *         "period_from": "2026-01-01",
+         *         "period_to": "2026-02-01"
          *       },
-         *       "type": "aggregate.contract"
+         *       "type": "candles.load"
          *     }
          * @example {
          *       "params": {
-         *         "contract_id": 12,
-         *         "from": "2020-11-01",
-         *         "till": "2020-11-30"
+         *         "engine": "levels",
+         *         "instrument_id": 1,
+         *         "timeframe": "1h"
          *       },
-         *       "type": "import.iss"
+         *       "type": "engine.run"
          *     }
          */
         JobCreate: {
             /**
              * Type
-             * @description Тип задачи: `import.file`, `iss.sync_root`, `import.iss`, `aggregate.contract`, `demo.sleep`. Неизвестный тип worker завершит ошибкой.
+             * @description Тип задачи: `candles.load`, `engine.run`, `backtest.run`, `verify.indicators`, `demo.sleep`. Неизвестный тип worker завершит ошибкой.
              */
             type: string;
             /**

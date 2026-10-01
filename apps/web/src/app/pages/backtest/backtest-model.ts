@@ -442,7 +442,7 @@ export interface NearestLevel {
   above: boolean;
 }
 
-/** Ближайший к цене сигнала уровень (в шкале continuous); `null` без уровней. */
+/** Ближайший к цене сигнала уровень; `null` без уровней. */
 export function nearestLevel(
   levels: LevelInfo[],
   price: number | null | undefined,
