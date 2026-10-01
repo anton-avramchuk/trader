@@ -8,7 +8,7 @@
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from statistics import mean, median
 
 from trader_engine.analogues.search import percentile
@@ -122,4 +122,32 @@ def forecast_horizon(
         median_mae=median(v[2] for v in usable),
         probabilities=probabilities,
         warnings=warnings,
+    )
+
+
+def _negate(interval: Interval | None) -> Interval | None:
+    return None if interval is None else Interval(-interval.high, -interval.low)
+
+
+def to_price_frame(forecast: HorizonForecast) -> HorizonForecast:
+    """Прогноз «в направлении события» (медвежье) → в ценовой системе (вверх — плюс).
+
+    Доход и квантили меняют знак (квантили зеркалятся), вероятности роста и падения
+    меняются местами, благоприятная экскурсия медвежьего события — это падение цены.
+    """
+    if forecast.mean_ret is None:
+        return forecast
+    q = forecast.quantiles
+    return replace(
+        forecast,
+        mean_ret=-forecast.mean_ret,
+        median_ret=None if forecast.median_ret is None else -forecast.median_ret,
+        ret_ci=_negate(forecast.ret_ci),
+        quantiles={10: -q[90], 25: -q[75], 75: -q[25], 90: -q[10]} if q else {},
+        median_mfe=forecast.median_mae,
+        median_mae=forecast.median_mfe,
+        probabilities=[
+            ThresholdProbability(p.threshold, p.down, p.up, p.down_ci, p.up_ci)
+            for p in forecast.probabilities
+        ],
     )
