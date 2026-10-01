@@ -830,6 +830,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analogues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Исторические аналоги формации
+         * @description Ближайшие по DTW исторические формации к запросу — вхождению паттерна или события уровня (`key`) либо окну последних `window` баров ряда прогона `query_run_id`. Формация сжимается до PIP-точек и нормализуется (ATR или процент); расстояние — DTW с полосой Сакоэ–Чибы. История — вхождения из прогонов `run_id` (состав прогонов задаёт область поиска), только то, что известно на `as_of`; окно запроса и пересекающиеся с ним вхождения исключаются. Ответ: аналоги с исходами, статистика MVP-5 по ним, траектории и перцентили 25/50/75. Результат кэшируется.
+         */
+        get: operations["getAnalogues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -854,6 +874,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnaloguesOut */
+        AnaloguesOut: {
+            query: components["schemas"]["FormationOut"];
+            /**
+             * Occurrence Key
+             * @description Ключ вхождения-запроса, если был
+             */
+            occurrence_key: string | null;
+            /**
+             * As Of
+             * Format: date-time
+             * @description Момент, которым ограничены история и бары
+             */
+            as_of: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /**
+             * Considered
+             * @description Кандидатов до отбора
+             */
+            considered: number;
+            /** Matches */
+            matches: components["schemas"]["MatchOut"][];
+            /** @description Исходы аналогов, статистика MVP-5 */
+            stats: components["schemas"]["StatsOut"];
+            /**
+             * Percentiles
+             * @description Перцентили 25/50/75 траекторий по барам после входа
+             */
+            percentiles: components["schemas"]["PercentileOut"][];
+            /** Trajectory Count */
+            trajectory_count: number;
+            /** Warnings */
+            warnings: string[];
+        };
         /** BucketOut */
         BucketOut: {
             /** Key */
@@ -1408,6 +1466,24 @@ export interface components {
              */
             delimiter: string | null;
         };
+        /** FormationOut */
+        FormationOut: {
+            /** Series Key */
+            series_key: string;
+            /**
+             * Start
+             * Format: date-time
+             * @description Начало первого бара окна
+             */
+            start: string;
+            /**
+             * End
+             * Format: date-time
+             * @description Закрытие последнего бара окна (точка входа)
+             */
+            end: string;
+            shape: components["schemas"]["ShapeOut"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1802,6 +1878,38 @@ export interface components {
             /** Finished At */
             finished_at: string | null;
         };
+        /** MatchOut */
+        MatchOut: {
+            occurrence: components["schemas"]["OccurrenceOut"];
+            formation: components["schemas"]["FormationOut"];
+            /** Distance */
+            distance: number;
+            /**
+             * Normalized Distance
+             * @description Накопленное / длина пути
+             */
+            normalized_distance: number;
+            /**
+             * Similarity
+             * @description 1 / (1 + normalized_distance), (0, 1]
+             */
+            similarity: number;
+            /**
+             * Path
+             * @description Выравнивание точек (запрос, аналог)
+             */
+            path: [
+                number,
+                number
+            ][];
+            /** Outcomes */
+            outcomes: components["schemas"]["HorizonOutcomeOut"][];
+            /**
+             * Trajectory
+             * @description Сдвиг close после входа по барам, в единицах запроса
+             */
+            trajectory: number[] | null;
+        };
         /** OccurrenceDetailOut */
         OccurrenceDetailOut: {
             occurrence: components["schemas"]["OccurrenceOut"];
@@ -1857,6 +1965,13 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        /** PercentileOut */
+        PercentileOut: {
+            /** Q */
+            q: number;
+            /** Values */
+            values: number[];
         };
         /** PresetIn */
         PresetIn: {
@@ -2098,6 +2213,24 @@ export interface components {
             roll_trading_days?: number | null;
             /** Include Weekend Sessions */
             include_weekend_sessions?: boolean | null;
+        };
+        /** ShapeOut */
+        ShapeOut: {
+            /**
+             * Indices
+             * @description Индексы PIP-точек в окне (от 0)
+             */
+            indices: number[];
+            /**
+             * Times
+             * @description Время точек в долях ширины, 0…1
+             */
+            times: number[];
+            /**
+             * Values
+             * @description Цена от первой точки (ATR или %)
+             */
+            values: number[];
         };
         /** StatsOut */
         StatsOut: {
@@ -4329,6 +4462,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OccurrenceDetailOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getAnalogues: {
+        parameters: {
+            query: {
+                /** @description Прогон, чей ряд — запрос */
+                query_run_id: number;
+                /** @description Прогоны истории (по умолчанию — запроса) */
+                run_id?: number[] | null;
+                /** @description Ключ вхождения-запроса; без него — окно */
+                key?: string | null;
+                window?: number;
+                pip_points?: number;
+                normalization?: "atr" | "percent";
+                k?: number;
+                max_distance?: number | null;
+                band?: number;
+                /** @description Горизонты, баров */
+                horizon?: number[] | null;
+                include_candidates?: boolean;
+                as_of?: string | null;
+                seed?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnaloguesOut"];
                 };
             };
             /** @description Не найдено */
