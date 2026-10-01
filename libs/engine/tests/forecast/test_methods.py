@@ -7,13 +7,16 @@ import pytest
 
 from tests.forecast.test_core import observations
 from tests.stats.test_outcomes import START, bar
+from trader_engine.analogues.library import build_candidates, formation_at
+from trader_engine.analogues.search import AnalogueMatch, find_analogues
 from trader_engine.forecast.core import forecast_horizon, to_price_frame
-from trader_engine.forecast.methods import empirical_forecast
+from trader_engine.forecast.methods import empirical_forecast, knn_forecast
 from trader_engine.stats.occurrences import Occurrence, close_index
 from trader_engine.stats.pipeline import Series, SeriesOccurrence
 from trader_engine.stats.regime import Regime
 
 N = 200
+WINDOW = 30
 FAR = START + timedelta(days=3650)
 UP, DOWN = Regime("uptrend", "mid"), Regime("downtrend", "mid")
 
@@ -155,3 +158,44 @@ def test_forecast_does_not_depend_on_bars_after_as_of() -> None:
     assert a.horizons[0] == b.horizons[0]  # горизонт 3 помещается и там, и там
     # горизонт 8 у входа 145 выходит за as_of: на обрезанном ряду он цензурирован
     assert (a.horizons[1].censored, b.horizons[1].censored) == (0, 1)
+
+
+def knn_matches(series: Series, entries: list[int]) -> list[AnalogueMatch]:
+    query = formation_at(series, 190, window=WINDOW)
+    assert query is not None
+    items = [item(series, e) for e in entries]
+    candidates = build_candidates(items, as_of=FAR, window=WINDOW, exclude=query)
+    return find_analogues(query, candidates, k=20, horizons=(4,)).matches
+
+
+def test_knn_uses_raw_direction_and_matches() -> None:
+    series = rising_series()
+    # синусоида вокруг роста, чтобы формации были непустыми и различными
+    matches = knn_matches(series, [60, 90, 120, 150])
+
+    result = knn_forecast(matches, horizons=(4,), min_effective=1)
+
+    [h] = result.horizons
+    assert result.method == "knn" and result.sample == len(matches) > 0
+    assert h.median_ret == pytest.approx(2.0)  # рост цены, сырое направление
+    assert h.probabilities[0].up == 1.0
+
+
+def test_knn_without_matches_warns() -> None:
+    result = knn_forecast([], horizons=(5,))
+
+    assert result.sample == 0 and result.warnings == ["no_matches"]
+    assert result.horizons[0].warnings == ["no_data"]
+
+
+def test_knn_and_empirical_agree_on_the_same_outcomes() -> None:
+    series = rising_series()
+    entries = [60, 90, 120, 150]
+    matches = knn_matches(series, entries)
+    knn = knn_forecast(matches, horizons=(4,), min_effective=1)
+    history = [item(series, e) for e in entries]
+    emp = empirical_forecast(
+        item(series, 190), history, as_of=FAR, horizons=(4,), min_effective=1
+    )
+
+    assert knn.horizons[0].median_ret == emp.horizons[0].median_ret
