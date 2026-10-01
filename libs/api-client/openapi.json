@@ -3574,6 +3574,223 @@
         }
       }
     },
+    "/analogues": {
+      "get": {
+        "tags": [
+          "analogues"
+        ],
+        "summary": "Исторические аналоги формации",
+        "description": "Ближайшие по DTW исторические формации к запросу — вхождению паттерна или события уровня (`key`) либо окну последних `window` баров ряда прогона `query_run_id`. Формация сжимается до PIP-точек и нормализуется (ATR или процент); расстояние — DTW с полосой Сакоэ–Чибы. История — вхождения из прогонов `run_id` (состав прогонов задаёт область поиска), только то, что известно на `as_of`; окно запроса и пересекающиеся с ним вхождения исключаются. Ответ: аналоги с исходами, статистика MVP-5 по ним, траектории и перцентили 25/50/75. Результат кэшируется.",
+        "operationId": "getAnalogues",
+        "parameters": [
+          {
+            "name": "query_run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "Прогон, чей ряд — запрос",
+              "title": "Query Run Id"
+            },
+            "description": "Прогон, чей ряд — запрос"
+          },
+          {
+            "name": "run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Прогоны истории (по умолчанию — запроса)",
+              "title": "Run Id"
+            },
+            "description": "Прогоны истории (по умолчанию — запроса)"
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ключ вхождения-запроса; без него — окно",
+              "title": "Key"
+            },
+            "description": "Ключ вхождения-запроса; без него — окно"
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 10,
+              "default": 60,
+              "title": "Window"
+            }
+          },
+          {
+            "name": "pip_points",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "default": 9,
+              "title": "Pip Points"
+            }
+          },
+          {
+            "name": "normalization",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "atr",
+                "percent"
+              ],
+              "type": "string",
+              "default": "atr",
+              "title": "Normalization"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "K"
+            }
+          },
+          {
+            "name": "max_distance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Distance"
+            }
+          },
+          {
+            "name": "band",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 1,
+              "minimum": 0,
+              "default": 0.2,
+              "title": "Band"
+            }
+          },
+          {
+            "name": "horizon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Горизонты, баров",
+              "title": "Horizon"
+            },
+            "description": "Горизонты, баров"
+          },
+          {
+            "name": "include_candidates",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Candidates"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          },
+          {
+            "name": "seed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Seed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnaloguesOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Не найдено"
+          },
+          "422": {
+            "description": "Неверные параметры"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3600,6 +3817,88 @@
   },
   "components": {
     "schemas": {
+      "AnaloguesOut": {
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/FormationOut"
+          },
+          "occurrence_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence Key",
+            "description": "Ключ вхождения-запроса, если был"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of",
+            "description": "Момент, которым ограничены история и бары"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "atr",
+              "pct"
+            ],
+            "title": "Unit"
+          },
+          "considered": {
+            "type": "integer",
+            "title": "Considered",
+            "description": "Кандидатов до отбора"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/MatchOut"
+            },
+            "type": "array",
+            "title": "Matches"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/StatsOut",
+            "description": "Исходы аналогов, статистика MVP-5"
+          },
+          "percentiles": {
+            "items": {
+              "$ref": "#/components/schemas/PercentileOut"
+            },
+            "type": "array",
+            "title": "Percentiles",
+            "description": "Перцентили 25/50/75 траекторий по барам после входа"
+          },
+          "trajectory_count": {
+            "type": "integer",
+            "title": "Trajectory Count"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "occurrence_key",
+          "as_of",
+          "unit",
+          "considered",
+          "matches",
+          "stats",
+          "percentiles",
+          "trajectory_count",
+          "warnings"
+        ],
+        "title": "AnaloguesOut"
+      },
       "BucketOut": {
         "properties": {
           "key": {
@@ -4984,6 +5283,37 @@
         ],
         "title": "FilePreview"
       },
+      "FormationOut": {
+        "properties": {
+          "series_key": {
+            "type": "string",
+            "title": "Series Key"
+          },
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start",
+            "description": "Начало первого бара окна"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End",
+            "description": "Закрытие последнего бара окна (точка входа)"
+          },
+          "shape": {
+            "$ref": "#/components/schemas/ShapeOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "series_key",
+          "start",
+          "end",
+          "shape"
+        ],
+        "title": "FormationOut"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -6004,6 +6334,82 @@
         "title": "JobOut",
         "description": "Состояние задачи. Статусы: queued, running, succeeded, failed, cancelled."
       },
+      "MatchOut": {
+        "properties": {
+          "occurrence": {
+            "$ref": "#/components/schemas/OccurrenceOut"
+          },
+          "formation": {
+            "$ref": "#/components/schemas/FormationOut"
+          },
+          "distance": {
+            "type": "number",
+            "title": "Distance"
+          },
+          "normalized_distance": {
+            "type": "number",
+            "title": "Normalized Distance",
+            "description": "Накопленное / длина пути"
+          },
+          "similarity": {
+            "type": "number",
+            "title": "Similarity",
+            "description": "1 / (1 + normalized_distance), (0, 1]"
+          },
+          "path": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Path",
+            "description": "Выравнивание точек (запрос, аналог)"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonOutcomeOut"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          },
+          "trajectory": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory",
+            "description": "Сдвиг close после входа по барам, в единицах запроса"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurrence",
+          "formation",
+          "distance",
+          "normalized_distance",
+          "similarity",
+          "path",
+          "outcomes",
+          "trajectory"
+        ],
+        "title": "MatchOut"
+      },
       "OccurrenceDetailOut": {
         "properties": {
           "occurrence": {
@@ -6159,6 +6565,27 @@
           "meta"
         ],
         "title": "OccurrenceOut"
+      },
+      "PercentileOut": {
+        "properties": {
+          "q": {
+            "type": "integer",
+            "title": "Q"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "q",
+          "values"
+        ],
+        "title": "PercentileOut"
       },
       "PresetIn": {
         "properties": {
@@ -6775,6 +7202,41 @@
         },
         "type": "object",
         "title": "RootPatch"
+      },
+      "ShapeOut": {
+        "properties": {
+          "indices": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Indices",
+            "description": "Индексы PIP-точек в окне (от 0)"
+          },
+          "times": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Times",
+            "description": "Время точек в долях ширины, 0…1"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Values",
+            "description": "Цена от первой точки (ATR или %)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indices",
+          "times",
+          "values"
+        ],
+        "title": "ShapeOut"
       },
       "StatsOut": {
         "properties": {
