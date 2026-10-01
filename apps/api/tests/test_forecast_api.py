@@ -124,3 +124,48 @@ def test_errors(client: TestClient, run_id: int) -> None:
     assert status(query_run_id=run_id, threshold=list(range(1, 9))) == 422
     assert status(query_run_id=run_id, horizon=[0]) == 422
     assert status(query_run_id=run_id, window=5) == 422
+
+
+def calibration(client: TestClient, run_id: int, **params: Any) -> dict[str, Any]:
+    response = client.get(
+        "/forecast/calibration",
+        params={
+            "run_id": run_id,
+            "group": "double_bottom",
+            "direction": "bullish",
+            "horizon": 2,
+            "min_history": 5,
+        }
+        | params,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_calibration_report(client: TestClient, run_id: int) -> None:
+    body = calibration(client, run_id)
+
+    assert body["occurrences"] >= 5 and body["tested"] >= 1
+    assert {(r["threshold"], r["side"]) for r in body["rows"]} == {
+        (k, side) for k in (0.5, 1.0, 2.0) for side in ("up", "down")
+    }
+    row = body["rows"][0]
+    assert 0 <= row["brier"] <= 1 and len(row["bins"]) == 5
+    assert sum(b["n"] for b in row["bins"]) == row["n"]
+
+
+def test_calibration_empty_selection_and_errors(
+    client: TestClient, run_id: int
+) -> None:
+    empty = calibration(client, run_id, group="double_top")
+    assert empty["occurrences"] == 0 and empty["warnings"] == ["not_enough_history"]
+
+    def status(**params: Any) -> int:
+        return client.get("/forecast/calibration", params=params).status_code
+
+    base = {"run_id": run_id, "group": "double_bottom", "direction": "bullish"}
+    assert status(**(base | {"run_id": 999999})) == 404
+    assert status(group="x", direction="bullish") == 422  # нет run_id
+    assert status(**(base | {"horizon": 0})) == 422
+    assert status(**(base | {"direction": "sideways"})) == 422
+    assert status(**(base | {"threshold": [0]})) == 422

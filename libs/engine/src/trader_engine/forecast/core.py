@@ -75,8 +75,12 @@ def forecast_horizon(
     thresholds: Sequence[float] = THRESHOLDS,
     seed: int = 0,
     min_effective: int = MIN_EFFECTIVE,
+    ci: bool = True,
 ) -> HorizonForecast:
-    """Прогноз на горизонте по набору исходов; мало данных — только предупреждения."""
+    """Прогноз на горизонте по набору исходов; мало данных — только предупреждения.
+
+    ``ci=False`` пропускает bootstrap (дорогой): для массовых расчётов калибровки.
+    """
     ready = [o for o in observations if not o.outcome.censored]
     censored = len(observations) - len(ready)
     kept = deoverlap([(o.key, o.index) for o in ready], horizon)
@@ -102,8 +106,8 @@ def forecast_horizon(
             k,
             sum(r >= k for r in returns) / len(returns),
             sum(r <= -k for r in returns) / len(returns),
-            bootstrap_ci([float(r >= k) for r in returns], seed=seed),
-            bootstrap_ci([float(r <= -k) for r in returns], seed=seed),
+            bootstrap_ci([float(r >= k) for r in returns], seed=seed) if ci else None,
+            bootstrap_ci([float(r <= -k) for r in returns], seed=seed) if ci else None,
         )
         for k in thresholds
     ]
@@ -116,7 +120,7 @@ def forecast_horizon(
         missing,
         mean_ret=mean(returns),
         median_ret=median(returns),
-        ret_ci=bootstrap_ci(returns, seed=seed),
+        ret_ci=bootstrap_ci(returns, seed=seed) if ci else None,
         quantiles={q: percentile(returns, q) for q in QUANTILES},
         median_mfe=median(v[1] for v in usable),
         median_mae=median(v[2] for v in usable),

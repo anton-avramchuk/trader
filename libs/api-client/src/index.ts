@@ -50,4 +50,5 @@ export type Analogues = components['schemas']['AnaloguesOut'];
 export type Forecast = components['schemas']['ForecastOut'];
 export type MethodForecast = components['schemas']['MethodOut'];
 export type HorizonForecast = components['schemas']['HorizonForecastOut'];
+export type ForecastCalibration = components['schemas']['CalibrationOut'];
 export type AnalogueMatch = components['schemas']['MatchOut'];
