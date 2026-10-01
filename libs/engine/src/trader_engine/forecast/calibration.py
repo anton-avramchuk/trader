@@ -139,7 +139,6 @@ def calibrate(
             entry,
             occurrence.direction,
             series.atrs[entry],
-            roll_times=series.roll_times,
             horizons=(horizon,),
         )[0]
         if outcome.censored or entry + horizon >= len(series.bars):

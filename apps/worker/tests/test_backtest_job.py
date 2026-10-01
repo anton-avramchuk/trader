@@ -9,11 +9,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from trader_db import create_experiment, list_log, list_trades, list_windows
 from trader_db.models import BacktestExperiment, BacktestTestLock
 
-from tests.test_aggregate_job import loaded_contract
-from tests.test_iss_jobs import run_job
+from tests.conftest import seed_candles
+from tests.helpers import run_job
 from trader_worker.runner import Worker
 
-FROM, TO = date(2020, 1, 1), date(2030, 1, 1)
+FROM, TO = date(2026, 1, 1), date(2026, 12, 31)
 LEVEL_STRATEGY: dict[str, Any] = {
     "source": "level_touch",
     "stop": {"kind": "atr", "value": 1.0},
@@ -22,14 +22,16 @@ LEVEL_STRATEGY: dict[str, Any] = {
 }
 
 
-def new_experiment(factory: sessionmaker[Session], root_id: int, **kw: Any) -> int:
+def new_experiment(
+    factory: sessionmaker[Session], instrument_id: int, **kw: Any
+) -> int:
     params: dict[str, Any] = {
         "kind": "single",
-        "root_id": root_id,
+        "instrument_id": instrument_id,
         "timeframe_code": "15m",
         "family": "level_touch",
         "strategy": LEVEL_STRATEGY,
-        "costs": {"slippage_ticks": 1, "commission_per_contract": 5},
+        "costs": {"slippage_ticks": 1, "commission_per_unit": 5},
         "period_from": FROM,
         "period_to": TO,
         "params_hash": "h",
@@ -40,9 +42,10 @@ def new_experiment(factory: sessionmaker[Session], root_id: int, **kw: Any) -> i
         return experiment.id
 
 
-def prepared(worker: Worker, factory: sessionmaker[Session], root_id: int) -> None:
-    loaded_contract(worker, factory, root_id)
-    run_job(worker, factory, "aggregate.contract", contract_id=1)
+def prepared(
+    worker: Worker, factory: sessionmaker[Session], instrument_id: int
+) -> None:
+    seed_candles(factory, instrument_id, "15m", 800)
 
 
 def load_experiment(
@@ -53,13 +56,13 @@ def load_experiment(
 
 
 def test_single_run_stores_result_trades_and_versions(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    prepared(iss_worker, session_factory, root_id)
-    experiment_id = new_experiment(session_factory, root_id)
+    prepared(loader_worker, session_factory, instrument_id)
+    experiment_id = new_experiment(session_factory, instrument_id)
 
     job = run_job(
-        iss_worker, session_factory, "backtest.run", experiment_id=experiment_id
+        loader_worker, session_factory, "backtest.run", experiment_id=experiment_id
     )
 
     assert job.status == "succeeded", job.error
@@ -67,9 +70,9 @@ def test_single_run_stores_result_trades_and_versions(
     stored = load_experiment(session_factory, experiment_id)
     assert stored.status == "succeeded" and stored.finished_at is not None
     assert stored.result is not None
-    assert set(stored.result["metrics"]) == {"ticks", "points", "rub"}
+    assert set(stored.result["metrics"]) == {"ticks", "points", "money"}
     assert stored.result["bars"] > 2 and stored.result["runs_for_series"] == 1
-    assert set(stored.result["equity"]) == {"ticks", "rub"}
+    assert set(stored.result["equity"]) == {"ticks", "money"}
     assert stored.versions["template"] == 1
     assert stored.versions["engines"]["levels"]["algorithm_version"] >= 1
     assert stored.versions["engines"]["levels"]["run_id"] > 0
@@ -82,14 +85,14 @@ def test_single_run_stores_result_trades_and_versions(
 
 
 def test_repeated_run_is_reproducible(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    prepared(iss_worker, session_factory, root_id)
-    first = new_experiment(session_factory, root_id)
-    second = new_experiment(session_factory, root_id)
+    prepared(loader_worker, session_factory, instrument_id)
+    first = new_experiment(session_factory, instrument_id)
+    second = new_experiment(session_factory, instrument_id)
 
-    run_job(iss_worker, session_factory, "backtest.run", experiment_id=first)
-    run_job(iss_worker, session_factory, "backtest.run", experiment_id=second)
+    run_job(loader_worker, session_factory, "backtest.run", experiment_id=first)
+    run_job(loader_worker, session_factory, "backtest.run", experiment_id=second)
 
     a, b = (load_experiment(session_factory, i) for i in (first, second))
     assert a.result is not None and b.result is not None
@@ -100,9 +103,9 @@ def test_repeated_run_is_reproducible(
 
 
 def test_walk_forward_with_test_opens_once(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    prepared(iss_worker, session_factory, root_id)
+    prepared(loader_worker, session_factory, instrument_id)
     wf = {
         "train_days": 1,
         "valid_days": 1,
@@ -113,22 +116,24 @@ def test_walk_forward_with_test_opens_once(
     common: dict[str, Any] = {
         "kind": "walk_forward",
         "walk_forward": wf,
-        "period_to": date(2026, 9, 29),
-        "test_from": date(2026, 9, 30),
-        "test_to": date(2026, 10, 30),
+        "period_to": date(2026, 1, 9),
+        "test_from": date(2026, 1, 10),
+        "test_to": date(2026, 1, 14),
     }
-    first = new_experiment(session_factory, root_id, **common)
-    second = new_experiment(session_factory, root_id, **common)
+    first = new_experiment(session_factory, instrument_id, **common)
+    second = new_experiment(session_factory, instrument_id, **common)
 
-    job = run_job(iss_worker, session_factory, "backtest.run", experiment_id=first)
-    again = run_job(iss_worker, session_factory, "backtest.run", experiment_id=second)
+    job = run_job(loader_worker, session_factory, "backtest.run", experiment_id=first)
+    again = run_job(
+        loader_worker, session_factory, "backtest.run", experiment_id=second
+    )
 
     assert job.status == "succeeded", job.error
     result = load_experiment(session_factory, first).result
     assert result is not None and result["walk_forward"]["windows"] is not None
     with session_factory() as session:
         windows = list_windows(session, first)
-        events = [e.event for e in list_log(session, root_id=root_id)]
+        events = [e.event for e in list_log(session, instrument_id=instrument_id)]
         locks = session.scalars(select(BacktestTestLock)).all()
     assert len(windows) == len(result["walk_forward"]["windows"])
     test = result["test"]
@@ -159,54 +164,58 @@ def test_walk_forward_with_test_opens_once(
             {
                 "kind": "walk_forward",
                 "walk_forward": {"train_days": 2, "valid_days": 1, "step_days": 1},
-                "test_from": date(2020, 6, 1),
-                "test_to": date(2020, 7, 1),
-                "period_to": date(2020, 12, 31),
+                "test_from": date(2026, 1, 6),
+                "test_to": date(2026, 1, 7),
+                "period_to": date(2026, 1, 12),
             },
             "после периода",
         ),
     ],
 )
 def test_bad_experiment_fails_with_a_readable_error(
-    iss_worker: Worker,
+    loader_worker: Worker,
     session_factory: sessionmaker[Session],
-    root_id: int,
+    instrument_id: int,
     kw: dict[str, Any],
     message: str,
 ) -> None:
-    prepared(iss_worker, session_factory, root_id)
-    experiment_id = new_experiment(session_factory, root_id, **kw)
+    prepared(loader_worker, session_factory, instrument_id)
+    experiment_id = new_experiment(session_factory, instrument_id, **kw)
 
     job = run_job(
-        iss_worker, session_factory, "backtest.run", experiment_id=experiment_id
+        loader_worker, session_factory, "backtest.run", experiment_id=experiment_id
     )
 
     assert job.status == "failed" and message in (job.error or "")
     stored = load_experiment(session_factory, experiment_id)
     assert stored.status == "failed" and message in (stored.error or "")
     with session_factory() as session:
-        assert "failed" in [e.event for e in list_log(session, root_id=root_id)]
+        assert "failed" in [
+            e.event for e in list_log(session, instrument_id=instrument_id)
+        ]
 
 
 def test_missing_experiment_or_parameter(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    missing = run_job(iss_worker, session_factory, "backtest.run", experiment_id=999999)
-    no_param = run_job(iss_worker, session_factory, "backtest.run")
+    missing = run_job(
+        loader_worker, session_factory, "backtest.run", experiment_id=999999
+    )
+    no_param = run_job(loader_worker, session_factory, "backtest.run")
 
     assert missing.status == "failed" and "не найден" in (missing.error or "")
     assert no_param.status == "failed" and "experiment_id" in (no_param.error or "")
 
 
 def test_finished_experiment_is_not_rerun(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    prepared(iss_worker, session_factory, root_id)
-    experiment_id = new_experiment(session_factory, root_id)
-    run_job(iss_worker, session_factory, "backtest.run", experiment_id=experiment_id)
+    prepared(loader_worker, session_factory, instrument_id)
+    experiment_id = new_experiment(session_factory, instrument_id)
+    run_job(loader_worker, session_factory, "backtest.run", experiment_id=experiment_id)
 
     again = run_job(
-        iss_worker, session_factory, "backtest.run", experiment_id=experiment_id
+        loader_worker, session_factory, "backtest.run", experiment_id=experiment_id
     )
 
     assert again.status == "failed" and "уже завершён" in (again.error or "")

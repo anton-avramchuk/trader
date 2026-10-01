@@ -30,9 +30,9 @@ def engine_registered() -> Iterator[None]:
 def run_id(seed: Seed, database_url: str) -> Iterator[int]:
     engine = make_engine(database_url)
     with Session(engine) as session:
-        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.a, "15m")]
+        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.id, "15m")]
         outcome = advance_run(
-            session, Patterns.name, {}, bars, "15m", contract_id=seed.a
+            session, Patterns.name, {}, bars, "15m", instrument_id=seed.id
         )
         session.commit()
     engine.dispose()

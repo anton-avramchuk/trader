@@ -1,9 +1,14 @@
 """REST профилей графика (нужен TRADER_DATABASE_URL)."""
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+from trader_db import create_instrument, make_engine
+from trader_db.models import Instrument
 
 CONFIG = {
     "chart_timeframe": "15m",
@@ -11,16 +16,27 @@ CONFIG = {
         {"name": "ema", "params": {"period": 200}, "source_timeframe": "1h"},
         {"name": "rsi", "params": {"period": 14}, "source_timeframe": "15m"},
     ],
-    "layers": {"volume": True, "rolls": True},
+    "layers": {"volume": True, "levels": True},
     "style": {"theme": "dark"},
 }
 
 
-def make_root(client: TestClient, code: str = "NG") -> int:
-    return client.post(
-        "/roots",
-        json={"code": code, "name": code, "quote_currency": "USD", "tick_size": "0.01"},
-    ).json()["id"]
+def make_instrument(database_url: str, ticker: str = "NG") -> int:
+    engine = make_engine(database_url)
+    with Session(engine) as session:
+        instrument = create_instrument(
+            session,
+            ticker=ticker,
+            name=ticker,
+            currency="RUB",
+            tick_size=Decimal("0.01"),
+            timezone="Europe/Moscow",
+            source="test",
+        )
+        session.commit()
+        instrument_id = instrument.id
+    engine.dispose()
+    return instrument_id
 
 
 def create(client: TestClient, name: str = "Основной", **extra: Any) -> dict[str, Any]:
@@ -35,7 +51,7 @@ class TestCrud:
     def test_create_get_roundtrips_the_config(self, client: TestClient) -> None:
         created = create(client)
 
-        assert created["root_id"] is None and created["last_used_at"] is None
+        assert created["instrument_id"] is None and created["last_used_at"] is None
         assert created["config"] == CONFIG | {"chart_timeframe": "15m"}
         assert client.get(f"/chart-profiles/{created['id']}").json() == created
 
@@ -76,16 +92,25 @@ class TestCrud:
 
 
 class TestScopes:
-    def test_names_are_unique_within_a_scope_only(self, client: TestClient) -> None:
-        ng, br = make_root(client, "NG"), make_root(client, "BR")
+    def test_names_are_unique_within_a_scope_only(
+        self, client: TestClient, database_url: str
+    ) -> None:
+        ng, br = (
+            make_instrument(database_url, "NG"),
+            make_instrument(database_url, "BR"),
+        )
         create(client, "Основной")
 
         same_global = client.post("/chart-profiles", json={"name": "Основной"})
-        in_ng = client.post("/chart-profiles", json={"name": "Основной", "root_id": ng})
-        in_ng_again = client.post(
-            "/chart-profiles", json={"name": "Основной", "root_id": ng}
+        in_ng = client.post(
+            "/chart-profiles", json={"name": "Основной", "instrument_id": ng}
         )
-        in_br = client.post("/chart-profiles", json={"name": "Основной", "root_id": br})
+        in_ng_again = client.post(
+            "/chart-profiles", json={"name": "Основной", "instrument_id": ng}
+        )
+        in_br = client.post(
+            "/chart-profiles", json={"name": "Основной", "instrument_id": br}
+        )
 
         assert same_global.status_code == 409
         assert in_ng.status_code == 201 and in_br.status_code == 201
@@ -99,18 +124,21 @@ class TestScopes:
 
         assert response.status_code == 409
 
-    def test_listing_by_root_shows_global_and_own_profiles(
-        self, client: TestClient
+    def test_listing_by_instrument_shows_global_and_own_profiles(
+        self, client: TestClient, database_url: str
     ) -> None:
-        ng, br = make_root(client, "NG"), make_root(client, "BR")
+        ng, br = (
+            make_instrument(database_url, "NG"),
+            make_instrument(database_url, "BR"),
+        )
         create(client, "Глобальный")
-        create(client, "Только NG", root_id=ng)
-        create(client, "Только BR", root_id=br)
+        create(client, "Только NG", instrument_id=ng)
+        create(client, "Только BR", instrument_id=br)
 
         names = lambda root: sorted(  # noqa: E731
             p["name"]
             for p in client.get(
-                "/chart-profiles", params={"root_id": root} if root else {}
+                "/chart-profiles", params={"instrument_id": root} if root else {}
             ).json()
         )
 
@@ -118,19 +146,24 @@ class TestScopes:
         assert names(br) == ["Глобальный", "Только BR"]
         assert names(None) == ["Глобальный", "Только BR", "Только NG"]
 
-    def test_unknown_root_is_404_and_deleting_a_root_drops_its_profiles(
-        self, client: TestClient
+    def test_unknown_instrument_is_404_and_deleting_it_drops_its_profiles(
+        self, client: TestClient, database_url: str
     ) -> None:
         assert (
             client.post(
-                "/chart-profiles", json={"name": "x", "root_id": 999}
+                "/chart-profiles", json={"name": "x", "instrument_id": 999}
             ).status_code
             == 404
         )
-        root = make_root(client)
-        create(client, "Свой", root_id=root)
+        instrument = make_instrument(database_url)
+        create(client, "Свой", instrument_id=instrument)
 
-        assert client.delete(f"/roots/{root}").status_code == 204
+        engine = make_engine(database_url)
+        with Session(engine) as session:
+            session.execute(delete(Instrument).where(Instrument.id == instrument))
+            session.commit()
+        engine.dispose()
+
         assert client.get("/chart-profiles").json() == []
 
 

@@ -2,7 +2,7 @@
 
 Запуск — ``POST /backtests``: эксперимент создаётся сразу (все входы хранятся в нём),
 в очередь ставится задача ``backtest.run`` (ход — ``/jobs/{id}`` и WebSocket).
-Test-период связки (root, TF, семейство) открывается один раз; разблокировка —
+Test-период связки (инструмент, TF, семейство) открывается один раз; разблокировка —
 только явная (``POST /backtest-locks/unlock``) с причиной, она пишется в журнал.
 """
 
@@ -28,11 +28,11 @@ from trader_db.models import (
     BacktestTestLock,
     BacktestTrade,
     BacktestWindow,
-    Root,
+    Instrument,
 )
-from trader_engine.aggregation import TIMEFRAMES
 from trader_engine.backtest.strategy import ExitRule, StrategySpec
 from trader_engine.backtest.walk_forward import OVERRIDES, WalkForwardConfig
+from trader_engine.timeframes import TIMEFRAMES
 
 from trader_api.deps import DbSession
 
@@ -93,8 +93,8 @@ class StrategyIn(BaseModel):
 class CostsIn(BaseModel):
     half_spread_ticks: float = Field(default=0.0, ge=0, description="Тики на сторону")
     slippage_ticks: float = Field(default=0.0, ge=0, description="Тики на сторону")
-    commission_per_contract: float = Field(
-        default=0.0, ge=0, description="₽ за контракт на сторону"
+    commission_per_unit: float = Field(
+        default=0.0, ge=0, description="Комиссия за единицу количества на сторону"
     )
 
 
@@ -111,12 +111,12 @@ class WalkForwardIn(BaseModel):
 
 
 class BacktestCreate(BaseModel):
-    root_id: int
+    instrument_id: int
     timeframe: str
     kind: Literal["single", "walk_forward"] = "single"
     strategy: StrategyIn
     costs: CostsIn = Field(default_factory=CostsIn)
-    contracts: int = Field(default=1, ge=1, le=1000)
+    quantity: int = Field(default=1, ge=1, le=1_000_000)
     period_from: date
     period_to: date
     walk_forward: WalkForwardIn | None = None
@@ -148,12 +148,12 @@ class BacktestOut(Orm):
     id: int
     kind: str
     status: str = Field(description="queued, running, succeeded, failed")
-    root_id: int
+    instrument_id: int
     timeframe_code: str
     family: str
     strategy: dict[str, Any]
     costs: dict[str, Any]
-    contracts: int
+    quantity: int
     period_from: date
     period_to: date
     test_from: date | None
@@ -176,25 +176,26 @@ class TradeOut(Orm):
     side: str
     ref: str | None
     signal_price: float | None = Field(
-        description="Close сигнального бара в шкале continuous (для уровней)"
+        description="Close сигнального бара (для связи с уровнями)"
     )
-    contracts: int
+    quantity: int
     entry_time: datetime
     exit_time: datetime
+    entry_price: float
+    exit_price: float
     reason: str
-    legs: list[dict[str, Any]]
     gross_ticks: float
     cost_ticks: float
     mfe_ticks: float
     mae_ticks: float
     gross_points: float
     net_points: float
-    commission_rub: float
-    gross_rub: float | None
-    net_rub: float | None
-    step_price_estimated: bool
+    commission: float
+    gross_money: float | None = Field(
+        description="Только если у инструмента есть tick_value"
+    )
+    net_money: float | None
     ambiguous_bar: bool
-    rolled: bool
 
 
 class WindowOut(Orm):
@@ -213,7 +214,7 @@ class LogOut(Orm):
     id: int
     created_at: datetime
     event: str
-    root_id: int | None
+    instrument_id: int | None
     timeframe_code: str | None
     family: str | None
     experiment_id: int | None
@@ -226,7 +227,7 @@ class LogOut(Orm):
 
 class LockOut(Orm):
     id: int
-    root_id: int
+    instrument_id: int
     timeframe_code: str
     family: str
     test_from: date
@@ -236,7 +237,7 @@ class LockOut(Orm):
 
 
 class UnlockIn(BaseModel):
-    root_id: int
+    instrument_id: int
     timeframe: str
     family: str
     note: str = Field(min_length=5, description="Причина — попадает в журнал")
@@ -290,12 +291,12 @@ def _validate(body: BacktestCreate) -> tuple[StrategySpec, dict[str, Any]]:
 def _params_hash(body: BacktestCreate, spec: StrategySpec) -> str:
     canonical = json.dumps(
         {
-            "root_id": body.root_id,
+            "instrument_id": body.instrument_id,
             "timeframe": body.timeframe,
             "kind": body.kind,
             "strategy": spec.to_dict(),
             "costs": body.costs.model_dump(),
-            "contracts": body.contracts,
+            "quantity": body.quantity,
             "period": [body.period_from.isoformat(), body.period_to.isoformat()],
             "walk_forward": body.walk_forward.model_dump()
             if body.walk_forward
@@ -320,7 +321,7 @@ def _params_hash(body: BacktestCreate, spec: StrategySpec) -> str:
         "Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). "
         "`single` — один период; `walk_forward` — скользящие окна train→validation, "
         "параметры из сетки выбираются только по train, опциональный финальный test "
-        "после `period_to` открывается один раз на связку (root, TF, семейство): "
+        "после `period_to` открывается один раз на связку (инструмент, TF, семейство): "
         "повторный запуск получит `test.status = rejected`. Каждый запуск пишется в "
         "журнал `/backtest-log`."
     ),
@@ -330,20 +331,20 @@ async def create_backtest(
     body: BacktestCreate, session: DbSession
 ) -> BacktestExperiment:
     spec, walk_forward = _validate(body)
-    if await session.get(Root, body.root_id) is None:
-        raise HTTPException(404, f"Root {body.root_id} не найден")
+    if await session.get(Instrument, body.instrument_id) is None:
+        raise HTTPException(404, f"Инструмент {body.instrument_id} не найден")
     params_hash = _params_hash(body, spec)
 
     def create(sync: Any) -> int:
         experiment = create_experiment(
             sync,
             kind=body.kind,
-            root_id=body.root_id,
+            instrument_id=body.instrument_id,
             timeframe_code=body.timeframe,
             family=body.strategy.source,
             strategy=spec.to_dict(),
             costs=body.costs.model_dump(),
-            contracts=body.contracts,
+            quantity=body.quantity,
             period_from=body.period_from,
             period_to=body.period_to,
             test_from=body.test_from,
@@ -370,18 +371,18 @@ async def create_backtest(
     response_model=list[BacktestOut],
     operation_id="listBacktests",
     summary="Список бэктестов",
-    description="Новые первыми; фильтры по root, таймфрейму и статусу.",
+    description="Новые первыми; фильтры по инструменту, таймфрейму и статусу.",
 )
 async def list_backtests(
     session: DbSession,
-    root_id: int | None = None,
+    instrument_id: int | None = None,
     timeframe: str | None = None,
     status: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[BacktestExperiment]:
     query = select(BacktestExperiment)
-    if root_id is not None:
-        query = query.where(BacktestExperiment.root_id == root_id)
+    if instrument_id is not None:
+        query = query.where(BacktestExperiment.instrument_id == instrument_id)
     if timeframe is not None:
         query = query.where(BacktestExperiment.timeframe_code == timeframe)
     if status is not None:
@@ -404,7 +405,7 @@ async def list_backtests(
 )
 async def backtest_log(
     session: DbSession,
-    root_id: int | None = None,
+    instrument_id: int | None = None,
     timeframe: str | None = None,
     family: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
@@ -412,7 +413,7 @@ async def backtest_log(
     return await session.run_sync(
         lambda sync: list_log(
             sync,
-            root_id=root_id,
+            instrument_id=instrument_id,
             timeframe_code=timeframe,
             family=family,
             limit=limit,
@@ -425,14 +426,14 @@ async def backtest_log(
     response_model=list[LockOut],
     operation_id="listBacktestLocks",
     summary="Заблокированные test-периоды",
-    description="Test-периоды связок (root, TF, семейство), уже открытые один раз.",
+    description="Test-периоды связок (инструмент, TF, семейство), открытые один раз.",
 )
 async def backtest_locks(
-    session: DbSession, root_id: int | None = None
+    session: DbSession, instrument_id: int | None = None
 ) -> list[BacktestTestLock]:
     query = select(BacktestTestLock).order_by(BacktestTestLock.id)
-    if root_id is not None:
-        query = query.where(BacktestTestLock.root_id == root_id)
+    if instrument_id is not None:
+        query = query.where(BacktestTestLock.instrument_id == instrument_id)
     return list(await session.scalars(query))
 
 
@@ -442,7 +443,7 @@ async def backtest_locks(
     operation_id="unlockBacktestTest",
     summary="Разблокировать test-период",
     description=(
-        "Явная разблокировка связки (root, TF, семейство) — test можно открыть "
+        "Явная разблокировка связки (инструмент, TF, семейство) — test можно открыть "
         "ещё раз. Причина обязательна и пишется в журнал; разблокировка видна "
         "рядом с результатами как повторное использование test."
     ),
@@ -451,7 +452,7 @@ async def unlock(body: UnlockIn, session: DbSession) -> UnlockOut:
     done = await session.run_sync(
         lambda sync: unlock_test_period(
             sync,
-            root_id=body.root_id,
+            instrument_id=body.instrument_id,
             timeframe_code=body.timeframe,
             family=body.family,
             note=body.note,
@@ -467,7 +468,7 @@ async def unlock(body: UnlockIn, session: DbSession) -> UnlockOut:
     operation_id="getBacktest",
     summary="Результат бэктеста",
     description=(
-        "Состояние, версии и результат: метрики в тиках, пунктах и ₽, equity, "
+        "Состояние, версии и результат: метрики в тиках, пунктах и деньгах, equity, "
         "walk-forward и test."
     ),
     responses=NOT_FOUND,

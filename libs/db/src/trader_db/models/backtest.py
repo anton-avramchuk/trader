@@ -26,11 +26,11 @@ from trader_db.models.base import Base, CreatedAtMixin
 
 
 class BacktestExperiment(CreatedAtMixin, Base):
-    """Запуск бэктеста по continuous-серии root: все входы и версии для воспроизведения.
+    """Запуск бэктеста по свечам инструмента: все входы и версии для воспроизведения.
 
-    ``family`` — семейство стратегии (источник сигнала): по связке (root, TF, family)
-    блокируется test-период. ``versions`` фиксирует версии движков и шаблона,
-    ``dataset_version_id`` — версию данных; при тех же версиях сделки совпадают.
+    ``family`` — семейство стратегии (источник сигнала): test-период блокируется по
+    связке (инструмент, TF, family). ``versions`` фиксирует версии движков и шаблона и
+    сведения о свечах (число и границы); при тех же версиях сделки совпадают.
     """
 
     __tablename__ = "backtest_experiments"
@@ -40,28 +40,27 @@ class BacktestExperiment(CreatedAtMixin, Base):
             "status IN ('queued', 'running', 'succeeded', 'failed')", name="status"
         ),
         CheckConstraint("period_from <= period_to", name="period_order"),
-        Index("ix_backtest_experiments_series", "root_id", "timeframe_code"),
+        Index("ix_backtest_experiments_series", "instrument_id", "timeframe_code"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     kind: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), server_default="queued")
-    root_id: Mapped[int] = mapped_column(ForeignKey("roots.id", ondelete="CASCADE"))
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE")
+    )
     timeframe_code: Mapped[str] = mapped_column(
         ForeignKey("timeframes.code", ondelete="RESTRICT")
     )
     family: Mapped[str] = mapped_column(String(64))
     strategy: Mapped[dict[str, Any]] = mapped_column(JSONB)
     costs: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    contracts: Mapped[int] = mapped_column(Integer, server_default="1")
+    quantity: Mapped[int] = mapped_column(Integer, server_default="1")
     period_from: Mapped[dt.date] = mapped_column(Date)
     period_to: Mapped[dt.date] = mapped_column(Date)
     test_from: Mapped[dt.date | None] = mapped_column(Date)
     test_to: Mapped[dt.date | None] = mapped_column(Date)
     walk_forward: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    dataset_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("dataset_versions.id", ondelete="RESTRICT")
-    )
     versions: Mapped[dict[str, Any]] = mapped_column(
         JSONB, server_default=text("'{}'::jsonb")
     )
@@ -121,23 +120,22 @@ class BacktestTrade(Base):
     side: Mapped[str] = mapped_column(String(8))
     ref: Mapped[str | None] = mapped_column(String(128))
     signal_price: Mapped[float | None] = mapped_column(Float)
-    contracts: Mapped[int] = mapped_column(Integer)
+    quantity: Mapped[int] = mapped_column(Integer)
     entry_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     exit_time: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    entry_price: Mapped[float] = mapped_column(Float)
+    exit_price: Mapped[float] = mapped_column(Float)
     reason: Mapped[str] = mapped_column(String(16))
-    legs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     gross_ticks: Mapped[float] = mapped_column(Float)
     cost_ticks: Mapped[float] = mapped_column(Float)
     mfe_ticks: Mapped[float] = mapped_column(Float)
     mae_ticks: Mapped[float] = mapped_column(Float)
     gross_points: Mapped[float] = mapped_column(Float)
     net_points: Mapped[float] = mapped_column(Float)
-    commission_rub: Mapped[float] = mapped_column(Float)
-    gross_rub: Mapped[float | None] = mapped_column(Float)
-    net_rub: Mapped[float | None] = mapped_column(Float)
-    step_price_estimated: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    commission: Mapped[float] = mapped_column(Float)
+    gross_money: Mapped[float | None] = mapped_column(Float)
+    net_money: Mapped[float | None] = mapped_column(Float)
     ambiguous_bar: Mapped[bool] = mapped_column(Boolean, server_default="false")
-    rolled: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
 
 class BacktestLog(CreatedAtMixin, Base):
@@ -150,13 +148,13 @@ class BacktestLog(CreatedAtMixin, Base):
             "'unlock', 'failed')",
             name="event",
         ),
-        Index("ix_backtest_log_series", "root_id", "timeframe_code", "family"),
+        Index("ix_backtest_log_series", "instrument_id", "timeframe_code", "family"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     event: Mapped[str] = mapped_column(String(16))
-    root_id: Mapped[int | None] = mapped_column(
-        ForeignKey("roots.id", ondelete="SET NULL")
+    instrument_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instruments.id", ondelete="SET NULL")
     )
     timeframe_code: Mapped[str | None] = mapped_column(
         ForeignKey("timeframes.code", ondelete="RESTRICT")
@@ -173,16 +171,18 @@ class BacktestLog(CreatedAtMixin, Base):
 
 
 class BacktestTestLock(CreatedAtMixin, Base):
-    """Test-период связки (root, TF, family): открыт один раз, затем заблокирован."""
+    """Test-период связки (инструмент, TF, family): открыт раз, затем заблокирован."""
 
     __tablename__ = "backtest_test_locks"
     __table_args__ = (
-        UniqueConstraint("root_id", "timeframe_code", "family"),
+        UniqueConstraint("instrument_id", "timeframe_code", "family"),
         CheckConstraint("test_from <= test_to", name="test_order"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    root_id: Mapped[int] = mapped_column(ForeignKey("roots.id", ondelete="CASCADE"))
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("instruments.id", ondelete="CASCADE")
+    )
     timeframe_code: Mapped[str] = mapped_column(
         ForeignKey("timeframes.code", ondelete="RESTRICT")
     )

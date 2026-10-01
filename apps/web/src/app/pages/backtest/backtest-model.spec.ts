@@ -19,7 +19,7 @@ import {
 
 const form = (overrides: Partial<BacktestForm> = {}): BacktestForm => ({
   ...defaultForm(),
-  rootId: 1,
+  instrumentId: 1,
   periodFrom: '2026-01-01',
   periodTo: '2026-06-30',
   ...overrides,
@@ -49,15 +49,15 @@ describe('buildRequest', () => {
         maxBars: 12,
         qualityMin: 60,
         slippage: 1,
-        contracts: 2,
+        quantity: 2,
       }),
     );
 
     expect(request).toMatchObject({
-      root_id: 1,
+      instrument_id: 1,
       timeframe: '1h',
       kind: 'single',
-      contracts: 2,
+      quantity: 2,
       period_from: '2026-01-01',
       costs: { slippage_ticks: 1, half_spread_ticks: 0 },
       strategy: {
@@ -97,7 +97,7 @@ describe('buildRequest', () => {
   });
 
   it.each([
-    [{ rootId: null }, 'инструмент'],
+    [{ instrumentId: null }, 'инструмент'],
     [{ periodFrom: '' }, 'период'],
     [{ periodFrom: '2026-07-01' }, 'позже'],
     [{ kind: 'walk_forward' as const, grid: 'nope: 1' }, 'сетки'],
@@ -138,7 +138,6 @@ describe('метрики', () => {
     average_mfe: 5,
     average_mae: -2,
     ambiguous_share: 0.0833,
-    rolled_share: 0,
     warnings: ['small_sample', 'x'],
   };
 
@@ -189,34 +188,31 @@ describe('сделки и окна', () => {
       gross_ticks: 5,
       cost_ticks: 2,
       net_points: 0.03,
-      net_rub: 60,
+      net_money: 60,
       ambiguous_bar: false,
-      rolled: false,
-      step_price_estimated: false,
       ...overrides,
     }) as BacktestTrade;
 
   it('единицы и флаги', () => {
-    const t = trade({
-      ambiguous_bar: true,
-      rolled: true,
-      step_price_estimated: true,
-    });
+    const t = trade({ ambiguous_bar: true });
 
     expect(tradeRows([t], 'ticks')[0]).toMatchObject({
       side: 'лонг',
       reason: 'цель',
       entry: '2026-09-28 10:15',
       net: '3.00',
-      flags: 'неоднозначный бар, ролл',
+      flags: 'неоднозначный бар',
     });
     expect(tradeRows([t], 'points')[0]?.net).toBe('0.03');
-    expect(tradeRows([t], 'rub')[0]).toMatchObject({
+    expect(tradeRows([t], 'money')[0]).toMatchObject({
       net: '60.00',
-      flags: 'неоднозначный бар, ролл, step_price оценён',
+      flags: 'неоднозначный бар',
     });
     expect(
-      tradeRows([trade({ net_rub: null, side: 'short', ref: null })], 'rub')[0],
+      tradeRows(
+        [trade({ net_money: null, side: 'short', ref: null })],
+        'money',
+      )[0],
     ).toMatchObject({ net: '—', side: 'шорт', ref: '—' });
   });
 

@@ -1,6 +1,6 @@
-"""Задача ``verify.indicators``: online replay индикаторов на диапазоне баров (#32).
+"""Задача ``verify.indicators``: online replay индикаторов на свечах инструмента.
 
-Параметры: ``root_id`` (continuous) или ``contract_id``; ``timeframe``;
+Параметры: ``instrument_id``; ``timeframe``;
 необязательные ``start`` / ``end`` (ISO-время, ``[start, end)``), ``indicators`` —
 список ``{"name", "params"}`` (по умолчанию все зарегистрированные с параметрами по
 умолчанию) и ``max_positions`` (сколько позиций перепроверять «с нуля», по
@@ -12,15 +12,15 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
-from trader_db import read_bars, read_continuous
-from trader_db.models import Contract, Root
-from trader_engine.aggregation import TIMEFRAMES
+from trader_db import read_bars
+from trader_db.models import Instrument
 from trader_engine.indicators import (
     BarInput,
     available,
     create,
     verify_online,
 )
+from trader_engine.timeframes import TIMEFRAMES
 
 from trader_worker.handlers import Handler, JobContext, JobFailed
 
@@ -45,9 +45,9 @@ def _time_param(params: dict[str, Any], key: str) -> datetime | None:
 def make_verify_handler(session_factory: sessionmaker[Session]) -> Handler:
     def handler(context: JobContext) -> dict[str, Any]:
         params = context.params
-        root_id, contract_id = params.get("root_id"), params.get("contract_id")
-        if (root_id is None) == (contract_id is None):
-            raise JobFailed("Укажите ровно один из: root_id или contract_id")
+        instrument_id = params.get("instrument_id")
+        if not isinstance(instrument_id, int):
+            raise JobFailed("Укажите instrument_id")
         timeframe = params.get("timeframe")
         if timeframe not in TIMEFRAMES:
             known = ", ".join(TIMEFRAMES)
@@ -68,34 +68,17 @@ def make_verify_handler(session_factory: sessionmaker[Session]) -> Handler:
             raise JobFailed(str(error.args[0] if error.args else error)) from error
 
         with session_factory() as session:
-            if root_id is not None:
-                if session.get(Root, root_id) is None:
-                    raise JobFailed(f"Root {root_id} не найден")
-                bars = [
-                    item.bar
-                    for item in read_continuous(
-                        session,
-                        int(root_id),
-                        timeframe,
-                        start,
-                        end,
-                        limit=MAX_BARS,
-                        tail=True,
-                    )
-                ]
-            else:
-                assert contract_id is not None
-                if session.get(Contract, contract_id) is None:
-                    raise JobFailed(f"Контракт {contract_id} не найден")
-                bars = read_bars(
-                    session,
-                    int(contract_id),
-                    timeframe,
-                    start,
-                    end,
-                    limit=MAX_BARS,
-                    tail=True,
-                )
+            if session.get(Instrument, instrument_id) is None:
+                raise JobFailed(f"Инструмент {instrument_id} не найден")
+            bars = read_bars(
+                session,
+                instrument_id,
+                timeframe,
+                start,
+                end,
+                limit=MAX_BARS,
+                tail=True,
+            )
         inputs = [BarInput.from_bar(bar) for bar in bars]
         if not inputs:
             raise JobFailed("В выбранном диапазоне нет баров")

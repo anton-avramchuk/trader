@@ -11,8 +11,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from trader_engine.aggregation import TIMEFRAMES
 from trader_engine.indicators.base import BarInput, IndicatorSeries
+from trader_engine.timeframes import TIMEFRAMES
 
 _RANK = {code: rank for rank, code in enumerate(TIMEFRAMES)}
 

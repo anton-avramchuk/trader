@@ -6,7 +6,7 @@ import { TuiButton } from '@taiga-ui/core';
 import type { BacktestLock } from '@trader/api-client';
 import {
   equityChart,
-  legRows,
+  fillRow,
   metricRows,
   metricWarnings,
   type MetricUnit,
@@ -31,7 +31,6 @@ const REASON_TITLES: Record<string, string> = {
   stop: 'стоп',
   target: 'цель',
   time: 'время',
-  roll: 'ролл',
   end_of_data: 'конец данных',
 };
 
@@ -44,7 +43,7 @@ const REASON_TITLES: Record<string, string> = {
     <h1>Backtest</h1>
     <p class="note">
       Стратегия «вход по событию»: сигнал на закрытии бара, вход по open
-      следующего бара в реальном фронтовом контракте. Метрики — не единственный
+      следующего бара по ценам свечей инструмента. Метрики — не единственный
       критерий оценки: смотрите число сделок и предупреждения.
     </p>
 
@@ -52,12 +51,12 @@ const REASON_TITLES: Record<string, string> = {
       <label>
         Инструмент
         <select
-          name="root"
-          [ngModel]="form().rootId"
-          (ngModelChange)="store.patch({ rootId: $event })"
+          name="instrument"
+          [ngModel]="form().instrumentId"
+          (ngModelChange)="store.patch({ instrumentId: $event })"
         >
-          @for (r of store.roots(); track r.id) {
-            <option [ngValue]="r.id">{{ r.code }}</option>
+          @for (r of store.instruments(); track r.id) {
+            <option [ngValue]="r.id">{{ r.ticker }}</option>
           }
         </select>
       </label>
@@ -199,13 +198,13 @@ const REASON_TITLES: Record<string, string> = {
       </label>
 
       <label>
-        Контрактов
+        Количество
         <input
-          name="contracts"
+          name="quantity"
           type="number"
           min="1"
-          [ngModel]="form().contracts"
-          (ngModelChange)="store.patch({ contracts: $event })"
+          [ngModel]="form().quantity"
+          (ngModelChange)="store.patch({ quantity: $event })"
         />
       </label>
       <label>
@@ -229,7 +228,7 @@ const REASON_TITLES: Record<string, string> = {
         />
       </label>
       <label>
-        Комиссия, ₽/контракт
+        Комиссия за единицу
         <input
           name="commission"
           type="number"
@@ -581,7 +580,7 @@ const REASON_TITLES: Record<string, string> = {
               <table>
                 <thead>
                   <tr>
-                    <th>Контракт</th>
+                    <th>Кол-во</th>
                     <th>Вход</th>
                     <th>Выход</th>
                     <th>Цена входа</th>
@@ -591,9 +590,9 @@ const REASON_TITLES: Record<string, string> = {
                   </tr>
                 </thead>
                 <tbody>
-                  @for (leg of legs(); track $index) {
+                  @for (leg of legs(); track leg.entry) {
                     <tr>
-                      <td>{{ leg.contract }}</td>
+                      <td>{{ leg.quantity }}</td>
                       <td>{{ leg.entry }}</td>
                       <td>{{ leg.exit }}</td>
                       <td>{{ leg.entryPrice }}</td>
@@ -877,7 +876,7 @@ export class Backtest implements OnInit {
   );
   protected readonly equity = computed(() =>
     equityChart(
-      this.data().equity[this.store.unit() === 'rub' ? 'rub' : 'ticks'],
+      this.data().equity[this.store.unit() === 'money' ? 'money' : 'ticks'],
     ),
   );
   protected readonly windows = computed(() => windowRows(this.store.windows()));
@@ -892,7 +891,7 @@ export class Backtest implements OnInit {
   );
   protected readonly legs = computed(() => {
     const trade = this.store.drill()?.trade;
-    return trade ? legRows(trade) : [];
+    return trade ? [fillRow(trade)] : [];
   });
   protected readonly link = computed(() => {
     const backtest = this.store.current();

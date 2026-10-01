@@ -1,241 +1,142 @@
 import { TestBed } from '@angular/core/testing';
 import type { Job } from '@trader/api-client';
-import { Observable, of, throwError } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { API_CLIENT } from '../../core/api/api';
 import { JobsService } from '../../core/jobs/jobs';
 import { InstrumentsStore } from './instruments.store';
 
-const ROOT = {
-  id: 1,
-  code: 'NG',
-  name: 'Gas',
-  exchange: 'MOEX',
-  quote_currency: 'USD',
-  tick_size: '0.00100000',
-  calendar_code: 'moex_forts',
-  roll_trading_days: 5,
-  include_weekend_sessions: false,
-  created_at: '2026-09-30T00:00:00Z',
-};
-
-const CONTRACT = {
-  id: 10,
-  root_id: 1,
-  expiration_date: '2026-12-29',
-  last_trade_date: null,
-  secid: 'NGZ6',
-  provider_ids: [],
-};
-
 const ok = <T>(data: T) => Promise.resolve({ data, response: { status: 200 } });
+const fail = (status: number, detail: string) =>
+  Promise.resolve({ error: { detail }, response: { status } });
 
-function job(overrides: Partial<Job> = {}): Job {
-  return {
-    id: 7,
-    type: 'iss.sync_root',
-    params: {},
-    status: 'succeeded',
-    progress: 1,
-    progress_message: null,
-    result: null,
-    error: null,
-    attempts: 1,
-    max_attempts: 3,
-    cancel_requested: false,
-    created_at: '2026-09-30T00:00:00Z',
-    started_at: null,
-    finished_at: null,
-    ...overrides,
-  };
-}
+const SBER = { id: 1, ticker: 'SBER', coverage: [] };
+const GAZP = { id: 2, ticker: 'GAZP', coverage: [] };
+const job = (status: string, extra: Partial<Job> = {}) =>
+  ({ id: 7, type: 'candles.load', status, ...extra }) as Job;
 
-function setup(watch: (id: number) => Observable<Job> = () => of(job())) {
+function setup(watch = of(job('succeeded'))) {
   const client = {
     GET: vi.fn((path: string) => {
-      if (path === '/roots') {
-        return ok([ROOT]);
+      switch (path) {
+        case '/instruments':
+          return ok([GAZP, SBER]);
+        case '/instruments/{instrument_id}/loads':
+          return ok([{ id: 1, timeframe_code: '1h', rows: 5 }]);
+        case '/importer/tickers':
+          return ok([
+            { ticker: 'SBER', added: true },
+            { ticker: 'LKOH', added: false },
+          ]);
+        default:
+          return ok(undefined);
       }
-      if (path === '/roots/{root_id}/contracts') {
-        return ok([CONTRACT]);
-      }
-      if (path === '/calendars/{code}') {
-        return ok({ code: 'moex_forts', name: 'FORTS', rule_list: [] });
-      }
-      return ok({ holidays: ['2026-01-01'], special_days: [] });
     }),
-    POST: vi.fn(),
-    PATCH: vi.fn(() => ok(ROOT)),
-    DELETE: vi.fn(() => Promise.resolve({ response: { status: 204 } })),
+    POST: vi.fn((path: string) =>
+      path === '/instruments'
+        ? ok(SBER)
+        : ok(job('queued', { params: { instrument_id: 1 } })),
+    ),
+    PATCH: vi.fn(() => ok(SBER)),
   };
   TestBed.configureTestingModule({
     providers: [
       InstrumentsStore,
       { provide: API_CLIENT, useValue: client },
-      { provide: JobsService, useValue: { watch: vi.fn(watch) } },
+      { provide: JobsService, useValue: { watch: () => watch } },
     ],
   });
   return { client, store: TestBed.inject(InstrumentsStore) };
 }
 
 describe('InstrumentsStore', () => {
-  it('загружает root, выбирает первый и подтягивает контракты и календарь', async () => {
+  it('загружает инструменты и выбирает первый с журналом загрузок', async () => {
     const { store } = setup();
 
-    await store.loadRoots();
+    await store.load();
 
-    expect(store.selected()?.code).toBe('NG');
-    expect(store.contracts()).toHaveLength(1);
-    expect(store.calendar()?.name).toBe('FORTS');
-    expect(store.calendarDays()?.holidays).toEqual(['2026-01-01']);
+    expect(store.instruments().map((i) => i.ticker)).toEqual(['GAZP', 'SBER']);
+    expect(store.selected()?.ticker).toBe('GAZP');
+    expect(store.loads()).toHaveLength(1);
   });
 
-  it('создание root перезагружает список и выбирает новый', async () => {
-    const { client, store } = setup();
-    client.POST.mockImplementation(() => ok({ ...ROOT, id: 2, code: 'BR' }));
-    await store.loadRoots();
+  it('тикеры importer: добавленные не предлагаются', async () => {
+    const { store } = setup();
 
-    const created = await store.createRoot({
-      code: 'BR',
-      name: 'Brent',
-      quote_currency: 'USD',
-      tick_size: '0.01',
+    await store.loadTickers();
+
+    expect(store.available().map((t) => t.ticker)).toEqual(['LKOH']);
+    expect(store.tickersError()).toBeNull();
+  });
+
+  it('недоступный importer — сообщение, а не исключение', async () => {
+    const { client, store } = setup();
+    client.GET.mockImplementation(
+      () => fail(502, 'Importer недоступен') as never,
+    );
+
+    await store.loadTickers();
+
+    expect(store.tickers()).toEqual([]);
+    expect(store.tickersError()).toContain('Importer');
+  });
+
+  it('добавление создаёт инструмент и выбирает его', async () => {
+    const { client, store } = setup();
+
+    await store.add('SBER', 2.5);
+
+    expect(client.POST).toHaveBeenCalledWith('/instruments', {
+      body: { ticker: 'SBER', tick_value: 2.5 },
     });
-
-    expect(created.code).toBe('BR');
-    expect(client.POST).toHaveBeenCalledWith('/roots', expect.anything());
-    expect(store.selectedId()).toBe(2);
+    expect(store.selectedId()).toBe(1);
   });
 
-  it('удаление root снимает выбор', async () => {
+  it('стоимость тика меняется PATCH-ом', async () => {
     const { client, store } = setup();
-    await store.loadRoots();
-    client.GET.mockImplementation((path: string) =>
-      path === '/roots' ? ok([]) : ok([]),
-    );
 
-    await store.deleteRoot(1);
+    await store.setTickValue(1, null);
 
-    expect(client.DELETE).toHaveBeenCalled();
-    expect(store.selected()).toBeNull();
-    expect(store.contracts()).toEqual([]);
+    expect(client.PATCH).toHaveBeenCalledWith('/instruments/{instrument_id}', {
+      params: { path: { instrument_id: 1 } },
+      body: { tick_value: null },
+    });
   });
 
-  it('обновление шага цены ставит задачу, ждёт её и перечитывает контракты', async () => {
-    const { client, store } = setup(() => of(job({ type: 'iss.step_prices' })));
-    client.POST.mockImplementation(() =>
-      ok(job({ type: 'iss.step_prices', status: 'queued' })),
-    );
-    await store.loadRoots();
-    const before = client.GET.mock.calls.filter(
-      ([path]) => path === '/roots/{root_id}/contracts',
-    ).length;
+  it('загрузка свечей ставит задачу, ждёт конца и обновляет покрытие', async () => {
+    const { client, store } = setup();
+    await store.load();
 
-    const finished = await store.refreshStepPrices(10);
+    await store.loadCandles(1, { from: '2026-01-01', to: '2026-02-01' }, [
+      '1h',
+      '1d',
+    ]);
 
-    const [path] = client.POST.mock.calls[0] as unknown as [string];
-    expect(path).toBe('/contracts/{contract_id}/step-prices/refresh');
-    expect(finished.status).toBe('succeeded');
-    expect(store.stepJob()?.status).toBe('succeeded');
-    expect(
-      client.GET.mock.calls.filter(([p]) => p === '/roots/{root_id}/contracts'),
-    ).toHaveLength(before + 1);
-  });
-
-  describe('контракты ISS', () => {
-    const found = [
-      { secid: 'NGZ6', expiration_date: '2026-12-29', last_trade_date: null },
+    expect(client.POST).toHaveBeenCalledWith(
+      '/instruments/{instrument_id}/load',
       {
-        secid: 'NGF7',
-        expiration_date: '2027-01-27',
-        last_trade_date: '2027-01-27',
+        params: { path: { instrument_id: 1 } },
+        body: {
+          period_from: '2026-01-01',
+          period_to: '2026-02-01',
+          timeframes: ['1h', '1d'],
+        },
       },
-    ];
+    );
+    expect(store.loadJob()?.status).toBe('succeeded');
+    expect(store.loadRunning()).toBe(false);
+    expect(client.GET).toHaveBeenCalledWith('/instruments');
+  });
 
-    it('отмечает существующие и предвыбирает только новые', async () => {
-      const { client, store } = setup(() =>
-        of(job({ result: { contracts: found } })),
-      );
-      client.POST.mockImplementation(() => ok(job({ status: 'queued' })));
-      await store.loadRoots();
+  it('обрыв связи с задачей помечает загрузку как неуспешную', async () => {
+    const { store } = setup(throwError(() => new Error('Нет связи')) as never);
 
-      await store.requestIssContracts(2026);
+    await store.select(1);
 
-      const [old, fresh] = store.issCandidates();
-      expect(old).toMatchObject({
-        secid: 'NGZ6',
-        exists: true,
-        selected: false,
-      });
-      expect(fresh).toMatchObject({
-        secid: 'NGF7',
-        exists: false,
-        selected: true,
-      });
-      expect(store.issSelectedCount()).toBe(1);
-      expect(store.issError()).toBeNull();
-    });
+    await store.loadCandles(1, { from: '2026-01-01', to: '2026-02-01' }, null);
 
-    it('подтверждение отправляет только отмеченные и обновляет контракты', async () => {
-      const { client, store } = setup(() =>
-        of(job({ result: { contracts: found } })),
-      );
-      client.POST.mockImplementation((path: string) =>
-        path.endsWith('iss-preview')
-          ? ok(job({ status: 'queued' }))
-          : ok({ contracts: [], created: 1, imports_enqueued: [5] }),
-      );
-      await store.loadRoots();
-      await store.requestIssContracts(2026);
-
-      const created = await store.confirmIssContracts(true);
-
-      expect(created).toBe(1);
-      const [, request] = client.POST.mock.calls.at(-1) as unknown as [
-        string,
-        { body: { contracts: { secid: string }[]; enqueue_imports: boolean } },
-      ];
-      expect(request.body.contracts.map((c) => c.secid)).toEqual(['NGF7']);
-      expect(request.body.enqueue_imports).toBe(true);
-      expect(store.issCandidates()).toEqual([]);
-    });
-
-    it('неуспешная задача показывает ошибку и не даёт кандидатов', async () => {
-      const { client, store } = setup(() =>
-        of(job({ status: 'failed', error: 'ISS недоступен: 503' })),
-      );
-      client.POST.mockImplementation(() => ok(job({ status: 'queued' })));
-      await store.loadRoots();
-
-      await store.requestIssContracts(2026);
-
-      expect(store.issError()).toBe('ISS недоступен: 503');
-      expect(store.issCandidates()).toEqual([]);
-    });
-
-    it('обрыв соединения с WebSocket превращается в сообщение', async () => {
-      const { client, store } = setup(() =>
-        throwError(() => new Error('Соединение с сервером прервано')),
-      );
-      client.POST.mockImplementation(() => ok(job({ status: 'queued' })));
-      await store.loadRoots();
-
-      await store.requestIssContracts(2026);
-
-      expect(store.issError()).toContain('прервано');
-    });
-
-    it('выбор можно менять по одному и целиком', async () => {
-      const { client, store } = setup(() =>
-        of(job({ result: { contracts: found } })),
-      );
-      client.POST.mockImplementation(() => ok(job({ status: 'queued' })));
-      await store.loadRoots();
-      await store.requestIssContracts(2026);
-
-      store.setAllCandidates(true);
-      expect(store.issSelectedCount()).toBe(2);
-      store.toggleCandidate('NGZ6', false);
-      expect(store.issSelectedCount()).toBe(1);
+    expect(store.loadJob()).toMatchObject({
+      status: 'failed',
+      error: 'Нет связи',
     });
   });
 });

@@ -36,13 +36,20 @@ class JobCreate(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
-                {"type": "aggregate.contract", "params": {"contract_id": 12}},
                 {
-                    "type": "import.iss",
+                    "type": "candles.load",
                     "params": {
-                        "contract_id": 12,
-                        "from": "2020-11-01",
-                        "till": "2020-11-30",
+                        "instrument_id": 1,
+                        "period_from": "2026-01-01",
+                        "period_to": "2026-02-01",
+                    },
+                },
+                {
+                    "type": "engine.run",
+                    "params": {
+                        "engine": "levels",
+                        "instrument_id": 1,
+                        "timeframe": "1h",
                     },
                 },
             ]
@@ -54,8 +61,8 @@ class JobCreate(BaseModel):
         max_length=64,
         pattern=r"^[a-z0-9_.-]+$",
         description=(
-            "Тип задачи: `import.file`, `iss.sync_root`, `import.iss`, "
-            "`aggregate.contract`, `demo.sleep`. "
+            "Тип задачи: `candles.load`, `engine.run`, `backtest.run`, "
+            "`verify.indicators`, `demo.sleep`. "
             "Неизвестный тип worker завершит ошибкой."
         ),
     )

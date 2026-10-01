@@ -236,7 +236,6 @@ def summarize(
         flags={
             "crosses_session_gap": sum(o.crosses_session_gap for o in outcomes),
             "crosses_weekend": sum(o.crosses_weekend for o in outcomes),
-            "crosses_roll": sum(o.crosses_roll for o in outcomes),
             "ambiguous_bar": sum(o.ambiguous_bar for o in outcomes),
         },
         warnings=warnings,

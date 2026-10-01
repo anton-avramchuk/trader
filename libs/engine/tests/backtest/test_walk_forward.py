@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from trader_engine.backtest.results import StepPriceLookup
 from trader_engine.backtest.simulator import SimBar
 from trader_engine.backtest.strategy import ExitRule, StrategySpec
 from trader_engine.backtest.walk_forward import (
@@ -63,16 +62,11 @@ def make_bars(seed: int = 3, cut: int | None = None) -> list[BarInput]:
     return bars
 
 
-def no_step(contract: int, at: datetime) -> tuple[float, bool] | None:
-    del contract, at
-    return 10.0, False
-
-
 def make_data(bars: list[BarInput] | None = None, every: int = 9) -> BacktestData:
     bars = bars or make_bars()
     series = build_series("S", bars)
     sim = [
-        SimBar(b.timestamp, b.close_time, b.open, b.high, b.low, b.close, 1, 1.0)
+        SimBar(b.timestamp, b.close_time, b.open, b.high, b.low, b.close)
         for b in series.bars
     ]
     items = [
@@ -91,8 +85,7 @@ def make_data(bars: list[BarInput] | None = None, every: int = 9) -> BacktestDat
         )
         for i in range(30, len(series.bars) - 1, every)
     ]
-    lookup: StepPriceLookup = no_step
-    return BacktestData(series, sim, items, 0.01, lookup)
+    return BacktestData(series, sim, items, 0.01, 10.0)
 
 
 SPEC = StrategySpec(stop=ExitRule("atr", 1.5), target=ExitRule("atr", 3.0), max_bars=12)

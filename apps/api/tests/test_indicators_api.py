@@ -2,10 +2,13 @@
 
 import json
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+from trader_db import create_instrument, make_engine
 from trader_engine.indicators import BarInput, create, run
 
 from tests.seeding import Seed, get, iso
@@ -55,13 +58,14 @@ class TestValues:
         body = values(
             client,
             "sma",
-            contract_id=seed.a,
+            instrument_id=seed.id,
             chart_timeframe="15m",
             params=json.dumps({"period": 5}),
         )
 
         expected = run(
-            create("sma", {"period": 5}), candle_bars(client, "15m", contract_id=seed.a)
+            create("sma", {"period": 5}),
+            candle_bars(client, "15m", instrument_id=seed.id),
         ).values["value"]
         got = [p["values"]["value"] for p in body["points"]]
         assert got == expected
@@ -75,7 +79,7 @@ class TestValues:
         body = values(
             client,
             "sma",
-            contract_id=seed.a,
+            instrument_id=seed.id,
             chart_timeframe="15m",
             source_timeframe="1h",
             params=json.dumps({"period": 2}),
@@ -83,7 +87,7 @@ class TestValues:
 
         points = body["points"]
         chart = get(
-            client, "/candles", contract_id=seed.a, timeframe="15m", limit=20000
+            client, "/candles", instrument_id=seed.id, timeframe="15m", limit=20000
         )
         closes = {c["timestamp"]: c["close_time"] for c in chart["candles"]}
         seen_valid = False
@@ -97,12 +101,13 @@ class TestValues:
         assert seen_valid
         # Значения совпадают с расчётом по 1h-барам и держатся ступенькой.
         hourly = run(
-            create("sma", {"period": 2}), candle_bars(client, "1h", contract_id=seed.a)
+            create("sma", {"period": 2}),
+            candle_bars(client, "1h", instrument_id=seed.id),
         ).values["value"]
         by_source = {
             p["source_timestamp"]: p["values"]["value"] for p in points if p["valid"]
         }
-        hourly_bars = candle_bars(client, "1h", contract_id=seed.a)
+        hourly_bars = candle_bars(client, "1h", instrument_id=seed.id)
         for index, bar in enumerate(hourly_bars):
             key = bar.timestamp.isoformat().replace("+00:00", "Z")
             if key in by_source and hourly[index] is not None:
@@ -115,7 +120,7 @@ class TestValues:
             "/indicator-values",
             params={
                 "indicator": "sma",
-                "contract_id": seed.a,
+                "instrument_id": seed.id,
                 "chart_timeframe": "1h",
                 "source_timeframe": "15m",
             },
@@ -137,34 +142,25 @@ class TestValues:
     def test_bad_requests(
         self, client: TestClient, seed: Seed, params: dict[str, Any], status: int
     ) -> None:
-        query = {"contract_id": seed.a, "chart_timeframe": "15m", **params}
+        query = {"instrument_id": seed.id, "chart_timeframe": "15m", **params}
 
         assert client.get("/indicator-values", params=query).status_code == status
 
-    def test_selection_is_required(self, client: TestClient, seed: Seed) -> None:
-        both = client.get(
-            "/indicator-values",
-            params={
-                "indicator": "sma",
-                "chart_timeframe": "15m",
-                "root_id": seed.root_id,
-                "contract_id": seed.a,
-            },
-        )
-
-        assert both.status_code == 422
-        assert (
-            client.get(
-                "/indicator-values",
-                params={"indicator": "sma", "chart_timeframe": "15m"},
-            ).status_code
-            == 422
-        )
-
-    def test_continuous_series_supports_calendar_anchored_vwap(
+    def test_instrument_is_required_and_must_exist(
         self, client: TestClient, seed: Seed
     ) -> None:
-        body = values(client, "vwap", root_id=seed.root_id, chart_timeframe="1h")
+        base = {"indicator": "sma", "chart_timeframe": "15m"}
+
+        assert client.get("/indicator-values", params=base).status_code == 422
+        unknown = client.get(
+            "/indicator-values", params=base | {"instrument_id": 99999}
+        )
+        assert unknown.status_code == 404
+
+    def test_vwap_is_anchored_to_the_trading_day(
+        self, client: TestClient, seed: Seed
+    ) -> None:
+        body = values(client, "vwap", instrument_id=seed.id, chart_timeframe="1h")
 
         assert body["points"] and all(p["valid"] for p in body["points"])
         assert all(p["values"]["value"] > 0 for p in body["points"])
@@ -173,15 +169,15 @@ class TestValues:
         self, client: TestClient, seed: Seed
     ) -> None:
         moment = datetime.fromisoformat(
-            get(client, "/candles", contract_id=seed.a, timeframe="1h")["candles"][10][
-                "close_time"
-            ]
+            get(client, "/candles", instrument_id=seed.id, timeframe="1h")["candles"][
+                10
+            ]["close_time"]
         )
 
         body = values(
             client,
             "ema",
-            contract_id=seed.a,
+            instrument_id=seed.id,
             chart_timeframe="1h",
             params=json.dumps({"period": 3}),
             as_of=iso(moment),
@@ -194,7 +190,7 @@ class TestValues:
     def test_repeat_request_is_served_from_the_cache(
         self, client: TestClient, seed: Seed
     ) -> None:
-        query = {"contract_id": seed.a, "chart_timeframe": "15m"}
+        query = {"instrument_id": seed.id, "chart_timeframe": "15m"}
         values(client, "sma", **query)
 
         values(client, "sma", **query)
@@ -202,17 +198,23 @@ class TestValues:
         stats = client.app.state.indicator_cache.stats  # type: ignore[attr-defined]
         assert stats.misses == 1 and stats.hits >= 1
 
-    def test_no_bars_gives_an_empty_answer(self, client: TestClient) -> None:
-        root = client.post(
-            "/roots",
-            json={
-                "code": "ZZ",
-                "name": "Empty",
-                "quote_currency": "USD",
-                "tick_size": "0.01",
-            },
-        ).json()
+    def test_no_bars_gives_an_empty_answer(
+        self, client: TestClient, database_url: str
+    ) -> None:
+        engine = make_engine(database_url)
+        with Session(engine) as session:
+            empty = create_instrument(
+                session,
+                ticker="ZZ",
+                name="Empty",
+                currency="RUB",
+                tick_size=Decimal("0.01"),
+                timezone="Europe/Moscow",
+                source="test",
+            ).id
+            session.commit()
+        engine.dispose()
 
-        body = values(client, "sma", root_id=root["id"], chart_timeframe="1h")
+        body = values(client, "sma", instrument_id=empty, chart_timeframe="1h")
 
         assert body["points"] == [] and body["source_bar_count"] == 0

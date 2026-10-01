@@ -72,19 +72,21 @@ def bars() -> list[BarInput]:
 
 @pytest.mark.parametrize(("engine", "params"), CONFIGS, ids=[c[0] for c in CONFIGS])
 def test_chunked_runs_equal_a_full_run(
-    session: Session, contract_id: int, engine: str, params: dict[str, Any]
+    session: Session, instrument_id: int, engine: str, params: dict[str, Any]
 ) -> None:
     data = bars()
 
     first = advance_run(
-        session, engine, params, data[:50], "15m", contract_id=contract_id
+        session, engine, params, data[:50], "15m", instrument_id=instrument_id
     )
     second = advance_run(
-        session, engine, params, data[:120], "15m", contract_id=contract_id
+        session, engine, params, data[:120], "15m", instrument_id=instrument_id
     )
-    last = advance_run(session, engine, params, data, "15m", contract_id=contract_id)
+    last = advance_run(
+        session, engine, params, data, "15m", instrument_id=instrument_id
+    )
     fresh = advance_run(
-        session, engine, params, data, "15m", contract_id=contract_id, mode="full"
+        session, engine, params, data, "15m", instrument_id=instrument_id, mode="full"
     )
 
     assert {second.run_id, last.run_id} == {first.run_id}
@@ -96,7 +98,7 @@ def test_chunked_runs_equal_a_full_run(
 
 @pytest.mark.parametrize(("engine", "params"), CONFIGS, ids=[c[0] for c in CONFIGS])
 def test_stored_events_as_of_do_not_depend_on_later_bars(
-    session: Session, contract_id: int, engine: str, params: dict[str, Any]
+    session: Session, instrument_id: int, engine: str, params: dict[str, Any]
 ) -> None:
     data = bars()
     cut = 100
@@ -106,9 +108,11 @@ def test_stored_events_as_of_do_not_depend_on_later_bars(
         *[replace(b, open=1.0, high=500.0, low=0.5, close=250.0) for b in data[cut:]],
     ]
 
-    real = advance_run(session, engine, params, data, "15m", contract_id=contract_id)
+    real = advance_run(
+        session, engine, params, data, "15m", instrument_id=instrument_id
+    )
     changed = advance_run(
-        session, engine, params, other, "15m", contract_id=contract_id
+        session, engine, params, other, "15m", instrument_id=instrument_id
     )
 
     assert real.run_id != changed.run_id  # история изменилась — новый прогон
@@ -127,14 +131,16 @@ STATS_ENGINES = [
 
 
 def stored_statistics(
-    session: Session, contract_id: int, data: list[BarInput], moment: datetime | None
+    session: Session, instrument_id: int, data: list[BarInput], moment: datetime | None
 ) -> Any:
     """Статистика по событиям, прочитанным из БД (прогоны всех движков MVP-3/4)."""
     logs: list[tuple[str, list[Event]]] = []
     for engine, params in CONFIGS:
         if engine not in STATS_ENGINES:
             continue
-        run = advance_run(session, engine, params, data, "15m", contract_id=contract_id)
+        run = advance_run(
+            session, engine, params, data, "15m", instrument_id=instrument_id
+        )
         logs.append((engine, load_events(session, run.run_id, as_of=moment)))
     series = build_series("db:15m", data, as_of=moment, atr_period=5)
     items = collect(series, logs)
@@ -144,10 +150,10 @@ def stored_statistics(
 
 
 def test_statistics_from_stored_events_and_as_of(
-    session: Session, contract_id: int
+    session: Session, instrument_id: int
 ) -> None:
     data = bars()
-    items, full = stored_statistics(session, contract_id, data, None)
+    items, full = stored_statistics(session, instrument_id, data, None)
 
     assert full.matched > 0 and len(items) >= full.matched
     assert all(item.entry_index is not None for item in items)
@@ -158,8 +164,8 @@ def test_statistics_from_stored_events_and_as_of(
         *data[:cut],
         *[replace(b, open=1.0, high=500.0, low=0.5, close=250.0) for b in data[cut:]],
     ]
-    _, early = stored_statistics(session, contract_id, data, moment)
-    _, early_changed = stored_statistics(session, contract_id, other, moment)
+    _, early = stored_statistics(session, instrument_id, data, moment)
+    _, early_changed = stored_statistics(session, instrument_id, other, moment)
 
     assert early == early_changed  # будущее не влияет на статистику в момент as_of
     assert early.matched < full.matched

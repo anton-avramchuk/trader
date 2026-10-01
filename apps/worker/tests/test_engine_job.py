@@ -12,8 +12,8 @@ from trader_db.models import EngineRun
 from trader_engine.events import EventEngine, register, unregister
 from trader_engine.indicators import BarInput
 
-from tests.test_aggregate_job import loaded_contract
-from tests.test_iss_jobs import run_job
+from tests.conftest import seed_candles
+from tests.helpers import run_job
 from trader_worker.runner import Worker
 
 
@@ -51,141 +51,125 @@ def engine_registered() -> Iterator[None]:
     unregister(NewHighs.name)
 
 
-def prepared(iss_worker: Worker, factory: sessionmaker[Session], root_id: int) -> int:
-    contract_id = loaded_contract(iss_worker, factory, root_id)
-    run_job(iss_worker, factory, "aggregate.contract", contract_id=contract_id)
-    return contract_id
+def worker_with_engine(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
+) -> Worker:
+    seed_candles(session_factory, instrument_id, "1h", 60)
+    seed_candles(session_factory, instrument_id, "15m", 120)
+    return loader_worker
 
 
-def test_run_on_contract_then_repeat_is_unchanged(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+def test_run_then_repeat_is_unchanged(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    contract_id = prepared(iss_worker, session_factory, root_id)
+    worker = worker_with_engine(loader_worker, session_factory, instrument_id)
+    common: dict[str, Any] = {
+        "engine": "job_highs",
+        "instrument_id": instrument_id,
+        "timeframe": "1h",
+    }
 
-    first = run_job(
-        iss_worker,
-        session_factory,
-        "engine.run",
-        engine="job_highs",
-        contract_id=contract_id,
-        timeframe="1h",
-    )
-    again = run_job(
-        iss_worker,
-        session_factory,
-        "engine.run",
-        engine="job_highs",
-        contract_id=contract_id,
-        timeframe="1h",
-    )
+    first = run_job(worker, session_factory, "engine.run", **common)
+    again = run_job(worker, session_factory, "engine.run", **common)
 
     assert first.status == "succeeded", first.error
     assert first.result["outcome"] == "created" and first.result["events_written"] > 0
-    assert first.result["bars_new"] == first.result["bars_total"] > 2
+    assert first.result["bars_new"] == first.result["bars_total"] == 60
     assert again.result["outcome"] == "unchanged"
     assert again.result["run_id"] == first.result["run_id"]
     with session_factory() as session:
         events = load_events(session, first.result["run_id"])
         run = session.get(EngineRun, first.result["run_id"])
     assert len(events) == first.result["events_written"]
-    assert run is not None and run.dataset_version_id is not None
+    assert run is not None and run.instrument_id == instrument_id
 
 
-def test_full_mode_and_continuous_series(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+def test_full_mode_and_separate_timeframes(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    contract_id = prepared(iss_worker, session_factory, root_id)
-    common: dict[str, Any] = {"engine": "job_highs", "timeframe": "15m"}
+    worker = worker_with_engine(loader_worker, session_factory, instrument_id)
+    common: dict[str, Any] = {"engine": "job_highs", "instrument_id": instrument_id}
 
-    first = run_job(
-        iss_worker, session_factory, "engine.run", contract_id=contract_id, **common
-    )
+    first = run_job(worker, session_factory, "engine.run", timeframe="15m", **common)
     full = run_job(
-        iss_worker,
-        session_factory,
-        "engine.run",
-        contract_id=contract_id,
-        mode="full",
-        **common,
+        worker, session_factory, "engine.run", timeframe="15m", mode="full", **common
     )
-    continuous = run_job(
-        iss_worker, session_factory, "engine.run", root_id=root_id, **common
-    )
+    other = run_job(worker, session_factory, "engine.run", timeframe="1h", **common)
 
     assert full.result["outcome"] == "created"
     assert full.result["run_id"] != first.result["run_id"]
-    assert continuous.status == "succeeded", continuous.error
+    assert other.status == "succeeded", other.error
     with session_factory() as session:
-        run = session.get(EngineRun, continuous.result["run_id"])
         runs = session.scalar(select(func.count()).select_from(EngineRun))
-    assert run is not None and run.root_id == root_id and run.dataset_version_id is None
     assert runs == 3
+
+
+def test_continuation_after_new_candles(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
+) -> None:
+    seed_candles(session_factory, instrument_id, "15m", 50)
+    common: dict[str, Any] = {
+        "engine": "job_highs",
+        "instrument_id": instrument_id,
+        "timeframe": "15m",
+    }
+    first = run_job(loader_worker, session_factory, "engine.run", **common)
+
+    seed_candles(session_factory, instrument_id, "15m", 80)  # те же 50 + новые 30
+    second = run_job(loader_worker, session_factory, "engine.run", **common)
+
+    assert first.result["bars_total"] == 50
+    assert second.result["outcome"] == "continued"
+    assert (
+        second.result["bars_new"] == 30
+        and second.result["run_id"] == first.result["run_id"]
+    )
 
 
 @pytest.mark.parametrize(
     ("params", "message"),
     [
-        ({"engine": "job_highs", "timeframe": "15m"}, "root_id или contract_id"),
-        (
-            {
-                "engine": "job_highs",
-                "timeframe": "15m",
-                "root_id": 1,
-                "contract_id": 1,
-            },
-            "root_id или contract_id",
-        ),
-        ({"engine": "job_highs", "contract_id": 1, "timeframe": "2h"}, "таймфрейм"),
-        ({"engine": "nope", "contract_id": 1, "timeframe": "15m"}, "nope"),
+        ({"engine": "job_highs", "timeframe": "15m"}, "instrument_id"),
+        ({"engine": "job_highs", "instrument_id": 1, "timeframe": "2h"}, "таймфрейм"),
+        ({"engine": "nope", "instrument_id": 1, "timeframe": "15m"}, "nope"),
         (
             {
                 "engine": "job_highs",
                 "engine_params": {"x": 1},
-                "contract_id": 1,
+                "instrument_id": 1,
                 "timeframe": "15m",
                 "mode": "sometimes",
             },
             "Неизвестный режим",
         ),
         (
-            {"engine": "job_highs", "contract_id": 999_999, "timeframe": "15m"},
+            {"engine": "job_highs", "instrument_id": 999_999, "timeframe": "15m"},
             "не найден",
         ),
-        ({"engine": "job_highs", "root_id": 999_999, "timeframe": "15m"}, "не найден"),
     ],
 )
 def test_bad_input_gives_a_readable_error(
-    iss_worker: Worker,
+    loader_worker: Worker,
     session_factory: sessionmaker[Session],
     params: dict[str, Any],
     message: str,
 ) -> None:
-    job = run_job(iss_worker, session_factory, "engine.run", **params)
+    job = run_job(loader_worker, session_factory, "engine.run", **params)
 
     assert job.status == "failed"
     assert message in (job.error or "")
 
 
-def test_contract_without_bars_is_a_readable_error(
-    iss_worker: Worker, session_factory: sessionmaker[Session], root_id: int
+def test_instrument_without_candles_is_a_readable_error(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
 ) -> None:
-    from tests.test_iss_jobs import contract_id_of
-
-    run_job(
-        iss_worker,
-        session_factory,
-        "iss.sync_root",
-        root_id=root_id,
-        enqueue_imports=False,
-    )
-
     job = run_job(
-        iss_worker,
+        loader_worker,
         session_factory,
         "engine.run",
         engine="job_highs",
-        contract_id=contract_id_of(session_factory, "BRZ6"),
+        instrument_id=instrument_id,
         timeframe="15m",
     )
 
-    assert job.status == "failed" and "Нет баров" in (job.error or "")
+    assert job.status == "failed" and "Нет свечей" in (job.error or "")

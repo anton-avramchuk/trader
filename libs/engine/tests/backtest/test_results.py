@@ -18,34 +18,36 @@ from trader_engine.backtest.results import (
     price_trades,
     records,
 )
-from trader_engine.backtest.simulator import Leg, Trade
+from trader_engine.backtest.simulator import Trade
 
 T0 = datetime(2026, 9, 28, 10, tzinfo=UTC)
 
 
-def leg(contract: int, ticks: float, day: int = 0) -> Leg:
-    at = T0 + timedelta(days=day)
-    return Leg(contract, 1, at, 100.0, 2, at, 100.0 + ticks, "target", ticks)
-
-
 def trade(
-    legs: list[Leg],
+    ticks: float,
     *,
     cost: float = 0.0,
     commission: float = 0.0,
-    contracts: int = 1,
+    quantity: int = 1,
     mfe: float = 0.0,
     mae: float = 0.0,
     ambiguous: bool = False,
+    day: int = 0,
 ) -> Trade:
+    at = T0 + timedelta(days=day)
     return Trade(
         side="long",
         signal_index=0,
         ref=None,
-        contracts=contracts,
-        legs=legs,
-        reason=legs[-1].reason,
-        gross_ticks=sum(x.gross_ticks for x in legs),
+        quantity=quantity,
+        entry_bar=1,
+        entry_time=at,
+        entry_price=100.0,
+        exit_bar=2,
+        exit_time=at,
+        exit_price=100.0 + ticks,
+        reason="target",
+        gross_ticks=ticks,
         cost_ticks=cost,
         mfe_ticks=mfe,
         mae_ticks=mae,
@@ -54,63 +56,42 @@ def trade(
     )
 
 
-def step_10(contract: int, at: datetime) -> tuple[float, bool] | None:
-    del contract, at
-    return 10.0, False
+def test_money_for_a_trade() -> None:
+    t = trade(5.0, cost=2.0, commission=7.0, quantity=2, mfe=6, mae=-1)
 
-
-def test_money_for_a_single_leg_trade() -> None:
-    t = trade([leg(1, 5.0)], cost=2.0, commission=7.0, contracts=2, mfe=6, mae=-1)
-
-    [priced] = price_trades([t], tick_size=0.5, step_price=step_10)
+    [priced] = price_trades([t], tick_size=0.5, tick_value=10.0)
 
     assert priced.gross_points == pytest.approx(5 * 0.5 * 2)
     assert priced.net_points == pytest.approx(3 * 0.5 * 2)
-    assert priced.gross_rub == pytest.approx(5 * 10 * 2)
-    assert priced.net_rub == pytest.approx(3 * 10 * 2 - 7)
-    assert priced.commission_rub == 7 and not priced.step_price_estimated
-    assert priced.rub_per_tick == pytest.approx(20.0)
+    assert priced.gross_money == pytest.approx(5 * 10 * 2)
+    assert priced.net_money == pytest.approx(3 * 10 * 2 - 7)
+    assert priced.commission == 7
+    assert priced.money_per_tick == pytest.approx(20.0)
 
 
-def test_roll_trade_uses_each_legs_step_price_and_splits_costs() -> None:
-    t = trade([leg(1, 4.0), leg(2, 6.0)], cost=4.0, contracts=1)
+def test_without_tick_value_money_is_empty_but_points_known() -> None:
+    [priced] = price_trades([trade(3.0)], tick_size=1.0, tick_value=None)
 
-    def lookup(contract: int, at: datetime) -> tuple[float, bool] | None:
-        del at
-        return (10.0, False) if contract == 1 else (30.0, True)
-
-    [priced] = price_trades([t], tick_size=1.0, step_price=lookup)
-
-    # издержки 4 тика делятся поровну: по 2 на ногу
-    assert priced.gross_rub == pytest.approx(4 * 10 + 6 * 30)
-    assert priced.net_rub == pytest.approx((4 - 2) * 10 + (6 - 2) * 30)
-    assert priced.step_price_estimated
-    assert priced.rub_per_tick == pytest.approx(30.0)
-
-
-def test_missing_step_price_leaves_rub_empty_but_points_known() -> None:
-    [priced] = price_trades(
-        [trade([leg(1, 3.0)])], tick_size=1.0, step_price=lambda c, t: None
-    )
-
-    assert priced.gross_rub is None and priced.net_rub is None
-    assert priced.gross_points == 3.0
-    items, missing = records([priced], "rub")
+    assert priced.gross_money is None and priced.net_money is None
+    assert priced.money_per_tick is None and priced.gross_points == 3.0
+    items, missing = records([priced], "money")
     assert items == [] and missing == 1
     assert len(records([priced], "points")[0]) == 1
 
 
 def test_records_units_scale_mfe_and_mae() -> None:
-    t = trade([leg(1, 5.0)], cost=1.0, commission=4.0, contracts=2, mfe=8, mae=-2)
-    [priced] = price_trades([t], tick_size=0.5, step_price=step_10)
+    t = trade(5.0, cost=1.0, commission=4.0, quantity=2, mfe=8, mae=-2)
+    [priced] = price_trades([t], tick_size=0.5, tick_value=10.0)
 
     [ticks], _ = records([priced], "ticks")
     [points], _ = records([priced], "points")
-    [rub], _ = records([priced], "rub")
+    [money], _ = records([priced], "money")
 
     assert (ticks.net, ticks.mfe, ticks.mae) == (4.0, 8.0, -2.0)
     assert (points.net, points.mfe, points.mae) == pytest.approx((4.0, 8.0, -2.0))
-    assert (rub.net, rub.mfe, rub.mae) == pytest.approx((4 * 10 * 2 - 4, 160.0, -40.0))
+    assert (money.net, money.mfe, money.mae) == pytest.approx(
+        (4 * 10 * 2 - 4, 160.0, -40.0)
+    )
 
 
 def record(
@@ -120,7 +101,6 @@ def record(
     mfe: float = 0.0,
     mae: float = 0.0,
     ambiguous: bool = False,
-    rolled: bool = False,
 ) -> Record:
     return Record(
         date(2026, 9, 28) + timedelta(days=day),
@@ -129,7 +109,6 @@ def record(
         mfe,
         mae,
         ambiguous,
-        rolled,
     )
 
 
@@ -152,21 +131,20 @@ def test_known_metrics() -> None:
     assert m.warnings == ["small_sample"]
 
 
-def test_flat_days_lower_sharpe_and_flags_are_shares() -> None:
+def test_flat_days_lower_sharpe_and_ambiguous_share() -> None:
     items = [
         record(0, 10, ambiguous=True),
-        record(1, 10, rolled=True),
+        record(1, 10),
         record(2, 10),
         record(3, -4),
     ]
     short = [r.day for r in items]
     long_period = [date(2026, 9, 28) + timedelta(days=i) for i in range(40)]
 
-    tight = compute_metrics(items, short, "rub")
-    loose = compute_metrics(items, long_period, "rub")
+    tight = compute_metrics(items, short, "money")
+    loose = compute_metrics(items, long_period, "money")
 
     assert tight.ambiguous_share == pytest.approx(0.25)
-    assert tight.rolled_share == pytest.approx(0.25)
     assert loose.sharpe is not None and tight.sharpe is not None
     assert loose.max_drawdown == tight.max_drawdown  # равны: дни без сделок не влияют
 

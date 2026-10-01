@@ -116,8 +116,7 @@ def _zone_out(zone: Zone, atr: float) -> ZoneOut:
 async def get_level_zones(
     session: DbSession,
     chart_timeframe: Annotated[str, Query(description="15m, 1h, 4h, 1d, 1w")],
-    root_id: int | None = None,
-    contract_id: int | None = None,
+    instrument_id: int,
     source_timeframes: Annotated[
         list[str] | None, Query(description="По умолчанию — chart TF")
     ] = None,
@@ -146,8 +145,7 @@ async def get_level_zones(
 
     atr_page = await _fetch(
         session,
-        root_id=root_id,
-        contract_id=contract_id,
+        instrument_id=instrument_id,
         timeframe=atr_tf,
         start=None,
         end=None,
@@ -170,9 +168,7 @@ async def get_level_zones(
                 EngineRun.params_hash == digest,
                 EngineRun.algorithm_version == type(engine).version,
                 EngineRun.timeframe_code == source,
-                EngineRun.contract_id == contract_id
-                if contract_id is not None
-                else EngineRun.root_id == root_id,
+                EngineRun.instrument_id == instrument_id,
             )
             .order_by(EngineRun.id.desc())
             .limit(1)

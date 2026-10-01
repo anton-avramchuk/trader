@@ -5,9 +5,9 @@ import { IndicatorsStore } from './indicators.store';
 import { LAYERS, profileKey } from './structure';
 import { StructureStore } from './structure.store';
 
-export type ProfileScope = 'global' | 'root';
+export type ProfileScope = 'global' | 'instrument';
 
-/** Профили графика: список для root, применение, сохранение, переименование. */
+/** Профили графика: список для инструмента, применение, сохранение, переименование. */
 @Injectable()
 export class ProfilesStore {
   private readonly api = inject(ApiService);
@@ -18,30 +18,32 @@ export class ProfilesStore {
   readonly selectedId = signal<number | null>(null);
   readonly busy = signal(false);
 
-  private rootId: number | null = null;
+  private instrumentId: number | null = null;
   private autoApplied = false;
 
   readonly selected = computed(
     () => this.profiles().find((p) => p.id === this.selectedId()) ?? null,
   );
 
-  /** Профили root (и глобальные); при первой загрузке применяет последний использованный. */
+  /** Профили инструмента (и глобальные); при первой загрузке применяет последний использованный. */
   async load(
-    rootId: number | null,
+    instrumentId: number | null,
     onTimeframe?: (timeframe: string) => void,
   ): Promise<void> {
-    if (rootId !== this.rootId) {
-      this.rootId = rootId;
+    if (instrumentId !== this.instrumentId) {
+      this.instrumentId = instrumentId;
       this.autoApplied = false;
     }
     this.profiles.set(
       await this.api.call(
         this.api.client.GET('/chart-profiles', {
-          params: { query: rootId === null ? {} : { root_id: rootId } },
+          params: {
+            query: instrumentId === null ? {} : { instrument_id: instrumentId },
+          },
         }),
       ),
     );
-    // Выбранный профиль остаётся, пока он виден для этого root (глобальные видны всегда).
+    // Выбранный профиль остаётся, пока он виден для этого инструмента (глобальные видны всегда).
     if (!this.profiles().some((p) => p.id === this.selectedId())) {
       this.selectedId.set(null);
     }
@@ -126,7 +128,7 @@ export class ProfilesStore {
       this.api.client.POST('/chart-profiles', {
         body: {
           name: name.trim(),
-          root_id: scope === 'root' ? this.rootId : null,
+          instrument_id: scope === 'instrument' ? this.instrumentId : null,
           config: this.currentConfig(chartTimeframe),
         },
       }),
@@ -191,7 +193,10 @@ export class ProfilesStore {
       await this.api.call(
         this.api.client.GET('/chart-profiles', {
           params: {
-            query: this.rootId === null ? {} : { root_id: this.rootId },
+            query:
+              this.instrumentId === null
+                ? {}
+                : { instrument_id: this.instrumentId },
           },
         }),
       ),

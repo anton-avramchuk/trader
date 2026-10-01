@@ -65,16 +65,13 @@ describe('Replay', () => {
           if (path === '/indicators' || path === '/chart-profiles') {
             return ok([]);
           }
-          if (path === '/roots') {
-            return ok([{ id: 1, code: 'NG' }]);
-          }
-          if (path === '/roots/{root_id}/contracts') {
-            return ok([]);
+          if (path === '/instruments') {
+            return ok([{ id: 1, ticker: 'SBER' }]);
           }
           const candles = request?.params.query.tail
             ? [bar(-2), bar(-1)]
             : [bar(0), bar(1), bar(2)];
-          return ok({ candles, rolls: [], truncated: false, next_start: null });
+          return ok({ candles, truncated: false, next_start: null });
         },
       ),
     };
@@ -118,7 +115,7 @@ describe('Replay', () => {
   }
 
   it('ссылка из бэктеста сразу начинает воспроизведение с дня входа', async () => {
-    const fixture = setup({ root: '1', tf: '15m', date: '2026-09-28' });
+    const fixture = setup({ instrument: '1', tf: '15m', date: '2026-09-28' });
 
     fixture.detectChanges();
     await settle(fixture);
@@ -131,7 +128,7 @@ describe('Replay', () => {
   });
 
   it('ссылка с неизвестным инструментом ничего не запускает', async () => {
-    const fixture = setup({ root: '99', tf: '1h', date: '2026-09-28' });
+    const fixture = setup({ instrument: '99', tf: '1h', date: '2026-09-28' });
 
     fixture.detectChanges();
     await settle(fixture);

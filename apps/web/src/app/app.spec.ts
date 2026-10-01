@@ -32,8 +32,6 @@ describe('App', () => {
     for (const title of [
       'Data',
       'Instruments',
-      'Import',
-      'Quality',
       'Chart',
       'Replay',
       'Research',

@@ -10,7 +10,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import type { Candle, Roll } from '@trader/api-client';
+import type { Candle } from '@trader/api-client';
 import {
   CandlestickSeries,
   createChart,
@@ -24,7 +24,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { formatMsk } from '../../core/time/msk';
-import { rollMarkers, toChartData, toChartTime } from './chart-data';
+import { toChartData, toChartTime } from './chart-data';
 import type { ChartIndicator } from './indicators';
 import { EMPTY_OVERLAY, type Overlay } from './structure';
 import { StructurePrimitive } from './structure-primitive';
@@ -56,8 +56,6 @@ const asTime = (value: number) => value as UTCTimestamp;
 })
 export class PriceChart {
   readonly candles = input<Candle[]>([]);
-  readonly rolls = input<Roll[]>([]);
-  readonly labels = input<Record<number, string>>({});
   /** Идентификатор набора данных (инструмент+TF): при смене график начинается заново. */
   readonly datasetKey = input('');
   /** Держать правый край на последнем баре (режим replay). */
@@ -92,18 +90,13 @@ export class PriceChart {
     afterNextRender(() => this.create());
     inject(DestroyRef).onDestroy(() => this.chart?.remove());
     effect(() => {
-      this.render(this.candles(), this.rolls(), this.labels());
+      this.render(this.candles());
     });
     effect(() => {
       this.syncIndicators(this.indicators());
     });
     effect(() => {
-      this.syncOverlay(
-        this.candles(),
-        this.rolls(),
-        this.labels(),
-        this.overlay(),
-      );
+      this.syncOverlay(this.candles(), this.overlay());
     });
   }
 
@@ -161,28 +154,18 @@ export class PriceChart {
         this.pointPicked.emit({ time: param.time as number, price });
       }
     });
-    this.render(this.candles(), this.rolls(), this.labels());
+    this.render(this.candles());
     this.syncIndicators(this.indicators());
-    this.syncOverlay(
-      this.candles(),
-      this.rolls(),
-      this.labels(),
-      this.overlay(),
-    );
+    this.syncOverlay(this.candles(), this.overlay());
   }
 
-  /** Маркеры (роллы + слои структуры) и линии/зоны слоёв; свечи не перерисовываются. */
-  private syncOverlay(
-    candles: Candle[],
-    rolls: Roll[],
-    labels: Record<number, string>,
-    overlay: Overlay,
-  ): void {
+  /** Маркеры и линии/зоны слоёв структуры; свечи не перерисовываются. */
+  private syncOverlay(candles: Candle[], overlay: Overlay): void {
     if (!this.chart) {
       return;
     }
     this.markers?.setMarkers(
-      [...rollMarkers(rolls, candles, labels), ...overlay.markers]
+      [...overlay.markers]
         .sort((a, b) => a.time - b.time)
         .map((m) => ({ ...m, time: asTime(m.time) })),
     );
@@ -252,11 +235,7 @@ export class PriceChart {
     }
   }
 
-  private render(
-    candles: Candle[],
-    rolls: Roll[],
-    labels: Record<number, string>,
-  ): void {
+  private render(candles: Candle[]): void {
     if (!this.chart || !this.candleSeries || !this.volumeSeries) {
       return;
     }
@@ -280,7 +259,7 @@ export class PriceChart {
     this.volumeSeries.setData(
       data.volume.map((p) => ({ ...p, time: asTime(p.time) })),
     );
-    this.syncOverlay(candles, rolls, labels, this.overlay());
+    this.syncOverlay(candles, this.overlay());
     if (visible) {
       this.chart.timeScale().setVisibleRange(visible);
     } else if (this.lastFirstTime === null && first !== null) {

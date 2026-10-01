@@ -17,8 +17,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from trader_db import events_statement, read_bars, read_continuous, to_event
-from trader_db.continuous import load_rolls
+from trader_db import events_statement, read_bars, to_event
 from trader_db.models import EngineRun
 from trader_engine.events import Event
 from trader_engine.indicators import BarInput
@@ -129,7 +128,6 @@ class HorizonOutcomeOut(Orm):
     ambiguous_bar: bool
     crosses_session_gap: bool
     crosses_weekend: bool
-    crosses_roll: bool
 
 
 class OccurrenceDetailOut(Orm):
@@ -148,8 +146,7 @@ def _horizons(values: list[int] | None) -> tuple[int, ...]:
 
 
 def _series_key(run: EngineRun) -> str:
-    scope = f"root:{run.root_id}" if run.root_id else f"contract:{run.contract_id}"
-    return f"{scope}:{run.timeframe_code}"
+    return f"instrument:{run.instrument_id}:{run.timeframe_code}"
 
 
 async def _runs(session: DbSession, run_ids: list[int]) -> list[EngineRun]:
@@ -166,11 +163,10 @@ async def _runs(session: DbSession, run_ids: list[int]) -> list[EngineRun]:
 
 
 class _Loaded:
-    """Данные, прочитанные из БД: бары и роллы рядов и события прогонов."""
+    """Данные, прочитанные из БД: бары рядов и события прогонов."""
 
     def __init__(self) -> None:
         self.bars: dict[str, list[BarInput]] = {}
-        self.rolls: dict[str, list[datetime]] = {}
         self.events: dict[int, list[Event]] = {}
 
 
@@ -179,25 +175,12 @@ def _load(sync: Session, runs: Sequence[EngineRun], as_of: datetime | None) -> _
     for run in runs:
         key = _series_key(run)
         if key not in loaded.bars:
-            if run.root_id is not None:
-                loaded.bars[key] = [
-                    BarInput.from_bar(item.bar)
-                    for item in read_continuous(
-                        sync, run.root_id, run.timeframe_code, as_of=as_of
-                    )
-                ]
-                loaded.rolls[key] = [
-                    roll.rolled_at for roll in load_rolls(sync, run.root_id, as_of)
-                ]
-            else:
-                assert run.contract_id is not None
-                loaded.bars[key] = [
-                    BarInput.from_bar(bar)
-                    for bar in read_bars(
-                        sync, run.contract_id, run.timeframe_code, closed_until=as_of
-                    )
-                ]
-                loaded.rolls[key] = []
+            loaded.bars[key] = [
+                BarInput.from_bar(bar)
+                for bar in read_bars(
+                    sync, run.instrument_id, run.timeframe_code, closed_until=as_of
+                )
+            ]
         rows = sync.scalars(events_statement(run.id, as_of=as_of)).all()
         loaded.events[run.id] = [to_event(row) for row in rows]
     return loaded
@@ -214,9 +197,7 @@ def _items(
     for run in runs:
         key = _series_key(run)
         if key not in series:
-            series[key] = build_series(
-                key, loaded.bars[key], roll_times=loaded.rolls[key], as_of=as_of
-            )
+            series[key] = build_series(key, loaded.bars[key], as_of=as_of)
         items += collect(
             series[key],
             [(run.engine, loaded.events[run.id])],

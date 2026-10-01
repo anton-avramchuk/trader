@@ -21,12 +21,11 @@ def outcome(
     mfe: float = 2.0,
     mae: float = 1.0,
     ambiguous: bool = False,
-    roll: bool = False,
 ) -> HorizonOutcome:
     if censored:
         return HorizonOutcome(
             horizon, True, None, None, None, None, None, None, None, False,
-            False, False, False,
+            False, False,
         )  # fmt: skip
     return HorizonOutcome(
         horizon=horizon,
@@ -41,7 +40,6 @@ def outcome(
         ambiguous_bar=ambiguous,
         crosses_session_gap=False,
         crosses_weekend=False,
-        crosses_roll=roll,
     )
 
 
@@ -182,7 +180,7 @@ class TestSummarize:
         events = [
             obs(0, first_hit="target"),
             obs(10, first_hit="invalidated", ambiguous=True),
-            obs(20, first_hit="target", roll=True),
+            obs(20, first_hit="target"),
             obs(30),
         ]
 
@@ -191,7 +189,6 @@ class TestSummarize:
         assert stats.target_rate == pytest.approx(0.5)
         assert stats.invalidated_rate == pytest.approx(0.25)
         assert stats.flags["ambiguous_bar"] == 1
-        assert stats.flags["crosses_roll"] == 1
 
     def test_edge_against_baseline(self) -> None:
         events = [obs(i * 10, 2.0) for i in range(20)]

@@ -14,13 +14,12 @@ function candle(timestamp: string): Candle {
     low: '1',
     close: '2',
     volume: '3',
-    is_partial: false,
+    trading_day: '2026-09-28',
   };
 }
 
 interface Query {
-  root_id?: number;
-  contract_id?: number;
+  instrument_id?: number;
   timeframe: string;
   end?: string;
   tail?: boolean;
@@ -31,11 +30,11 @@ function setup(pages: Record<string, unknown>[]) {
   const candlePages = [...pages];
   const client = {
     GET: vi.fn((path: string) => {
-      if (path === '/roots') {
-        return ok([{ id: 1, code: 'NG' }]);
-      }
-      if (path === '/roots/{root_id}/contracts') {
-        return ok([{ id: 10, secid: 'NGZ6', expiration_date: '2026-12-29' }]);
+      if (path === '/instruments') {
+        return ok([
+          { id: 1, ticker: 'SBER' },
+          { id: 2, ticker: 'GAZP' },
+        ]);
       }
       return ok(candlePages.shift());
     }),
@@ -56,37 +55,35 @@ function setup(pages: Record<string, unknown>[]) {
 }
 
 describe('ChartStore', () => {
-  it('загружает последние бары continuous выбранного root', async () => {
+  it('загружает последние бары первого инструмента', async () => {
     const { store, queries } = setup([
       {
         candles: [candle('2026-09-28T04:00:00Z')],
-        rolls: [],
         truncated: true,
       },
     ]);
 
-    await store.loadRoots();
+    await store.loadInstruments();
 
     expect(queries()).toEqual([
-      { root_id: 1, timeframe: '1d', limit: 1500, tail: true },
+      { instrument_id: 1, timeframe: '1d', limit: 1500, tail: true },
     ]);
     expect(store.candles()).toHaveLength(1);
     expect(store.hasOlder()).toBe(true);
-    expect(store.labels()).toEqual({ 10: 'NGZ6' });
     expect(store.loading()).toBe(false);
   });
 
-  it('выбор контракта и таймфрейма перезагружает данные', async () => {
-    const empty = { candles: [], rolls: [], truncated: false };
+  it('выбор инструмента и таймфрейма перезагружает данные', async () => {
+    const empty = { candles: [], truncated: false };
     const { store, queries } = setup([empty, empty, empty]);
-    await store.loadRoots();
+    await store.loadInstruments();
 
-    await store.selectTarget({ kind: 'contract', id: 10 });
+    store.selectInstrument(2);
     await store.selectTimeframe('4h');
 
     expect(queries().slice(1)).toEqual([
-      { contract_id: 10, timeframe: '1d', limit: 1500, tail: true },
-      { contract_id: 10, timeframe: '4h', limit: 1500, tail: true },
+      { instrument_id: 2, timeframe: '1d', limit: 1500, tail: true },
+      { instrument_id: 2, timeframe: '4h', limit: 1500, tail: true },
     ]);
   });
 
@@ -94,16 +91,14 @@ describe('ChartStore', () => {
     const { store, queries } = setup([
       {
         candles: [candle('2026-09-29T04:00:00Z')],
-        rolls: [],
         truncated: true,
       },
       {
         candles: [candle('2026-09-28T04:00:00Z')],
-        rolls: [],
         truncated: false,
       },
     ]);
-    await store.loadRoots();
+    await store.loadInstruments();
 
     await store.loadOlder();
     await store.loadOlder(); // старше уже нет — запроса не будет
@@ -126,12 +121,11 @@ describe('ChartStore', () => {
     const stale = new Promise((resolve) => (releaseStale = resolve));
     const fresh = {
       candles: [candle('2026-09-30T04:00:00Z')],
-      rolls: [],
       truncated: false,
     };
     let calls = 0;
     client.GET.mockImplementation(() => (++calls === 1 ? stale : ok(fresh)));
-    store.rootId.set(1);
+    store.instrumentId.set(1);
 
     const first = store.selectTimeframe('1h'); // ответ придёт последним
     await store.selectTimeframe('4h');
@@ -139,7 +133,6 @@ describe('ChartStore', () => {
       response: { status: 200 },
       data: {
         candles: [candle('2020-01-01T00:00:00Z')],
-        rolls: [],
         truncated: false,
       },
     });

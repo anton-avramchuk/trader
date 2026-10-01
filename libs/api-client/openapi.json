@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Trader API",
-    "summary": "Исследовательская платформа по фьючерсам MOEX",
+    "summary": "Исследовательская платформа по рыночным данным",
     "description": "REST API платформы. Документация: `/docs` (Swagger UI), `/redoc`, схема — `/openapi.json`.\n\n**WebSocket** `/ws/jobs/{job_id}` (в OpenAPI не описывается): шлёт JSON в формате `JobOut` при каждом изменении задачи и закрывается по её завершении; код закрытия 4404 — задачи нет.",
     "version": "0.1.0"
   },
@@ -223,14 +223,14 @@
         }
       }
     },
-    "/calendars": {
+    "/importer/tickers": {
       "get": {
         "tags": [
-          "calendars"
+          "instruments"
         ],
-        "summary": "Торговые календари",
-        "description": "Календари только для чтения: расписание откалибровано по данным ISS и меняется миграциями (ADR-0014).",
-        "operationId": "listCalendars",
+        "summary": "Тикеры importer",
+        "description": "Список инструментов, которые умеет отдавать importer; `added` — уже заведённые в системе.",
+        "operationId": "listImporterTickers",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -238,114 +238,28 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/CalendarOut"
+                    "$ref": "#/components/schemas/TickerOut"
                   },
                   "type": "array",
-                  "title": "Response Listcalendars"
+                  "title": "Response Listimportertickers"
                 }
               }
             }
+          },
+          "502": {
+            "description": "Importer недоступен"
           }
         }
       }
     },
-    "/calendars/{code}": {
+    "/instruments": {
       "get": {
         "tags": [
-          "calendars"
+          "instruments"
         ],
-        "summary": "Календарь с эпохами расписания",
-        "operationId": "getCalendar",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Code"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CalendarDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/calendars/{code}/days": {
-      "get": {
-        "tags": [
-          "calendars"
-        ],
-        "summary": "Праздники и особые дни календаря",
-        "operationId": "getCalendarDays",
-        "parameters": [
-          {
-            "name": "code",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Code"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CalendarDays"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/roots": {
-      "get": {
-        "tags": [
-          "roots"
-        ],
-        "summary": "Базовые активы",
-        "operationId": "listRoots",
+        "summary": "Инструменты",
+        "description": "Заведённые инструменты и покрытие свечами по таймфреймам.",
+        "operationId": "listInstruments",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -353,10 +267,10 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/RootOut"
+                    "$ref": "#/components/schemas/InstrumentOut"
                   },
                   "type": "array",
-                  "title": "Response Listroots"
+                  "title": "Response Listinstruments"
                 }
               }
             }
@@ -365,15 +279,16 @@
       },
       "post": {
         "tags": [
-          "roots"
+          "instruments"
         ],
-        "summary": "Завести базовый актив",
-        "operationId": "createRoot",
+        "summary": "Завести инструмент по тикеру importer",
+        "description": "Название, валюта, шаг цены и часовой пояс берутся у importer. Свечи загружаются отдельно: `POST /instruments/{id}/load`.",
+        "operationId": "createInstrument",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootIn"
+                "$ref": "#/components/schemas/InstrumentCreate"
               }
             }
           },
@@ -385,51 +300,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootOut"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Конфликт данных"
-          },
-          "422": {
-            "description": "Неизвестный календарь или значения"
-          }
-        }
-      }
-    },
-    "/roots/{root_id}": {
-      "get": {
-        "tags": [
-          "roots"
-        ],
-        "summary": "Базовый актив",
-        "operationId": "getRoot",
-        "parameters": [
-          {
-            "name": "root_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Root Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RootOut"
+                  "$ref": "#/components/schemas/InstrumentOut"
                 }
               }
             }
           },
           "404": {
             "description": "Не найдено"
+          },
+          "409": {
+            "description": "Конфликт"
+          },
+          "502": {
+            "description": "Importer недоступен"
           },
           "422": {
             "description": "Validation Error",
@@ -442,22 +325,23 @@
             }
           }
         }
-      },
+      }
+    },
+    "/instruments/{instrument_id}": {
       "patch": {
         "tags": [
-          "roots"
+          "instruments"
         ],
-        "summary": "Изменить базовый актив",
-        "description": "Код неизменяем. Смена календаря, числа дней до ролла или флага выходных сессий приводит к пересборке баров при следующем `aggregate.contract`.",
-        "operationId": "updateRoot",
+        "summary": "Изменить стоимость тика",
+        "operationId": "updateInstrument",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           }
         ],
@@ -466,7 +350,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RootPatch"
+                "$ref": "#/components/schemas/InstrumentPatch"
               }
             }
           }
@@ -477,53 +361,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RootOut"
+                  "$ref": "#/components/schemas/InstrumentOut"
                 }
               }
             }
           },
           "404": {
             "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "roots"
-        ],
-        "summary": "Удалить базовый актив",
-        "description": "Только без контрактов.",
-        "operationId": "deleteRoot",
-        "parameters": [
-          {
-            "name": "root_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Root Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "409": {
-            "description": "Конфликт данных"
           },
           "422": {
             "description": "Validation Error",
@@ -538,70 +382,22 @@
         }
       }
     },
-    "/roots/{root_id}/contracts": {
-      "get": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Контракты базового актива",
-        "description": "По возрастанию экспирации.",
-        "operationId": "listContracts",
-        "parameters": [
-          {
-            "name": "root_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Root Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ContractOut"
-                  },
-                  "title": "Response Listcontracts"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
+    "/instruments/{instrument_id}/load": {
       "post": {
         "tags": [
-          "contracts"
+          "instruments"
         ],
-        "summary": "Завести контракт вручную",
-        "description": "Ключ контракта — `(root, expiration_date)`; SECID — лишь атрибут.",
-        "operationId": "createContract",
+        "summary": "Подгрузить свечи из importer",
+        "description": "Ставит задачу `candles.load` за период `[period_from, period_to)`: worker забирает готовые свечи у importer и записывает их поверх существующих. Ход — `GET /jobs/{id}` или WebSocket. Пока по инструменту идёт загрузка, новая не ставится.",
+        "operationId": "loadCandles",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           }
         ],
@@ -610,306 +406,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ContractIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContractOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "409": {
-            "description": "Конфликт данных"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/contracts/{contract_id}": {
-      "get": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Контракт",
-        "operationId": "getContract",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContractOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "patch": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Изменить контракт",
-        "description": "Экспирация — часть ключа и не меняется.",
-        "operationId": "updateContract",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ContractPatch"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ContractOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "last_trade_date позже экспирации"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Удалить контракт",
-        "description": "Только без загруженных данных и импортов.",
-        "operationId": "deleteContract",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "409": {
-            "description": "Конфликт данных"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/contracts/{contract_id}/step-prices": {
-      "get": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "История стоимости шага цены",
-        "description": "Дневная стоимость шага в ₽, выведенная из итогов торгов ISS (оборот / (объём × средневзвешенная цена) × шаг цены). Новые первыми.",
-        "operationId": "listStepPrices",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 2000,
-              "minimum": 1,
-              "default": 60,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/StepPriceOut"
-                  },
-                  "title": "Response Liststepprices"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/contracts/{contract_id}/step-prices/refresh": {
-      "post": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Обновить стоимость шага цены из ISS",
-        "description": "Ставит `iss.step_prices`; догружает с последнего сохранённого дня.",
-        "operationId": "refreshStepPrices",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/roots/{root_id}/iss-preview": {
-      "post": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Запросить список контрактов из ISS",
-        "description": "Ставит задачу `iss.sync_root` в режиме `dry_run`: ничего не создаётся. Результат задачи (`result.contracts`) показывается пользователю для подтверждения, затем вызывается `from-iss`.",
-        "operationId": "previewIssContracts",
-        "parameters": [
-          {
-            "name": "root_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Root Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IssPreviewIn"
+                "$ref": "#/components/schemas/LoadRequest"
               }
             }
           }
@@ -928,722 +425,31 @@
           "404": {
             "description": "Не найдено"
           },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/roots/{root_id}/contracts/from-iss": {
-      "post": {
-        "tags": [
-          "contracts"
-        ],
-        "summary": "Создать подтверждённые контракты ISS",
-        "description": "Идемпотентно: существующие контракты обновляются. Для каждого при `enqueue_imports` ставится загрузка истории (если она уже не ждёт).",
-        "operationId": "createContractsFromIss",
-        "parameters": [
-          {
-            "name": "root_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Root Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IssContractsIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/IssContractsOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/imports": {
-      "get": {
-        "tags": [
-          "imports"
-        ],
-        "summary": "Импорты",
-        "description": "Новые первыми.",
-        "operationId": "listImports",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contract Id"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "name": "kind",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Kind"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ImportOut"
-                  },
-                  "title": "Response Listimports"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/imports/{import_id}": {
-      "get": {
-        "tags": [
-          "imports"
-        ],
-        "summary": "Импорт с отчётом",
-        "operationId": "getImport",
-        "parameters": [
-          {
-            "name": "import_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Import Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImportOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/imports/{import_id}/errors": {
-      "get": {
-        "tags": [
-          "imports"
-        ],
-        "summary": "Отклонённые строки импорта",
-        "operationId": "listImportErrors",
-        "parameters": [
-          {
-            "name": "import_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Import Id"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 1000,
-              "minimum": 1,
-              "default": 200,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ImportErrorOut"
-                  },
-                  "title": "Response Listimporterrors"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/contracts/{contract_id}/imports/iss": {
-      "post": {
-        "tags": [
-          "imports"
-        ],
-        "summary": "Загрузить историю из ISS",
-        "description": "Ставит `import.iss`. Загрузка возобновляемая: повторный запуск догружает только недостающее.",
-        "operationId": "startIssImport",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/IssImportIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/contracts/{contract_id}/imports/file": {
-      "post": {
-        "tags": [
-          "imports"
-        ],
-        "summary": "Импортировать загруженный файл",
-        "description": "Ставит `import.file` для файла из каталога импорта.",
-        "operationId": "startFileImport",
-        "parameters": [
-          {
-            "name": "contract_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Contract Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FileImportIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobOut"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/import-files": {
-      "get": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Загруженные файлы",
-        "operationId": "listImportFiles",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/FileOut"
-                  },
-                  "type": "array",
-                  "title": "Response Listimportfiles"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/import-files/{name}": {
-      "put": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Загрузить файл для импорта",
-        "description": "Тело запроса — содержимое файла как есть (`application/octet-stream`). Существующий файл с тем же именем заменяется.",
-        "operationId": "uploadImportFile",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileOut"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Файл больше лимита"
-          },
-          "422": {
-            "description": "Недопустимое имя"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Удалить загруженный файл",
-        "operationId": "deleteImportFile",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/import-files/{name}/preview": {
-      "get": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Первые строки загруженного файла",
-        "description": "Для настройки маппинга колонок. Только текстовые форматы (CSV, JSON); кодировка задаётся параметром `encoding`.",
-        "operationId": "previewImportFile",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          },
-          {
-            "name": "encoding",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 32,
-              "default": "utf-8-sig",
-              "title": "Encoding"
-            }
-          },
-          {
-            "name": "lines",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 20,
-              "title": "Lines"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FilePreview"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Нельзя прочитать как текст"
-          }
-        }
-      }
-    },
-    "/import-presets": {
-      "get": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Пресеты маппинга файлов",
-        "description": "Встроенные первыми (`finam`, `finam_no_header`, `iso_utc`).",
-        "operationId": "listImportPresets",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/PresetOut"
-                  },
-                  "type": "array",
-                  "title": "Response Listimportpresets"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/import-presets/{name}": {
-      "put": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Создать или обновить пресет",
-        "operationId": "saveImportPreset",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PresetIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PresetOut"
-                }
-              }
-            }
-          },
           "409": {
-            "description": "Пресет встроенный"
+            "description": "Конфликт"
           },
           "422": {
-            "description": "Недопустимое имя"
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "files"
-        ],
-        "summary": "Удалить пользовательский пресет",
-        "operationId": "deleteImportPreset",
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Name"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "409": {
-            "description": "Пресет встроенный"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Неверный период"
           }
         }
       }
     },
-    "/imports/{import_id}/conflicts": {
+    "/instruments/{instrument_id}/loads": {
       "get": {
         "tags": [
-          "conflicts"
+          "instruments"
         ],
-        "summary": "Конфликты импорта",
-        "description": "Свечи из импорта, отличающиеся от уже загруженных. Не применяются без решения пользователя (ADR-0005).",
-        "operationId": "listImportConflicts",
+        "summary": "Журнал загрузок свечей",
+        "description": "Что и за какой период загружено; новые первыми.",
+        "operationId": "listCandleLoads",
         "parameters": [
           {
-            "name": "import_id",
+            "name": "instrument_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "integer",
-              "title": "Import Id"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "pattern": "^(pending|accepted|rejected)$"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": "pending",
-              "title": "Status"
+              "title": "Instrument Id"
             }
           },
           {
@@ -1652,21 +458,10 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 1000,
+              "maximum": 500,
               "minimum": 1,
-              "default": 200,
+              "default": 100,
               "title": "Limit"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
             }
           }
         ],
@@ -1678,65 +473,9 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ConflictOut"
+                    "$ref": "#/components/schemas/LoadOut"
                   },
-                  "title": "Response Listimportconflicts"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Не найдено"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/imports/{import_id}/conflicts/resolve": {
-      "post": {
-        "tags": [
-          "conflicts"
-        ],
-        "summary": "Принять или отклонить конфликты",
-        "description": "Принятие создаёт импорт-разрешение и новую версию датасета (старые версии остаются воспроизводимыми) и ставит пересборку баров.",
-        "operationId": "resolveImportConflicts",
-        "parameters": [
-          {
-            "name": "import_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Import Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResolveIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResolveOut"
+                  "title": "Response Listcandleloads"
                 }
               }
             }
@@ -1762,52 +501,29 @@
         "tags": [
           "candles"
         ],
-        "summary": "Свечи контракта или continuous-серии",
-        "description": "`contract_id` — бары контракта в его ценах (`1m` — сырые минуты версии датасета, по умолчанию последней). `root_id` — continuous-серия: цены приведены к масштабу текущего контракта, у каждого бара указан контракт и `price_factor`, в ответе — роллы диапазона. Выдача по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`. С `tail=true` — последние `limit` баров диапазона (при `truncated` слева есть более ранние).",
+        "summary": "Свечи инструмента",
+        "description": "Закрытые свечи инструмента на таймфрейме по возрастанию времени, не более `limit`; при `truncated` продолжайте с `next_start`. С `tail=true` — последние `limit` свечей диапазона (при `truncated` слева есть более ранние).",
         "operationId": "getCandles",
         "parameters": [
+          {
+            "name": "instrument_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instrument Id"
+            }
+          },
           {
             "name": "timeframe",
             "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "1m, 15m, 1h, 4h, 1d, 1w",
+              "description": "15m, 1h, 4h, 1d, 1w",
               "title": "Timeframe"
             },
-            "description": "1m, 15m, 1h, 4h, 1d, 1w"
-          },
-          {
-            "name": "root_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Root Id"
-            }
-          },
-          {
-            "name": "contract_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contract Id"
-            }
+            "description": "15m, 1h, 4h, 1d, 1w"
           },
           {
             "name": "start",
@@ -1848,24 +564,6 @@
             "description": "Исключительно"
           },
           {
-            "name": "dataset_version_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Только 1m; по умолчанию последняя версия",
-              "title": "Dataset Version Id"
-            },
-            "description": "Только 1m; по умолчанию последняя версия"
-          },
-          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -1883,11 +581,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Последние `limit` баров диапазона (для подгрузки истории)",
+              "description": "Последние `limit` свечей диапазона (подгрузка истории)",
               "default": false,
               "title": "Tail"
             },
-            "description": "Последние `limit` баров диапазона (для подгрузки истории)"
+            "description": "Последние `limit` свечей диапазона (подгрузка истории)"
           }
         ],
         "responses": {
@@ -1905,10 +603,7 @@
             "description": "Не найдено"
           },
           "422": {
-            "description": "Нужен ровно один из root_id / contract_id; неверный TF"
-          },
-          "409": {
-            "description": "dataset_version_id для TF"
+            "description": "Неизвестный таймфрейм"
           }
         }
       }
@@ -1919,19 +614,28 @@
           "candles"
         ],
         "summary": "Свечи, известные на момент as_of",
-        "description": "Срез знания: только бары, закрытые к `as_of` (`close_time <= as_of`), и только роллы, известные к этому моменту — масштаб continuous такой, каким его видел бы наблюдатель в момент `as_of`. Возвращает **последние** `limit` баров (по возрастанию). Основа для воспроизводимых расчётов без заглядывания в будущее.",
+        "description": "Срез знания: только свечи, закрытые к `as_of` (`close_time <= as_of`). Возвращает **последние** `limit` свечей (по возрастанию). Основа для воспроизводимых расчётов без заглядывания в будущее.",
         "operationId": "getSnapshot",
         "parameters": [
+          {
+            "name": "instrument_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Instrument Id"
+            }
+          },
           {
             "name": "timeframe",
             "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "description": "1m, 15m, 1h, 4h, 1d, 1w",
+              "description": "15m, 1h, 4h, 1d, 1w",
               "title": "Timeframe"
             },
-            "description": "1m, 15m, 1h, 4h, 1d, 1w"
+            "description": "15m, 1h, 4h, 1d, 1w"
           },
           {
             "name": "as_of",
@@ -1944,38 +648,6 @@
               "title": "As Of"
             },
             "description": "Момент знания (UTC или со смещением)"
-          },
-          {
-            "name": "root_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Root Id"
-            }
-          },
-          {
-            "name": "contract_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contract Id"
-            }
           },
           {
             "name": "start",
@@ -2024,7 +696,7 @@
             "description": "Не найдено"
           },
           "422": {
-            "description": "Нужен ровно один из root_id / contract_id; неверный TF"
+            "description": "Неизвестный таймфрейм"
           }
         }
       }
@@ -2061,7 +733,7 @@
           "indicators"
         ],
         "summary": "Значения индикатора на баре графика",
-        "description": "Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары и роллы, известные к нему (масштаб continuous как тогда). Значения до конца прогрева — `valid = false`.",
+        "description": "Считает индикатор по барам `source_timeframe` (по умолчанию как у графика) и проецирует на последние `limit` баров `chart_timeframe` ступенькой по `available_at` (без формирующегося старшего бара). С `as_of` — только закрытые к моменту бары. Значения до конца прогрева — `valid = false`.",
         "operationId": "getIndicatorValues",
         "parameters": [
           {
@@ -2087,35 +759,12 @@
             "description": "15m, 1h, 4h, 1d, 1w"
           },
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Root Id"
-            }
-          },
-          {
-            "name": "contract_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contract Id"
+              "type": "integer",
+              "title": "Instrument Id"
             }
           },
           {
@@ -2227,7 +876,7 @@
             "description": "Не найдено"
           },
           "422": {
-            "description": "Неверные параметры индикатора, выбор root/контракта или таймфреймы (source TF младше chart TF запрещён)"
+            "description": "Неверные параметры индикатора, инструмент или таймфреймы (source TF младше chart TF запрещён)"
           }
         }
       }
@@ -2238,11 +887,11 @@
           "profiles"
         ],
         "summary": "Профили графика",
-        "description": "С `root_id` — глобальные и профили этого root; без него — все. Последние применённые первыми.",
+        "description": "С `instrument_id` — глобальные и профили этого инструмента; без него — все. Последние применённые первыми.",
         "operationId": "listChartProfiles",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -2254,10 +903,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Фильтр по root",
-              "title": "Root Id"
+              "description": "Фильтр по инструменту",
+              "title": "Instrument Id"
             },
-            "description": "Фильтр по root"
+            "description": "Фильтр по инструменту"
           }
         ],
         "responses": {
@@ -2547,7 +1196,7 @@
           "engines"
         ],
         "summary": "Прогоны движков",
-        "description": "Новые сверху. Фильтры по движку, ряду и таймфрейму.",
+        "description": "Новые сверху. Фильтры по движку, инструменту и таймфрейму.",
         "operationId": "listEngineRuns",
         "parameters": [
           {
@@ -2569,7 +1218,7 @@
             "description": "Имя движка"
           },
           {
-            "name": "contract_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -2581,26 +1230,8 @@
                   "type": "null"
                 }
               ],
-              "title": "Contract Id"
+              "title": "Instrument Id"
             }
-          },
-          {
-            "name": "root_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Continuous-серия",
-              "title": "Root Id"
-            },
-            "description": "Continuous-серия"
           },
           {
             "name": "timeframe",
@@ -2825,7 +1456,7 @@
         "operationId": "listFibGrids",
         "parameters": [
           {
-            "name": "contract_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -2837,23 +1468,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Contract Id"
-            }
-          },
-          {
-            "name": "root_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           },
           {
@@ -3002,35 +1617,12 @@
             "description": "15m, 1h, 4h, 1d, 1w"
           },
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Root Id"
-            }
-          },
-          {
-            "name": "contract_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Contract Id"
+              "type": "integer",
+              "title": "Instrument Id"
             }
           },
           {
@@ -4203,7 +2795,7 @@
           "backtests"
         ],
         "summary": "Запустить бэктест",
-        "description": "Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (root, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.",
+        "description": "Создаёт эксперимент и ставит задачу `backtest.run` (`job_id` в ответе). `single` — один период; `walk_forward` — скользящие окна train→validation, параметры из сетки выбираются только по train, опциональный финальный test после `period_to` открывается один раз на связку (инструмент, TF, семейство): повторный запуск получит `test.status = rejected`. Каждый запуск пишется в журнал `/backtest-log`.",
         "operationId": "createBacktest",
         "requestBody": {
           "required": true,
@@ -4239,11 +2831,11 @@
           "backtests"
         ],
         "summary": "Список бэктестов",
-        "description": "Новые первыми; фильтры по root, таймфрейму и статусу.",
+        "description": "Новые первыми; фильтры по инструменту, таймфрейму и статусу.",
         "operationId": "listBacktests",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -4255,7 +2847,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           },
           {
@@ -4341,7 +2933,7 @@
         "operationId": "listBacktestLog",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -4353,7 +2945,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           },
           {
@@ -4435,11 +3027,11 @@
           "backtests"
         ],
         "summary": "Заблокированные test-периоды",
-        "description": "Test-периоды связок (root, TF, семейство), уже открытые один раз.",
+        "description": "Test-периоды связок (инструмент, TF, семейство), открытые один раз.",
         "operationId": "listBacktestLocks",
         "parameters": [
           {
-            "name": "root_id",
+            "name": "instrument_id",
             "in": "query",
             "required": false,
             "schema": {
@@ -4451,7 +3043,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Root Id"
+              "title": "Instrument Id"
             }
           }
         ],
@@ -4489,7 +3081,7 @@
           "backtests"
         ],
         "summary": "Разблокировать test-период",
-        "description": "Явная разблокировка связки (root, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.",
+        "description": "Явная разблокировка связки (инструмент, TF, семейство) — test можно открыть ещё раз. Причина обязательна и пишется в журнал; разблокировка видна рядом с результатами как повторное использование test.",
         "operationId": "unlockBacktestTest",
         "requestBody": {
           "content": {
@@ -4531,7 +3123,7 @@
           "backtests"
         ],
         "summary": "Результат бэктеста",
-        "description": "Состояние, версии и результат: метрики в тиках, пунктах и ₽, equity, walk-forward и test.",
+        "description": "Состояние, версии и результат: метрики в тиках, пунктах и деньгах, equity, walk-forward и test.",
         "operationId": "getBacktest",
         "parameters": [
           {
@@ -4841,9 +3433,9 @@
       },
       "BacktestCreate": {
         "properties": {
-          "root_id": {
+          "instrument_id": {
             "type": "integer",
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "timeframe": {
             "type": "string",
@@ -4864,11 +3456,11 @@
           "costs": {
             "$ref": "#/components/schemas/CostsIn"
           },
-          "contracts": {
+          "quantity": {
             "type": "integer",
-            "maximum": 1000.0,
+            "maximum": 1000000.0,
             "minimum": 1.0,
-            "title": "Contracts",
+            "title": "Quantity",
             "default": 1
           },
           "period_from": {
@@ -4919,7 +3511,7 @@
         },
         "type": "object",
         "required": [
-          "root_id",
+          "instrument_id",
           "timeframe",
           "strategy",
           "period_from",
@@ -4942,9 +3534,9 @@
             "title": "Status",
             "description": "queued, running, succeeded, failed"
           },
-          "root_id": {
+          "instrument_id": {
             "type": "integer",
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "timeframe_code": {
             "type": "string",
@@ -4964,9 +3556,9 @@
             "type": "object",
             "title": "Costs"
           },
-          "contracts": {
+          "quantity": {
             "type": "integer",
-            "title": "Contracts"
+            "title": "Quantity"
           },
           "period_from": {
             "type": "string",
@@ -5080,12 +3672,12 @@
           "id",
           "kind",
           "status",
-          "root_id",
+          "instrument_id",
           "timeframe_code",
           "family",
           "strategy",
           "costs",
-          "contracts",
+          "quantity",
           "period_from",
           "period_to",
           "test_from",
@@ -5199,176 +3791,6 @@
         ],
         "title": "BucketOut"
       },
-      "CalendarDays": {
-        "properties": {
-          "holidays": {
-            "items": {
-              "type": "string",
-              "format": "date"
-            },
-            "type": "array",
-            "title": "Holidays",
-            "description": "Будние дни без торгов"
-          },
-          "special_days": {
-            "items": {
-              "type": "string",
-              "format": "date"
-            },
-            "type": "array",
-            "title": "Special Days",
-            "description": "Выходные, торгуемые как обычный день (рабочие субботы-переносы)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "holidays",
-          "special_days"
-        ],
-        "title": "CalendarDays"
-      },
-      "CalendarDetail": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "title": "Code"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "timezone": {
-            "type": "string",
-            "title": "Timezone"
-          },
-          "rules": {
-            "type": "integer",
-            "title": "Rules",
-            "description": "Сколько эпох расписания (ADR-0014)"
-          },
-          "holidays": {
-            "type": "integer",
-            "title": "Holidays"
-          },
-          "special_days": {
-            "type": "integer",
-            "title": "Special Days"
-          },
-          "fingerprint": {
-            "type": "string",
-            "title": "Fingerprint",
-            "description": "Отпечаток расписания: меняется вместе с ним"
-          },
-          "rule_list": {
-            "items": {
-              "$ref": "#/components/schemas/CalendarRuleOut"
-            },
-            "type": "array",
-            "title": "Rule List"
-          }
-        },
-        "type": "object",
-        "required": [
-          "code",
-          "name",
-          "timezone",
-          "rules",
-          "holidays",
-          "special_days",
-          "fingerprint",
-          "rule_list"
-        ],
-        "title": "CalendarDetail"
-      },
-      "CalendarOut": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "title": "Code"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "timezone": {
-            "type": "string",
-            "title": "Timezone"
-          },
-          "rules": {
-            "type": "integer",
-            "title": "Rules",
-            "description": "Сколько эпох расписания (ADR-0014)"
-          },
-          "holidays": {
-            "type": "integer",
-            "title": "Holidays"
-          },
-          "special_days": {
-            "type": "integer",
-            "title": "Special Days"
-          }
-        },
-        "type": "object",
-        "required": [
-          "code",
-          "name",
-          "timezone",
-          "rules",
-          "holidays",
-          "special_days"
-        ],
-        "title": "CalendarOut"
-      },
-      "CalendarRuleOut": {
-        "properties": {
-          "effective_from": {
-            "type": "string",
-            "format": "date",
-            "title": "Effective From"
-          },
-          "effective_to": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Effective To"
-          },
-          "bar_anchor": {
-            "type": "string",
-            "title": "Bar Anchor"
-          },
-          "weekday_windows": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Weekday Windows"
-          },
-          "weekend_windows": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Weekend Windows"
-          }
-        },
-        "type": "object",
-        "required": [
-          "effective_from",
-          "effective_to",
-          "bar_anchor",
-          "weekday_windows",
-          "weekend_windows"
-        ],
-        "title": "CalendarRuleOut"
-      },
       "CalibrationOut": {
         "properties": {
           "group": {
@@ -5452,13 +3874,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Timestamp",
-            "description": "Open time бара (UTC)"
+            "description": "Открытие свечи (UTC)"
           },
           "close_time": {
             "type": "string",
             "format": "date-time",
             "title": "Close Time",
-            "description": "Конец бара; данные доступны с этого момента"
+            "description": "Конец свечи; данные доступны с этого момента"
           },
           "open": {
             "type": "string",
@@ -5485,59 +3907,11 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Volume"
           },
-          "trade_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trade Count"
-          },
-          "is_partial": {
-            "type": "boolean",
-            "title": "Is Partial",
-            "description": "Бар короче номинала (сессия, клиринг, граница)"
-          },
           "trading_day": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
+            "format": "date",
             "title": "Trading Day",
-            "description": "Торговый день (только TF)"
-          },
-          "contract_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contract Id",
-            "description": "Контракт бара (только continuous)"
-          },
-          "price_factor": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price Factor",
-            "description": "Множитель цен к масштабу текущего контракта (только continuous)"
+            "description": "Дата открытия в часовом поясе инструмента"
           }
         },
         "type": "object",
@@ -5549,58 +3923,9 @@
           "low",
           "close",
           "volume",
-          "is_partial"
+          "trading_day"
         ],
         "title": "CandleOut"
-      },
-      "CandleValues": {
-        "properties": {
-          "open": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Open"
-          },
-          "high": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "High"
-          },
-          "low": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Low"
-          },
-          "close": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Close"
-          },
-          "volume": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Volume"
-          },
-          "trade_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trade Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "open",
-          "high",
-          "low",
-          "close",
-          "volume"
-        ],
-        "title": "CandleValues"
       },
       "CandlesOut": {
         "properties": {
@@ -5608,39 +3933,9 @@
             "type": "string",
             "title": "Timeframe"
           },
-          "root_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Id"
-          },
-          "contract_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contract Id"
-          },
-          "dataset_version_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dataset Version Id",
-            "description": "Версия датасета 1m (для сырых минут); у баров TF — null"
+          "instrument_id": {
+            "type": "integer",
+            "title": "Instrument Id"
           },
           "as_of": {
             "anyOf": [
@@ -5662,7 +3957,7 @@
           "truncated": {
             "type": "boolean",
             "title": "Truncated",
-            "description": "Есть ещё бары за пределами `limit`"
+            "description": "Есть ещё свечи за пределами `limit`"
           },
           "next_start": {
             "anyOf": [
@@ -5683,226 +3978,19 @@
             },
             "type": "array",
             "title": "Candles"
-          },
-          "rolls": {
-            "items": {
-              "$ref": "#/components/schemas/RollOut"
-            },
-            "type": "array",
-            "title": "Rolls",
-            "description": "Роллы continuous-серии в диапазоне выданных баров"
           }
         },
         "type": "object",
         "required": [
           "timeframe",
-          "root_id",
-          "contract_id",
-          "dataset_version_id",
+          "instrument_id",
           "as_of",
           "count",
           "truncated",
           "next_start",
-          "candles",
-          "rolls"
+          "candles"
         ],
         "title": "CandlesOut"
-      },
-      "ConflictOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "timestamp": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Timestamp"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "pending, accepted, rejected"
-          },
-          "existing": {
-            "$ref": "#/components/schemas/CandleValues",
-            "description": "Активная свеча на момент обнаружения"
-          },
-          "incoming": {
-            "$ref": "#/components/schemas/CandleValues",
-            "description": "Свеча из импорта"
-          },
-          "resolved_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resolved At"
-          },
-          "resolution_import_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resolution Import Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "timestamp",
-          "status",
-          "existing",
-          "incoming",
-          "resolved_at",
-          "resolution_import_id"
-        ],
-        "title": "ConflictOut"
-      },
-      "ContractIn": {
-        "properties": {
-          "expiration_date": {
-            "type": "string",
-            "format": "date",
-            "title": "Expiration Date"
-          },
-          "last_trade_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Trade Date"
-          },
-          "secid": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 32
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secid"
-          }
-        },
-        "type": "object",
-        "required": [
-          "expiration_date"
-        ],
-        "title": "ContractIn"
-      },
-      "ContractOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "root_id": {
-            "type": "integer",
-            "title": "Root Id"
-          },
-          "expiration_date": {
-            "type": "string",
-            "format": "date",
-            "title": "Expiration Date"
-          },
-          "last_trade_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Trade Date"
-          },
-          "secid": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secid"
-          },
-          "provider_ids": {
-            "items": {
-              "$ref": "#/components/schemas/ProviderIdOut"
-            },
-            "type": "array",
-            "title": "Provider Ids"
-          },
-          "step_price": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/StepPriceOut"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Последняя известная стоимость шага цены"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "root_id",
-          "expiration_date",
-          "last_trade_date",
-          "secid",
-          "provider_ids"
-        ],
-        "title": "ContractOut"
-      },
-      "ContractPatch": {
-        "properties": {
-          "last_trade_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Trade Date"
-          },
-          "secid": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 32
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secid"
-          }
-        },
-        "type": "object",
-        "title": "ContractPatch"
       },
       "CostsIn": {
         "properties": {
@@ -5920,48 +4008,62 @@
             "description": "Тики на сторону",
             "default": 0.0
           },
-          "commission_per_contract": {
+          "commission_per_unit": {
             "type": "number",
             "minimum": 0.0,
-            "title": "Commission Per Contract",
-            "description": "₽ за контракт на сторону",
+            "title": "Commission Per Unit",
+            "description": "Комиссия за единицу количества на сторону",
             "default": 0.0
           }
         },
         "type": "object",
         "title": "CostsIn"
       },
-      "DatetimeSpec": {
+      "CoverageOut": {
         "properties": {
-          "columns": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "maxItems": 2,
-            "minItems": 1,
-            "title": "Columns"
-          },
-          "format": {
+          "timeframe": {
             "type": "string",
-            "title": "Format"
+            "title": "Timeframe"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "first": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First",
+            "description": "Открытие первой свечи"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last",
+            "description": "Закрытие последней свечи"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": [
-          "columns",
-          "format"
+          "timeframe",
+          "count",
+          "first",
+          "last"
         ],
-        "title": "DatetimeSpec",
-        "description": "Откуда брать время свечи: одна колонка или две (дата и время) + формат."
+        "title": "CoverageOut"
       },
       "DistOut": {
         "properties": {
@@ -6115,44 +4217,13 @@
             "type": "string",
             "title": "Params Hash"
           },
-          "contract_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contract Id"
-          },
-          "root_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Id",
-            "description": "Continuous-серия root (или контракт)"
+          "instrument_id": {
+            "type": "integer",
+            "title": "Instrument Id"
           },
           "timeframe": {
             "type": "string",
             "title": "Timeframe"
-          },
-          "dataset_version_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dataset Version Id",
-            "description": "Версия минутных данных контракта (у continuous пусто)"
           },
           "bars_processed": {
             "type": "integer",
@@ -6192,10 +4263,8 @@
           "algorithm_version",
           "params",
           "params_hash",
-          "contract_id",
-          "root_id",
+          "instrument_id",
           "timeframe",
-          "dataset_version_id",
           "bars_processed",
           "last_close_time",
           "event_count",
@@ -6227,28 +4296,9 @@
       },
       "FibGridIn": {
         "properties": {
-          "contract_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contract Id"
-          },
-          "root_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Id",
-            "description": "Continuous-серия root"
+          "instrument_id": {
+            "type": "integer",
+            "title": "Instrument Id"
           },
           "timeframe": {
             "type": "string",
@@ -6275,6 +4325,7 @@
         },
         "type": "object",
         "required": [
+          "instrument_id",
           "timeframe",
           "start",
           "end"
@@ -6287,27 +4338,9 @@
             "type": "integer",
             "title": "Id"
           },
-          "contract_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contract Id"
-          },
-          "root_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Id"
+          "instrument_id": {
+            "type": "integer",
+            "title": "Instrument Id"
           },
           "timeframe": {
             "type": "string",
@@ -6363,8 +4396,7 @@
         "type": "object",
         "required": [
           "id",
-          "contract_id",
-          "root_id",
+          "instrument_id",
           "timeframe",
           "start",
           "end",
@@ -6394,293 +4426,6 @@
           "price"
         ],
         "title": "FibPoint"
-      },
-      "FileImportIn": {
-        "properties": {
-          "file": {
-            "type": "string",
-            "title": "File",
-            "description": "Имя файла, загруженного через `PUT /import-files/{name}`"
-          },
-          "format": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^(csv|json|parquet)$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Format",
-            "description": "По умолчанию — по расширению"
-          },
-          "preset": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Preset",
-            "description": "Имя пресета маппинга"
-          },
-          "mapping": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FileMapping"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Маппинг без пресета"
-          },
-          "overrides": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Overrides",
-            "description": "Поля маппинга, заменяемые для этого запуска"
-          },
-          "allow_non_positive_prices": {
-            "type": "boolean",
-            "title": "Allow Non Positive Prices",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "file"
-        ],
-        "title": "FileImportIn",
-        "examples": [
-          {
-            "file": "NG-2020.csv",
-            "preset": "finam"
-          }
-        ]
-      },
-      "FileMapping": {
-        "properties": {
-          "delimiter": {
-            "type": "string",
-            "maxLength": 1,
-            "minLength": 1,
-            "title": "Delimiter",
-            "default": ","
-          },
-          "has_header": {
-            "type": "boolean",
-            "title": "Has Header",
-            "default": true
-          },
-          "encoding": {
-            "type": "string",
-            "title": "Encoding",
-            "default": "utf-8-sig"
-          },
-          "skip_rows": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Skip Rows",
-            "default": 0
-          },
-          "decimal_separator": {
-            "type": "string",
-            "enum": [
-              ".",
-              ","
-            ],
-            "title": "Decimal Separator",
-            "default": "."
-          },
-          "timezone": {
-            "type": "string",
-            "title": "Timezone",
-            "default": "Europe/Moscow"
-          },
-          "datetime": {
-            "$ref": "#/components/schemas/DatetimeSpec"
-          },
-          "open": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Open"
-          },
-          "high": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "High"
-          },
-          "low": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Low"
-          },
-          "close": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Close"
-          },
-          "volume": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              }
-            ],
-            "title": "Volume"
-          },
-          "trade_count": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trade Count"
-          },
-          "quote_volume": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quote Volume"
-          },
-          "timestamp_is_close": {
-            "type": "boolean",
-            "title": "Timestamp Is Close",
-            "default": false
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "datetime",
-          "open",
-          "high",
-          "low",
-          "close",
-          "volume"
-        ],
-        "title": "FileMapping",
-        "description": "Как читать файл со свечами 1m. Одинаков для CSV, JSON и Parquet."
-      },
-      "FileOut": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "size": {
-            "type": "integer",
-            "title": "Size"
-          },
-          "modified_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Modified At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "size",
-          "modified_at"
-        ],
-        "title": "FileOut"
-      },
-      "FilePreview": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "size": {
-            "type": "integer",
-            "title": "Size"
-          },
-          "encoding": {
-            "type": "string",
-            "title": "Encoding"
-          },
-          "lines": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Lines",
-            "description": "Первые строки файла как текст"
-          },
-          "delimiter": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delimiter",
-            "description": "Предполагаемый разделитель CSV (`,` `;` таб `|`) или null"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "size",
-          "encoding",
-          "lines",
-          "delimiter"
-        ],
-        "title": "FilePreview"
       },
       "ForecastOut": {
         "properties": {
@@ -7045,10 +4790,6 @@
           "crosses_weekend": {
             "type": "boolean",
             "title": "Crosses Weekend"
-          },
-          "crosses_roll": {
-            "type": "boolean",
-            "title": "Crosses Roll"
           }
         },
         "type": "object",
@@ -7064,8 +4805,7 @@
           "first_hit",
           "ambiguous_bar",
           "crosses_session_gap",
-          "crosses_weekend",
-          "crosses_roll"
+          "crosses_weekend"
         ],
         "title": "HorizonOutcomeOut"
       },
@@ -7252,150 +4992,6 @@
           "warnings"
         ],
         "title": "HorizonStatsOut"
-      },
-      "ImportErrorOut": {
-        "properties": {
-          "row_number": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Row Number"
-          },
-          "raw_row": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Raw Row"
-          },
-          "reason_code": {
-            "type": "string",
-            "title": "Reason Code"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          }
-        },
-        "type": "object",
-        "required": [
-          "row_number",
-          "raw_row",
-          "reason_code",
-          "message"
-        ],
-        "title": "ImportErrorOut"
-      },
-      "ImportOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "contract_id": {
-            "type": "integer",
-            "title": "Contract Id"
-          },
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind",
-            "description": "`import` или `conflict_resolution`"
-          },
-          "source_type": {
-            "type": "string",
-            "title": "Source Type"
-          },
-          "source_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Name"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "running, completed, failed"
-          },
-          "report": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Report",
-            "description": "Отчёт: строки, дубликаты, конфликты, покрытие, диапазон (ADR-0015)"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "resolves_import_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resolves Import Id"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "contract_id",
-          "provider",
-          "kind",
-          "source_type",
-          "source_name",
-          "status",
-          "report",
-          "error",
-          "resolves_import_id",
-          "created_at",
-          "finished_at"
-        ],
-        "title": "ImportOut"
       },
       "IndicatorInfo": {
         "properties": {
@@ -7607,6 +5203,132 @@
         ],
         "title": "IndicatorValuesOut"
       },
+      "InstrumentCreate": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Ticker",
+            "description": "Тикер из importer"
+          },
+          "tick_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker"
+        ],
+        "title": "InstrumentCreate"
+      },
+      "InstrumentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "tick_size": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tick Size"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "tick_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick Value",
+            "description": "Стоимость тика в валюте счёта на единицу (для денег в бэктесте)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageOut"
+            },
+            "type": "array",
+            "title": "Coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ticker",
+          "name",
+          "currency",
+          "tick_size",
+          "timezone",
+          "tick_value",
+          "source",
+          "created_at"
+        ],
+        "title": "InstrumentOut"
+      },
+      "InstrumentPatch": {
+        "properties": {
+          "tick_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick Value",
+            "description": "`null` — убрать (деньги не считаются)"
+          }
+        },
+        "type": "object",
+        "title": "InstrumentPatch"
+      },
       "IntervalOut": {
         "properties": {
           "low": {
@@ -7625,164 +5347,6 @@
         ],
         "title": "IntervalOut"
       },
-      "IssContractIn": {
-        "properties": {
-          "secid": {
-            "type": "string",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Secid"
-          },
-          "expiration_date": {
-            "type": "string",
-            "format": "date",
-            "title": "Expiration Date"
-          },
-          "last_trade_date": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Trade Date"
-          }
-        },
-        "type": "object",
-        "required": [
-          "secid",
-          "expiration_date"
-        ],
-        "title": "IssContractIn",
-        "description": "Серия ISS, подтверждённая пользователем."
-      },
-      "IssContractsIn": {
-        "properties": {
-          "contracts": {
-            "items": {
-              "$ref": "#/components/schemas/IssContractIn"
-            },
-            "type": "array",
-            "maxItems": 200,
-            "minItems": 1,
-            "title": "Contracts"
-          },
-          "enqueue_imports": {
-            "type": "boolean",
-            "title": "Enqueue Imports",
-            "description": "Сразу поставить загрузку истории каждого контракта",
-            "default": true
-          }
-        },
-        "type": "object",
-        "required": [
-          "contracts"
-        ],
-        "title": "IssContractsIn"
-      },
-      "IssContractsOut": {
-        "properties": {
-          "contracts": {
-            "items": {
-              "$ref": "#/components/schemas/ContractOut"
-            },
-            "type": "array",
-            "title": "Contracts"
-          },
-          "created": {
-            "type": "integer",
-            "title": "Created"
-          },
-          "imports_enqueued": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "title": "Imports Enqueued",
-            "description": "id поставленных задач `import.iss`"
-          }
-        },
-        "type": "object",
-        "required": [
-          "contracts",
-          "created",
-          "imports_enqueued"
-        ],
-        "title": "IssContractsOut"
-      },
-      "IssImportIn": {
-        "properties": {
-          "from": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "From",
-            "description": "Начало окна (включительно)"
-          },
-          "till": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Till",
-            "description": "Конец окна (включительно)"
-          }
-        },
-        "type": "object",
-        "title": "IssImportIn"
-      },
-      "IssPreviewIn": {
-        "properties": {
-          "from_year": {
-            "type": "integer",
-            "maximum": 2100.0,
-            "minimum": 1990.0,
-            "title": "From Year",
-            "default": 2020
-          },
-          "to_year": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 2100.0,
-                "minimum": 1990.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "To Year"
-          },
-          "secid_prefix": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secid Prefix",
-            "description": "Префикс SECID; по умолчанию определяется по ISS"
-          }
-        },
-        "type": "object",
-        "title": "IssPreviewIn"
-      },
       "JobCreate": {
         "properties": {
           "type": {
@@ -7791,7 +5355,7 @@
             "minLength": 1,
             "pattern": "^[a-z0-9_.-]+$",
             "title": "Type",
-            "description": "Тип задачи: `import.file`, `iss.sync_root`, `import.iss`, `aggregate.contract`, `demo.sleep`. Неизвестный тип worker завершит ошибкой."
+            "description": "Тип задачи: `candles.load`, `engine.run`, `backtest.run`, `verify.indicators`, `demo.sleep`. Неизвестный тип worker завершит ошибкой."
           },
           "params": {
             "additionalProperties": true,
@@ -7817,17 +5381,19 @@
         "examples": [
           {
             "params": {
-              "contract_id": 12
+              "instrument_id": 1,
+              "period_from": "2026-01-01",
+              "period_to": "2026-02-01"
             },
-            "type": "aggregate.contract"
+            "type": "candles.load"
           },
           {
             "params": {
-              "contract_id": 12,
-              "from": "2020-11-01",
-              "till": "2020-11-30"
+              "engine": "levels",
+              "instrument_id": 1,
+              "timeframe": "1h"
             },
-            "type": "import.iss"
+            "type": "engine.run"
           }
         ]
       },
@@ -7950,15 +5516,126 @@
         "title": "JobOut",
         "description": "Состояние задачи. Статусы: queued, running, succeeded, failed, cancelled."
       },
+      "LoadOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "timeframe_code": {
+            "type": "string",
+            "title": "Timeframe Code"
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period To"
+          },
+          "rows": {
+            "type": "integer",
+            "title": "Rows"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "timeframe_code",
+          "period_from",
+          "period_to",
+          "rows",
+          "source",
+          "job_id",
+          "created_at"
+        ],
+        "title": "LoadOut"
+      },
+      "LoadRequest": {
+        "properties": {
+          "period_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "string",
+                "format": "date-time"
+              }
+            ],
+            "title": "Period From",
+            "description": "Начало периода (дата — начало дня в зоне инструмента)"
+          },
+          "period_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "string",
+                "format": "date-time"
+              }
+            ],
+            "title": "Period To",
+            "description": "Конец периода, исключительно"
+          },
+          "timeframes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframes",
+            "description": "По умолчанию все: 15m, 1h, 4h, 1d, 1w"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_from",
+          "period_to"
+        ],
+        "title": "LoadRequest"
+      },
       "LockOut": {
         "properties": {
           "id": {
             "type": "integer",
             "title": "Id"
           },
-          "root_id": {
+          "instrument_id": {
             "type": "integer",
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "timeframe_code": {
             "type": "string",
@@ -7998,7 +5675,7 @@
         "type": "object",
         "required": [
           "id",
-          "root_id",
+          "instrument_id",
           "timeframe_code",
           "family",
           "test_from",
@@ -8023,7 +5700,7 @@
             "type": "string",
             "title": "Event"
           },
-          "root_id": {
+          "instrument_id": {
             "anyOf": [
               {
                 "type": "integer"
@@ -8032,7 +5709,7 @@
                 "type": "null"
               }
             ],
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "timeframe_code": {
             "anyOf": [
@@ -8123,7 +5800,7 @@
           "id",
           "created_at",
           "event",
-          "root_id",
+          "instrument_id",
           "timeframe_code",
           "family",
           "experiment_id",
@@ -8420,64 +6097,6 @@
         ],
         "title": "PercentileOut"
       },
-      "PresetIn": {
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 500
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "mapping": {
-            "$ref": "#/components/schemas/FileMapping"
-          }
-        },
-        "type": "object",
-        "required": [
-          "mapping"
-        ],
-        "title": "PresetIn"
-      },
-      "PresetOut": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "builtin": {
-            "type": "boolean",
-            "title": "Builtin"
-          },
-          "mapping": {
-            "$ref": "#/components/schemas/FileMapping"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "description",
-          "builtin",
-          "mapping"
-        ],
-        "title": "PresetOut"
-      },
       "ProbabilityOut": {
         "properties": {
           "threshold": {
@@ -8572,7 +6191,7 @@
             "minLength": 1,
             "title": "Name"
           },
-          "root_id": {
+          "instrument_id": {
             "anyOf": [
               {
                 "type": "integer"
@@ -8581,8 +6200,8 @@
                 "type": "null"
               }
             ],
-            "title": "Root Id",
-            "description": "Пусто — глобальный профиль, иначе для этого root"
+            "title": "Instrument Id",
+            "description": "Пусто — глобальный профиль, иначе для этого инструмента"
           },
           "config": {
             "$ref": "#/components/schemas/ProfileConfig"
@@ -8629,7 +6248,7 @@
             "type": "string",
             "title": "Name"
           },
-          "root_id": {
+          "instrument_id": {
             "anyOf": [
               {
                 "type": "integer"
@@ -8638,7 +6257,7 @@
                 "type": "null"
               }
             ],
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "config": {
             "$ref": "#/components/schemas/ProfileConfig"
@@ -8670,7 +6289,7 @@
         "required": [
           "id",
           "name",
-          "root_id",
+          "instrument_id",
           "config",
           "created_at",
           "updated_at",
@@ -8707,29 +6326,6 @@
         "type": "object",
         "title": "ProfilePatch"
       },
-      "ProviderIdOut": {
-        "properties": {
-          "provider": {
-            "type": "string",
-            "title": "Provider"
-          },
-          "id_type": {
-            "type": "string",
-            "title": "Id Type"
-          },
-          "external_id": {
-            "type": "string",
-            "title": "External Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "provider",
-          "id_type",
-          "external_id"
-        ],
-        "title": "ProviderIdOut"
-      },
       "QuantileOut": {
         "properties": {
           "q": {
@@ -8747,360 +6343,6 @@
           "value"
         ],
         "title": "QuantileOut"
-      },
-      "ResolveIn": {
-        "properties": {
-          "accept": {
-            "type": "boolean",
-            "title": "Accept",
-            "description": "`true` — принять новые значения, `false` — отклонить"
-          },
-          "conflict_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "integer"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conflict Ids",
-            "description": "Только эти конфликты; по умолчанию — все ожидающие"
-          }
-        },
-        "type": "object",
-        "required": [
-          "accept"
-        ],
-        "title": "ResolveIn"
-      },
-      "ResolveOut": {
-        "properties": {
-          "resolved": {
-            "type": "integer",
-            "title": "Resolved"
-          },
-          "resolution_import_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resolution Import Id"
-          },
-          "dataset_version_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dataset Version Id",
-            "description": "Новая версия датасета (только при принятии изменений)"
-          },
-          "aggregation_job_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Aggregation Job Id",
-            "description": "Задача пересборки баров"
-          }
-        },
-        "type": "object",
-        "required": [
-          "resolved",
-          "resolution_import_id",
-          "dataset_version_id",
-          "aggregation_job_id"
-        ],
-        "title": "ResolveOut"
-      },
-      "RollOut": {
-        "properties": {
-          "from_contract_id": {
-            "type": "integer",
-            "title": "From Contract Id"
-          },
-          "to_contract_id": {
-            "type": "integer",
-            "title": "To Contract Id"
-          },
-          "rolled_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rolled At"
-          },
-          "ratio": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Ratio"
-          },
-          "available_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Available At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "from_contract_id",
-          "to_contract_id",
-          "rolled_at",
-          "ratio",
-          "available_at"
-        ],
-        "title": "RollOut"
-      },
-      "RootIn": {
-        "properties": {
-          "code": {
-            "type": "string",
-            "maxLength": 32,
-            "minLength": 1,
-            "pattern": "^[A-Za-z0-9_.-]+$",
-            "title": "Code",
-            "description": "Код базового актива (для ISS — ASSETCODE, например NG, BR, GOLD)"
-          },
-          "name": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Name"
-          },
-          "exchange": {
-            "type": "string",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Exchange",
-            "default": "MOEX"
-          },
-          "quote_currency": {
-            "type": "string",
-            "maxLength": 3,
-            "minLength": 3,
-            "title": "Quote Currency",
-            "examples": [
-              "USD"
-            ]
-          },
-          "tick_size": {
-            "anyOf": [
-              {
-                "type": "number",
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              }
-            ],
-            "title": "Tick Size"
-          },
-          "calendar_code": {
-            "type": "string",
-            "title": "Calendar Code",
-            "default": "moex_forts"
-          },
-          "roll_trading_days": {
-            "type": "integer",
-            "maximum": 60.0,
-            "minimum": 0.0,
-            "title": "Roll Trading Days",
-            "description": "Ролл за N торговых дней до экспирации",
-            "default": 5
-          },
-          "include_weekend_sessions": {
-            "type": "boolean",
-            "title": "Include Weekend Sessions",
-            "description": "Включать выходные сессии в continuous-серию",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "code",
-          "name",
-          "quote_currency",
-          "tick_size"
-        ],
-        "title": "RootIn",
-        "examples": [
-          {
-            "code": "NG",
-            "name": "Природный газ",
-            "quote_currency": "USD",
-            "tick_size": "0.001"
-          }
-        ]
-      },
-      "RootOut": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "code": {
-            "type": "string",
-            "title": "Code"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "exchange": {
-            "type": "string",
-            "title": "Exchange"
-          },
-          "quote_currency": {
-            "type": "string",
-            "title": "Quote Currency"
-          },
-          "tick_size": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Tick Size"
-          },
-          "calendar_code": {
-            "type": "string",
-            "title": "Calendar Code"
-          },
-          "roll_trading_days": {
-            "type": "integer",
-            "title": "Roll Trading Days"
-          },
-          "include_weekend_sessions": {
-            "type": "boolean",
-            "title": "Include Weekend Sessions"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "code",
-          "name",
-          "exchange",
-          "quote_currency",
-          "tick_size",
-          "calendar_code",
-          "roll_trading_days",
-          "include_weekend_sessions",
-          "created_at"
-        ],
-        "title": "RootOut"
-      },
-      "RootPatch": {
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 128,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "exchange": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 32,
-                "minLength": 1
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Exchange"
-          },
-          "quote_currency": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 3,
-                "minLength": 3
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quote Currency"
-          },
-          "tick_size": {
-            "anyOf": [
-              {
-                "type": "number",
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "string",
-                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tick Size"
-          },
-          "calendar_code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Calendar Code"
-          },
-          "roll_trading_days": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 60.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Roll Trading Days"
-          },
-          "include_weekend_sessions": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Include Weekend Sessions"
-          }
-        },
-        "type": "object",
-        "title": "RootPatch"
       },
       "ShapeOut": {
         "properties": {
@@ -9181,27 +6423,6 @@
           "warnings"
         ],
         "title": "StatsOut"
-      },
-      "StepPriceOut": {
-        "properties": {
-          "date": {
-            "type": "string",
-            "format": "date",
-            "title": "Date"
-          },
-          "step_price": {
-            "type": "string",
-            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
-            "title": "Step Price",
-            "description": "Стоимость шага цены в ₽"
-          }
-        },
-        "type": "object",
-        "required": [
-          "date",
-          "step_price"
-        ],
-        "title": "StepPriceOut"
       },
       "StrategyIn": {
         "properties": {
@@ -9379,6 +6600,77 @@
         ],
         "title": "ThresholdCalibrationOut"
       },
+      "TickerOut": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "tick_size": {
+            "type": "string",
+            "title": "Tick Size"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "timeframes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Timeframes"
+          },
+          "first_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Date"
+          },
+          "last_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Date"
+          },
+          "added": {
+            "type": "boolean",
+            "title": "Added",
+            "description": "Уже заведён как инструмент",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "name",
+          "currency",
+          "tick_size",
+          "timezone",
+          "timeframes"
+        ],
+        "title": "TickerOut"
+      },
       "TradeOut": {
         "properties": {
           "id": {
@@ -9429,11 +6721,11 @@
               }
             ],
             "title": "Signal Price",
-            "description": "Close сигнального бара в шкале continuous (для уровней)"
+            "description": "Close сигнального бара (для связи с уровнями)"
           },
-          "contracts": {
+          "quantity": {
             "type": "integer",
-            "title": "Contracts"
+            "title": "Quantity"
           },
           "entry_time": {
             "type": "string",
@@ -9445,17 +6737,17 @@
             "format": "date-time",
             "title": "Exit Time"
           },
+          "entry_price": {
+            "type": "number",
+            "title": "Entry Price"
+          },
+          "exit_price": {
+            "type": "number",
+            "title": "Exit Price"
+          },
           "reason": {
             "type": "string",
             "title": "Reason"
-          },
-          "legs": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Legs"
           },
           "gross_ticks": {
             "type": "number",
@@ -9481,11 +6773,11 @@
             "type": "number",
             "title": "Net Points"
           },
-          "commission_rub": {
+          "commission": {
             "type": "number",
-            "title": "Commission Rub"
+            "title": "Commission"
           },
-          "gross_rub": {
+          "gross_money": {
             "anyOf": [
               {
                 "type": "number"
@@ -9494,9 +6786,10 @@
                 "type": "null"
               }
             ],
-            "title": "Gross Rub"
+            "title": "Gross Money",
+            "description": "Только если у инструмента есть tick_value"
           },
-          "net_rub": {
+          "net_money": {
             "anyOf": [
               {
                 "type": "number"
@@ -9505,19 +6798,11 @@
                 "type": "null"
               }
             ],
-            "title": "Net Rub"
-          },
-          "step_price_estimated": {
-            "type": "boolean",
-            "title": "Step Price Estimated"
+            "title": "Net Money"
           },
           "ambiguous_bar": {
             "type": "boolean",
             "title": "Ambiguous Bar"
-          },
-          "rolled": {
-            "type": "boolean",
-            "title": "Rolled"
           }
         },
         "type": "object",
@@ -9529,31 +6814,30 @@
           "side",
           "ref",
           "signal_price",
-          "contracts",
+          "quantity",
           "entry_time",
           "exit_time",
+          "entry_price",
+          "exit_price",
           "reason",
-          "legs",
           "gross_ticks",
           "cost_ticks",
           "mfe_ticks",
           "mae_ticks",
           "gross_points",
           "net_points",
-          "commission_rub",
-          "gross_rub",
-          "net_rub",
-          "step_price_estimated",
-          "ambiguous_bar",
-          "rolled"
+          "commission",
+          "gross_money",
+          "net_money",
+          "ambiguous_bar"
         ],
         "title": "TradeOut"
       },
       "UnlockIn": {
         "properties": {
-          "root_id": {
+          "instrument_id": {
             "type": "integer",
-            "title": "Root Id"
+            "title": "Instrument Id"
           },
           "timeframe": {
             "type": "string",
@@ -9572,7 +6856,7 @@
         },
         "type": "object",
         "required": [
-          "root_id",
+          "instrument_id",
           "timeframe",
           "family",
           "note"
@@ -9951,35 +7235,15 @@
   "tags": [
     {
       "name": "jobs",
-      "description": "Фоновые задачи: импорт, загрузка ISS, сборка баров."
+      "description": "Фоновые задачи: загрузка свечей, прогоны, бэктесты."
     },
     {
-      "name": "roots",
-      "description": "Базовые активы (NG, BR, GOLD…)."
-    },
-    {
-      "name": "contracts",
-      "description": "Серии фьючерсов и их загрузка из ISS."
-    },
-    {
-      "name": "calendars",
-      "description": "Торговые календари (только чтение)."
-    },
-    {
-      "name": "imports",
-      "description": "Запуск импортов, отчёты, отклонённые строки."
-    },
-    {
-      "name": "files",
-      "description": "Загруженные файлы и пресеты маппинга."
-    },
-    {
-      "name": "conflicts",
-      "description": "Расхождения импорта с уже загруженными данными."
+      "name": "instruments",
+      "description": "Инструменты и загрузка свечей из importer."
     },
     {
       "name": "candles",
-      "description": "Свечи, continuous-серия и snapshot as-of."
+      "description": "Свечи инструмента и snapshot as-of."
     },
     {
       "name": "indicators",

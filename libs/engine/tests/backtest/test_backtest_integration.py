@@ -32,17 +32,17 @@ BREAK = StrategySpec(
     target=ExitRule("atr", 2.0),
     max_bars=8,
 )
-COSTS = Costs(half_spread_ticks=1, slippage_ticks=1, commission_per_contract=5)
+COSTS = Costs(half_spread_ticks=1, slippage_ticks=1, commission_per_unit=5)
 
 
 def data_for(bars: list[BarInput], as_of: datetime | None = None) -> BacktestData:
     items, _ = items_at(bars, as_of)
     series = items[0].series
     sim = [
-        SimBar(b.timestamp, b.close_time, b.open, b.high, b.low, b.close, 1, 1.0)
+        SimBar(b.timestamp, b.close_time, b.open, b.high, b.low, b.close)
         for b in series.bars
     ]
-    return BacktestData(series, sim, items, 0.01, lambda contract, at: (10.0, False))
+    return BacktestData(series, sim, items, 0.01, 10.0)
 
 
 DATA = data_for(BARS)
@@ -113,21 +113,23 @@ def test_decisions_use_only_data_up_to_the_signal_bar() -> None:
         signal_bar = DATA.series.bars[trade.signal_index]
         entry_bar = DATA.series.bars[trade.entry_bar]
         assert trade.entry_bar == trade.signal_index + 1
-        assert trade.legs[0].entry_price == pytest.approx(entry_bar.open)
-        assert trade.legs[0].entry_time >= signal_bar.close_time  # вход после сигнала
+        assert trade.entry_price == pytest.approx(entry_bar.open)
+        assert trade.entry_time >= signal_bar.close_time  # вход после сигнала
 
 
 def test_accounting_identities() -> None:
-    ev = run(DATA, BREAK, contracts=3)
+    ev = run(DATA, BREAK, quantity=3)
 
     assert ev.priced
     for p in ev.priced:
         t = p.trade
-        assert t.gross_ticks == pytest.approx(sum(leg.gross_ticks for leg in t.legs))
-        assert t.net_ticks == pytest.approx(t.gross_ticks - 2 * len(t.legs) * 2.0)
-        assert t.commission == pytest.approx(2 * len(t.legs) * 3 * 5)
+        assert t.gross_ticks == pytest.approx(
+            (t.exit_price - t.entry_price) / 0.01 * (1 if t.side == "long" else -1)
+        )
+        assert t.net_ticks == pytest.approx(t.gross_ticks - 2 * 2.0)
+        assert t.commission == pytest.approx(2 * 3 * 5)
         assert p.net_points == pytest.approx(t.net_ticks * 0.01 * 3)
-        assert p.net_rub == pytest.approx(t.net_ticks * 10.0 * 3 - t.commission)
+        assert p.net_money == pytest.approx(t.net_ticks * 10.0 * 3 - t.commission)
         assert t.mfe_ticks >= min(t.gross_ticks, 0.0) - 1e-9
         assert t.mae_ticks <= max(t.gross_ticks, 0.0) + 1e-9
 

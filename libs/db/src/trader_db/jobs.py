@@ -50,14 +50,16 @@ def enqueue_statement(
     return insert(Job).values(**values).returning(Job)
 
 
-def has_active_contract_job(session: Session, job_type: str, contract_id: int) -> bool:
-    """Есть ли ожидающая или выполняющаяся задача типа ``job_type`` по контракту."""
+def has_active_instrument_job(
+    session: Session, job_type: str, instrument_id: int
+) -> bool:
+    """Есть ли ожидающая или выполняющаяся задача типа ``job_type`` по инструменту."""
     return bool(
         session.scalar(
             select(
                 exists().where(
                     Job.type == job_type,
-                    Job.params["contract_id"].as_integer() == contract_id,
+                    Job.params["instrument_id"].as_integer() == instrument_id,
                     Job.status.in_(ACTIVE_STATUSES),
                 )
             )

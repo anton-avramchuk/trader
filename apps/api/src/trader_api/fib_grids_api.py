@@ -11,9 +11,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import AwareDatetime, BaseModel, Field, model_validator
 from sqlalchemy import select
-from trader_db.models import Contract, ManualFibGrid, Root
-from trader_engine.aggregation import TIMEFRAMES
+from trader_db.models import Instrument, ManualFibGrid
 from trader_engine.events.fibonacci import fib_levels
+from trader_engine.timeframes import TIMEFRAMES
 
 from trader_api.deps import DbSession
 
@@ -28,8 +28,7 @@ class FibPoint(BaseModel):
 
 
 class FibGridIn(BaseModel):
-    contract_id: int | None = None
-    root_id: int | None = Field(default=None, description="Continuous-серия root")
+    instrument_id: int
     timeframe: str
     start: FibPoint
     end: FibPoint
@@ -37,8 +36,6 @@ class FibGridIn(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> "FibGridIn":
-        if (self.contract_id is None) == (self.root_id is None):
-            raise ValueError("Укажите ровно один из: contract_id или root_id")
         if self.timeframe not in TIMEFRAMES:
             raise ValueError(f"Неизвестный таймфрейм {self.timeframe!r}")
         if self.start.time == self.end.time:
@@ -50,8 +47,7 @@ class FibGridIn(BaseModel):
 
 class FibGridOut(BaseModel):
     id: int
-    contract_id: int | None
-    root_id: int | None
+    instrument_id: int
     timeframe: str
     start: FibPoint
     end: FibPoint
@@ -68,8 +64,7 @@ def _out(grid: ManualFibGrid) -> FibGridOut:
     levels = fib_levels(start, end)
     return FibGridOut(
         id=grid.id,
-        contract_id=grid.contract_id,
-        root_id=grid.root_id,
+        instrument_id=grid.instrument_id,
         timeframe=grid.timeframe_code,
         start=FibPoint(time=grid.start_time, price=start),
         end=FibPoint(time=grid.end_time, price=end),
@@ -89,15 +84,12 @@ def _out(grid: ManualFibGrid) -> FibGridOut:
 )
 async def list_grids(
     session: DbSession,
-    contract_id: Annotated[int | None, Query()] = None,
-    root_id: Annotated[int | None, Query()] = None,
+    instrument_id: Annotated[int | None, Query()] = None,
     timeframe: Annotated[str | None, Query()] = None,
 ) -> list[FibGridOut]:
     query = select(ManualFibGrid)
-    if contract_id is not None:
-        query = query.where(ManualFibGrid.contract_id == contract_id)
-    if root_id is not None:
-        query = query.where(ManualFibGrid.root_id == root_id)
+    if instrument_id is not None:
+        query = query.where(ManualFibGrid.instrument_id == instrument_id)
     if timeframe is not None:
         query = query.where(ManualFibGrid.timeframe_code == timeframe)
     grids = await session.scalars(query.order_by(ManualFibGrid.id))
@@ -113,16 +105,10 @@ async def list_grids(
     responses=NOT_FOUND,
 )
 async def create_grid(body: FibGridIn, session: DbSession) -> FibGridOut:
-    if (
-        body.contract_id is not None
-        and await session.get(Contract, body.contract_id) is None
-    ):
-        raise HTTPException(404, f"Контракт {body.contract_id} не найден")
-    if body.root_id is not None and await session.get(Root, body.root_id) is None:
-        raise HTTPException(404, f"Root {body.root_id} не найден")
+    if await session.get(Instrument, body.instrument_id) is None:
+        raise HTTPException(404, f"Инструмент {body.instrument_id} не найден")
     grid = ManualFibGrid(
-        contract_id=body.contract_id,
-        root_id=body.root_id,
+        instrument_id=body.instrument_id,
         timeframe_code=body.timeframe,
         start_time=body.start.time,
         start_price=Decimal(str(body.start.price)),

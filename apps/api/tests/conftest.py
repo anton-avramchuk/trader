@@ -30,5 +30,5 @@ def client(database_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestC
 
 @pytest.fixture
 def seed(client: TestClient, database_url: str) -> Seed:
-    """Root с двумя контрактами, барами всех TF и роллом (см. tests/seeding.py)."""
+    """Инструмент со свечами всех TF (см. tests/seeding.py)."""
     return seed_database(client, database_url)

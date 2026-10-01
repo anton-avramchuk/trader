@@ -1,12 +1,10 @@
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
-import type { Candle, Contract, Root, Roll } from '@trader/api-client';
+import type { Candle, Instrument } from '@trader/api-client';
 import { ApiService } from '../../core/api/api';
-import { mergeRolls } from '../chart/chart-data';
 import {
   compareBars,
   clampCursor,
   knownAt,
-  knownRolls,
   mskDate,
   mskMidnightUtc,
   visibleCandles,
@@ -24,8 +22,6 @@ export const FORWARD_PAGE = 5000;
 const TICK_MS = 100;
 const VERIFY_BARS = 50;
 
-export type ReplayTarget = { kind: 'root' } | { kind: 'contract'; id: number };
-
 export interface VerifyResult {
   checked: number;
   mismatches: number;
@@ -37,15 +33,12 @@ export interface VerifyResult {
 export class ReplayStore implements OnDestroy {
   private readonly api = inject(ApiService);
 
-  readonly roots = signal<Root[]>([]);
-  readonly contracts = signal<Contract[]>([]);
-  readonly rootId = signal<number | null>(null);
-  readonly target = signal<ReplayTarget>({ kind: 'root' });
+  readonly instruments = signal<Instrument[]>([]);
+  readonly instrumentId = signal<number | null>(null);
   readonly timeframe = signal<ReplayTimeframe>('1h');
   readonly startDate = signal('');
 
   readonly timeline = signal<Candle[]>([]);
-  readonly rolls = signal<Roll[]>([]);
   /** Сколько баров видно (курсор). */
   readonly cursor = signal(0);
   /** Начальная позиция курсора после загрузки (для Restart). */
@@ -60,24 +53,15 @@ export class ReplayStore implements OnDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
 
   readonly visible = computed(() =>
-    visibleCandles(this.timeline(), this.rolls(), this.cursor()),
-  );
-  readonly known = computed(() =>
-    knownRolls(this.timeline(), this.rolls(), this.cursor()),
+    visibleCandles(this.timeline(), this.cursor()),
   );
   /** Момент, до которого система «знает» рынок. */
   readonly asOf = computed(() => knownAt(this.timeline(), this.cursor()));
   readonly atEnd = computed(
     () => this.cursor() >= this.timeline().length && !this.hasMoreForward(),
   );
-  readonly labels = computed(() =>
-    Object.fromEntries(
-      this.contracts().map((c) => [c.id, c.secid ?? c.expiration_date]),
-    ),
-  );
   readonly datasetKey = computed(
-    () =>
-      `${this.rootId()}:${JSON.stringify(this.target())}:${this.timeframe()}:${this.startDate()}`,
+    () => `${this.instrumentId()}:${this.timeframe()}:${this.startDate()}`,
   );
 
   ngOnDestroy(): void {
@@ -86,31 +70,19 @@ export class ReplayStore implements OnDestroy {
 
   // --- справочники -----------------------------------------------------------
 
-  async loadRoots(): Promise<void> {
-    this.roots.set(await this.api.call(this.api.client.GET('/roots')));
-    const first = this.roots()[0];
-    if (this.rootId() === null && first) {
-      await this.selectRoot(first.id);
+  async loadInstruments(): Promise<void> {
+    this.instruments.set(
+      await this.api.call(this.api.client.GET('/instruments')),
+    );
+    const first = this.instruments()[0];
+    if (this.instrumentId() === null && first) {
+      this.selectInstrument(first.id);
     }
   }
 
-  async selectRoot(rootId: number): Promise<void> {
+  selectInstrument(instrumentId: number): void {
     this.pause();
-    this.rootId.set(rootId);
-    this.target.set({ kind: 'root' });
-    this.contracts.set(
-      await this.api.call(
-        this.api.client.GET('/roots/{root_id}/contracts', {
-          params: { path: { root_id: rootId } },
-        }),
-      ),
-    );
-    this.clear();
-  }
-
-  selectTarget(target: ReplayTarget): void {
-    this.pause();
-    this.target.set(target);
+    this.instrumentId.set(instrumentId);
     this.clear();
   }
 
@@ -122,27 +94,21 @@ export class ReplayStore implements OnDestroy {
 
   private clear(): void {
     this.timeline.set([]);
-    this.rolls.set([]);
     this.cursor.set(0);
     this.origin.set(0);
     this.hasMoreForward.set(false);
     this.verify.set(null);
   }
 
-  private selection(): { root_id?: number; contract_id?: number } {
-    const target = this.target();
-    if (target.kind === 'contract') {
-      return { contract_id: target.id };
-    }
-    const rootId = this.rootId();
-    return rootId === null ? {} : { root_id: rootId };
+  private selection(): { instrument_id: number } {
+    return { instrument_id: this.instrumentId() as number };
   }
 
   // --- запуск и навигация ------------------------------------------------------
 
   /** Начать (или перейти к дате, Jump to date): история слева, будущее скрыто. */
   async start(date: string): Promise<void> {
-    if (!date || this.rootId() === null) {
+    if (!date || this.instrumentId() === null) {
       return;
     }
     this.pause();
@@ -180,7 +146,6 @@ export class ReplayStore implements OnDestroy {
         ),
       ]);
       this.timeline.set([...past.candles, ...future.candles]);
-      this.rolls.set(mergeRolls(past.rolls, future.rolls));
       this.origin.set(past.candles.length);
       this.cursor.set(past.candles.length);
       this.forwardFrom = future.next_start ?? null;
@@ -224,7 +189,6 @@ export class ReplayStore implements OnDestroy {
         }),
       );
       this.timeline.update((current) => [...current, ...page.candles]);
-      this.rolls.update((current) => mergeRolls(current, page.rolls));
       this.forwardFrom = page.next_start ?? null;
       this.hasMoreForward.set(page.truncated);
     } finally {

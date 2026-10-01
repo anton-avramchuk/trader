@@ -103,9 +103,9 @@ def engine_registered() -> Iterator[None]:
 def run_id(seed: Seed, database_url: str) -> Iterator[int]:
     engine = make_engine(database_url)
     with Session(engine) as session:
-        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.a, "15m")]
+        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.id, "15m")]
         outcome = advance_run(
-            session, Patterns.name, {}, bars, "15m", contract_id=seed.a
+            session, Patterns.name, {}, bars, "15m", instrument_id=seed.id
         )
         session.commit()
     engine.dispose()
@@ -115,7 +115,7 @@ def run_id(seed: Seed, database_url: str) -> Iterator[int]:
 def bars_of(database_url: str, seed: Seed) -> list[BarInput]:
     engine = make_engine(database_url)
     with Session(engine) as session:
-        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.a, "15m")]
+        bars = [BarInput.from_bar(bar) for bar in read_bars(session, seed.id, "15m")]
     engine.dispose()
     return bars
 
@@ -150,7 +150,11 @@ def test_small_sample_is_flagged(
 
     [bucket] = stats(client, run_id, as_of=iso(cut), baseline="false")["buckets"]
 
-    assert all("small_sample" in h["warnings"] for h in bucket["horizons"])
+    # мало событий: либо «мало», либо вовсе нет исходов на длинном горизонте
+    assert all(
+        {"small_sample", "no_data"} & set(h["warnings"]) for h in bucket["horizons"]
+    )
+    assert any("small_sample" in h["warnings"] for h in bucket["horizons"])
 
 
 def test_deoverlap_thins_longer_horizons(client: TestClient, run_id: int) -> None:

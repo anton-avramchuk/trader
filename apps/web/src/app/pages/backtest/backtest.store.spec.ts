@@ -40,8 +40,8 @@ function setup(watch?: Observable<Job>) {
   const client = {
     GET: vi.fn((path: string) => {
       switch (path) {
-        case '/roots':
-          return ok([{ id: 1, code: 'NG' }]);
+        case '/instruments':
+          return ok([{ id: 1, ticker: 'SBER' }]);
         case '/backtests':
           return ok([finished()]);
         case '/backtest-locks':
@@ -78,7 +78,11 @@ function setup(watch?: Observable<Job>) {
 }
 
 const ready = (store: BacktestStore) =>
-  store.patch({ rootId: 1, periodFrom: '2026-01-01', periodTo: '2026-06-30' });
+  store.patch({
+    instrumentId: 1,
+    periodFrom: '2026-01-01',
+    periodTo: '2026-06-30',
+  });
 
 describe('BacktestStore', () => {
   it('init: инструменты, первый выбирается, история и блокировки', async () => {
@@ -86,8 +90,8 @@ describe('BacktestStore', () => {
 
     await store.init();
 
-    expect(store.roots()).toHaveLength(1);
-    expect(store.form().rootId).toBe(1);
+    expect(store.instruments()).toHaveLength(1);
+    expect(store.form().instrumentId).toBe(1);
     expect(store.history()).toHaveLength(1);
     expect(store.locks()).toEqual([]);
   });
@@ -101,7 +105,7 @@ describe('BacktestStore', () => {
     const [path, request] = calls(client.POST)[0] ?? [];
     expect(path).toBe('/backtests');
     expect(request?.body).toMatchObject({
-      root_id: 1,
+      instrument_id: 1,
       period_from: '2026-01-01',
     });
     expect(jobs.watch).toHaveBeenCalledWith(70);
@@ -194,7 +198,7 @@ describe('BacktestStore', () => {
     const { store, client } = setup();
     const lock = {
       id: 1,
-      root_id: 1,
+      instrument_id: 1,
       timeframe_code: '1h',
       family: 'pattern',
     } as BacktestLock;
@@ -205,7 +209,7 @@ describe('BacktestStore', () => {
     const [path, request] = calls(client.POST).at(-1) ?? [];
     expect(path).toBe('/backtest-locks/unlock');
     expect(request?.body).toEqual({
-      root_id: 1,
+      instrument_id: 1,
       timeframe: '1h',
       family: 'pattern',
       note: 'ошибка в данных',

@@ -75,7 +75,7 @@ function setup() {
   return { client, jobs, store: TestBed.inject(StructureStore) };
 }
 
-const CONTEXT = { root_id: 1, chartTimeframe: '15m' };
+const CONTEXT = { instrument_id: 1, chartTimeframe: '15m' };
 
 describe('StructureStore', () => {
   it('без включённых слоёв ничего не запрашивает', async () => {
@@ -98,7 +98,7 @@ describe('StructureStore', () => {
     expect(posted).toHaveLength(1);
     expect(posted[0]?.[1]?.body).toEqual({
       type: 'engine.run',
-      params: { engine: 'zigzag', timeframe: '15m', root_id: 1 },
+      params: { engine: 'zigzag', timeframe: '15m', instrument_id: 1 },
     });
     const query = calls(client.GET).at(-1)?.[1]?.params?.query;
     expect(query).toMatchObject({
@@ -114,7 +114,7 @@ describe('StructureStore', () => {
     await store.refresh(CONTEXT);
     await store.setLayer('swings', true);
 
-    await store.refresh({ root_id: 1, chartTimeframe: '1h' });
+    await store.refresh({ instrument_id: 1, chartTimeframe: '1h' });
     await store.recompute();
 
     const timeframes = calls(client.POST).map(
@@ -138,7 +138,7 @@ describe('StructureStore', () => {
     expect(zones?.[1]?.params?.query).toMatchObject({
       chart_timeframe: '15m',
       source_timeframes: ['15m', '1h'],
-      root_id: 1,
+      instrument_id: 1,
     });
   });
 
@@ -157,7 +157,7 @@ describe('StructureStore', () => {
 
   it('ручная сетка: две точки сохраняют сетку и выключают режим', async () => {
     const { store, client } = setup();
-    await store.refresh({ contract_id: 7, chartTimeframe: '15m' });
+    await store.refresh({ instrument_id: 7, chartTimeframe: '15m' });
     await store.pickPoint({ time: 1, price: 1 }); // режим выключен — игнор
     expect(store.pending()).toBeNull();
 
@@ -168,7 +168,7 @@ describe('StructureStore', () => {
 
     const post = calls(client.POST).find(([path]) => path === '/fib-grids');
     expect(post?.[1]?.body).toEqual({
-      contract_id: 7,
+      instrument_id: 7,
       timeframe: '15m',
       start: { time: new Date(1_790_000_000_000).toISOString(), price: 100 },
       end: { time: new Date(1_790_003_600_000).toISOString(), price: 120 },
@@ -195,7 +195,7 @@ describe('StructureStore', () => {
       ),
     );
     await store.refresh({
-      root_id: 1,
+      instrument_id: 1,
       chartTimeframe: '15m',
       asOf: '2026-09-28T06:00:00Z',
     });
@@ -203,7 +203,7 @@ describe('StructureStore', () => {
     await store.setLayer('fibonacci', true);
     const early = store.overlay().segments.length;
     await store.refresh({
-      root_id: 1,
+      instrument_id: 1,
       chartTimeframe: '15m',
       asOf: '2026-09-28T09:00:00Z',
     });

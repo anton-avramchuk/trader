@@ -15,7 +15,7 @@ function bar(index: number): Candle {
     low: '99',
     close: String(100 + index),
     volume: '1',
-    is_partial: false,
+    trading_day: '2026-09-28',
   };
 }
 
@@ -35,27 +35,22 @@ function setup(options: { forward?: Candle[]; more?: boolean } = {}) {
   const forward = options.forward ?? range(0, 6);
   const client = {
     GET: vi.fn((path: string, request?: { params: { query: Query } }) => {
-      if (path === '/roots') {
-        return ok([{ id: 1, code: 'NG' }]);
-      }
-      if (path === '/roots/{root_id}/contracts') {
-        return ok([{ id: 10, secid: 'NGZ6', expiration_date: '2026-12-29' }]);
+      if (path === '/instruments') {
+        return ok([{ id: 1, ticker: 'SBER' }]);
       }
       if (path === '/snapshot') {
-        return ok({ candles: past.slice(-1), rolls: [], truncated: false });
+        return ok({ candles: past.slice(-1), truncated: false });
       }
       const query = request?.params.query;
       if (query?.tail) {
         return ok({
           candles: past,
-          rolls: [],
           truncated: false,
           next_start: null,
         });
       }
       return ok({
         candles: forward,
-        rolls: [],
         truncated: options.more ?? false,
         next_start: options.more ? forward.at(-1)?.close_time : null,
       });
@@ -69,7 +64,7 @@ function setup(options: { forward?: Candle[]; more?: boolean } = {}) {
 
 async function started(options?: Parameters<typeof setup>[0]) {
   const ctx = setup(options);
-  await ctx.store.loadRoots();
+  await ctx.store.loadInstruments();
   await ctx.store.start('2026-09-28');
   return ctx;
 }

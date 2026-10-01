@@ -1,20 +1,27 @@
 """Unit tests configuration module."""
 
 import os
+import random
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
-from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
-from trader_db import make_engine, upgrade_head
-from trader_db.models import Contract, Root, TradingCalendar
+from trader_db import (
+    CandleRow,
+    create_instrument,
+    make_engine,
+    upgrade_head,
+    upsert_candles,
+)
 from trader_db.testing import temporary_database
+from trader_engine.timeframes import TIMEFRAMES
 
-from tests.fake_provider import MON, NOW, TODAY, TUE, WED, FakeProvider, contract
 from trader_worker.handlers import HandlerRegistry
+from trader_worker.importer_client import ImporterClient
 from trader_worker.registry import build_registry
 from trader_worker.runner import Worker, WorkerConfig
 
@@ -53,95 +60,163 @@ def worker(session_factory: sessionmaker[Session], registry: HandlerRegistry) ->
 
 
 @pytest.fixture
-def contract_id(session_factory: sessionmaker[Session]) -> int:
+def instrument_id(session_factory: sessionmaker[Session]) -> int:
+    """Инструмент SBER, зафиксированный в БД."""
     with session_factory() as session:
-        calendar_id = session.scalars(
-            select(TradingCalendar.id).where(TradingCalendar.code == "moex_forts")
-        ).one()
-        root = Root(
-            code="BR",
-            name="Brent",
-            exchange="MOEX",
-            quote_currency="USD",
+        instrument = create_instrument(
+            session,
+            ticker="SBER",
+            name="Сбербанк",
+            currency="RUB",
             tick_size=Decimal("0.01"),
-            calendar_id=calendar_id,
-            roll_trading_days=5,
+            timezone="Europe/Moscow",
+            source="test",
+            tick_value=Decimal("1"),
         )
-        session.add(root)
-        session.flush()
-        contract = Contract(root_id=root.id, expiration_date=date(2026, 12, 1))
-        session.add(contract)
-        session.flush()
-        contract_id = contract.id
         session.commit()
-    return contract_id
+        return instrument.id
 
 
-@pytest.fixture
-def import_dir(tmp_path: Path) -> Path:
-    directory = tmp_path / "imports"
-    directory.mkdir()
-    return directory
-
-
-@pytest.fixture
-def file_worker(
-    session_factory: sessionmaker[Session], import_dir: Path, worker: Worker
-) -> Worker:
-    """Worker с реальным реестром: демо-задачи и ``import.file``."""
-    return Worker(
-        session_factory, build_registry(session_factory, import_dir), worker.config
-    )
-
-
-@pytest.fixture
-def root_id(session_factory: sessionmaker[Session]) -> int:
-    with session_factory() as session:
-        calendar_id = session.scalars(
-            select(TradingCalendar.id).where(TradingCalendar.code == "moex_forts")
-        ).one()
-        root = Root(
-            code="BR",
-            name="Brent",
-            exchange="MOEX",
-            quote_currency="USD",
-            tick_size=Decimal("0.01"),
-            calendar_id=calendar_id,
-            roll_trading_days=5,
+def synthetic_candles(timeframe: str, count: int, seed: int = 3) -> list[CandleRow]:
+    """Детерминированное блуждание цены со ступенчатыми волнами (для движков)."""
+    rng = random.Random(seed)
+    length = TIMEFRAMES[timeframe]
+    opened = datetime(2026, 1, 5, 7, tzinfo=UTC)
+    price = 100.0
+    rows: list[CandleRow] = []
+    for i in range(count):
+        wave = 1.5 if (i // 12) % 2 == 0 else -1.5
+        close = price + wave * rng.uniform(0.2, 1.0) + rng.gauss(0, 0.8)
+        high = max(price, close) + rng.uniform(0, 0.8)
+        low = min(price, close) - rng.uniform(0, 0.8)
+        start = opened + i * length
+        rows.append(
+            CandleRow(
+                open_time=start,
+                close_time=start + length,
+                open=Decimal(f"{price:.4f}"),
+                high=Decimal(f"{high:.4f}"),
+                low=Decimal(f"{low:.4f}"),
+                close=Decimal(f"{close:.4f}"),
+                volume=Decimal(rng.randint(10, 100)),
+                trading_day=start.date(),
+            )
         )
-        session.add(root)
-        session.flush()
-        root_id = root.id
-        session.commit()
-    return root_id
+        price = close
+    return rows
 
 
-@pytest.fixture
-def provider() -> FakeProvider:
-    fake = FakeProvider(
-        [
-            contract("BRX6", date(2026, 11, 2)),
-            contract("BRZ6", date(2026, 12, 1)),
-            contract("NGZ6", date(2026, 12, 29), asset="NG"),
+def seed_candles(
+    factory: sessionmaker[Session],
+    instrument: int,
+    timeframe: str = "15m",
+    count: int = 800,
+) -> None:
+    with factory() as session, session.begin():
+        upsert_candles(
+            session, instrument, timeframe, synthetic_candles(timeframe, count)
+        )
+
+
+class FakeImporter:
+    """Фейковый importer: свечи по требованию; считает запросы, умеет падать."""
+
+    def __init__(self) -> None:
+        self.calls: list[httpx.Request] = []
+        self.page_size = 3
+        self.fail_with: int | None = None
+        self.known = {"SBER"}
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.calls.append(request)
+        if self.fail_with is not None:
+            return httpx.Response(self.fail_with, json={"detail": "источник упал"})
+        path = request.url.path
+        if path == "/tickers":
+            return httpx.Response(200, json=[self._ticker("SBER")])
+        if path.startswith("/tickers/"):
+            ticker = path.rsplit("/", 1)[1]
+            if ticker not in self.known:
+                return httpx.Response(
+                    404, json={"detail": f"Тикер не найден: {ticker}"}
+                )
+            return httpx.Response(200, json=self._ticker(ticker))
+        if path == "/history":
+            return self._history(request)
+        return httpx.Response(404)
+
+    @staticmethod
+    def _ticker(ticker: str) -> dict[str, Any]:
+        return {
+            "ticker": ticker,
+            "name": "Сбербанк",
+            "currency": "RUB",
+            "tick_size": "0.01",
+            "timezone": "Europe/Moscow",
+            "timeframes": list(TIMEFRAMES),
+            "first_date": None,
+            "last_date": None,
+        }
+
+    def _history(self, request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        if params["ticker"] not in self.known:
+            return httpx.Response(404, json={"detail": "Тикер не найден"})
+        length = TIMEFRAMES[params["tf"]]
+        start = datetime.fromisoformat(params["from"].replace("Z", "+00:00"))
+        end = datetime.fromisoformat(params["to"].replace("Z", "+00:00"))
+        slots: list[datetime] = []
+        moment = start
+        while moment < end:
+            slots.append(moment)
+            moment += length
+        page = slots[: self.page_size]
+        candles = [
+            {
+                "t": t.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+                "o": "100.5",
+                "h": "101",
+                "l": "100",
+                "c": "100.75",
+                "v": "12",
+            }
+            for t in page
         ]
-    )
-    fake.set_days("BRZ6", [MON, TUE, WED])
-    return fake
+        more = slots[self.page_size :]
+        next_from = (
+            None
+            if not more
+            else more[0].astimezone(UTC).isoformat().replace("+00:00", "Z")
+        )
+        return httpx.Response(
+            200,
+            json={
+                "ticker": params["ticker"],
+                "tf": params["tf"],
+                "candles": candles,
+                "next_from": next_from,
+            },
+        )
 
 
 @pytest.fixture
-def iss_worker(
-    worker: Worker,
-    session_factory: sessionmaker[Session],
-    provider: FakeProvider,
-    tmp_path: Path,
+def importer() -> FakeImporter:
+    return FakeImporter()
+
+
+@pytest.fixture
+def loader_worker(
+    worker: Worker, session_factory: sessionmaker[Session], importer: FakeImporter
 ) -> Worker:
-    registry = build_registry(
-        session_factory,
-        tmp_path,
-        provider.factory,
-        chunk_days=2,
-        today=lambda: TODAY,
-        clock=lambda: NOW,
+    """Worker с реальным реестром, но с фейковым importer."""
+
+    def factory() -> ImporterClient:
+        return ImporterClient(
+            client=httpx.Client(
+                transport=httpx.MockTransport(importer), base_url="http://importer.test"
+            )
+        )
+
+    return Worker(
+        session_factory, build_registry(session_factory, factory), worker.config
     )
-    return Worker(session_factory, registry, worker.config)

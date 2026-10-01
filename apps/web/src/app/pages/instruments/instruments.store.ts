@@ -1,284 +1,147 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import type {
-  CalendarDays,
-  CalendarDetail,
-  Contract,
-  ContractIn,
-  ContractPatch,
-  IssContractIn,
+  CandleLoad,
+  ImporterTicker,
+  Instrument,
   Job,
-  Root,
-  RootIn,
-  RootPatch,
 } from '@trader/api-client';
 import { lastValueFrom } from 'rxjs';
 import { ApiService } from '../../core/api/api';
 import { JobsService } from '../../core/jobs/jobs';
 
-/** Контракт, найденный в ISS, и его статус относительно уже заведённых. */
-export interface IssCandidate extends IssContractIn {
-  exists: boolean;
-  selected: boolean;
+/** Период загрузки свечей: даты `YYYY-MM-DD`, конец исключительно. */
+export interface LoadPeriod {
+  from: string;
+  to: string;
 }
 
-interface IssJobResult {
-  contracts: {
-    secid: string;
-    expiration_date: string;
-    last_trade_date: string | null;
-  }[];
-}
-
-/** Состояние и действия страницы Data → Instruments. */
+/** Состояние и действия страницы Data → Instruments (ADR-0028). */
 @Injectable()
 export class InstrumentsStore {
   private readonly api = inject(ApiService);
   private readonly jobs = inject(JobsService);
 
-  readonly roots = signal<Root[]>([]);
+  readonly instruments = signal<Instrument[]>([]);
   readonly selectedId = signal<number | null>(null);
-  readonly contracts = signal<Contract[]>([]);
-  readonly calendar = signal<CalendarDetail | null>(null);
-  readonly calendarDays = signal<CalendarDays | null>(null);
+  readonly tickers = signal<ImporterTicker[]>([]);
+  readonly tickersError = signal<string | null>(null);
+  readonly loads = signal<CandleLoad[]>([]);
+  readonly loadJob = signal<Job | null>(null);
   readonly loading = signal(false);
 
   readonly selected = computed(
-    () => this.roots().find((root) => root.id === this.selectedId()) ?? null,
+    () => this.instruments().find((i) => i.id === this.selectedId()) ?? null,
   );
-
-  // Запрос контрактов ISS: ход задачи и найденные серии.
-  readonly issJob = signal<Job | null>(null);
-  readonly issCandidates = signal<IssCandidate[]>([]);
-  readonly issError = signal<string | null>(null);
-  // Обновление стоимости шага цены.
-  readonly stepJob = signal<Job | null>(null);
-
-  readonly issSelectedCount = computed(
-    () => this.issCandidates().filter((c) => c.selected).length,
+  readonly available = computed(() =>
+    this.tickers().filter((ticker) => !ticker.added),
   );
+  readonly loadRunning = computed(() => {
+    const job = this.loadJob();
+    return (
+      job !== null && (job.status === 'queued' || job.status === 'running')
+    );
+  });
 
-  async loadRoots(): Promise<void> {
+  async load(): Promise<void> {
     this.loading.set(true);
     try {
-      this.roots.set(await this.api.call(this.api.client.GET('/roots')));
+      this.instruments.set(
+        await this.api.call(this.api.client.GET('/instruments')),
+      );
     } finally {
       this.loading.set(false);
     }
-    const current = this.selectedId();
-    if (current === null || !this.selected()) {
-      const first = this.roots()[0];
-      await this.select(first ? first.id : null);
+    if (this.selectedId() === null || !this.selected()) {
+      await this.select(this.instruments()[0]?.id ?? null);
     }
   }
 
-  async select(rootId: number | null): Promise<void> {
-    this.selectedId.set(rootId);
-    this.resetIss();
-    if (rootId === null) {
-      this.contracts.set([]);
-      this.calendar.set(null);
-      return;
+  async select(instrumentId: number | null): Promise<void> {
+    this.selectedId.set(instrumentId);
+    this.loadJob.set(null);
+    this.loads.set([]);
+    if (instrumentId !== null) {
+      await this.loadJournal(instrumentId);
     }
-    await Promise.all([this.loadContracts(rootId), this.loadCalendar()]);
   }
 
-  async createRoot(body: RootIn): Promise<Root> {
-    const root = await this.api.call(this.api.client.POST('/roots', { body }));
-    await this.loadRoots();
-    await this.select(root.id);
-    return root;
+  /** Тикеры importer; недоступность сервиса — сообщение, а не падение страницы. */
+  async loadTickers(): Promise<void> {
+    this.tickersError.set(null);
+    try {
+      this.tickers.set(
+        await this.api.call(this.api.client.GET('/importer/tickers')),
+      );
+    } catch (error) {
+      this.tickers.set([]);
+      this.tickersError.set((error as Error).message);
+    }
   }
 
-  async updateRoot(rootId: number, body: RootPatch): Promise<void> {
-    await this.api.call(
-      this.api.client.PATCH('/roots/{root_id}', {
-        params: { path: { root_id: rootId } },
-        body,
+  async add(ticker: string, tickValue: number | null): Promise<void> {
+    const created = await this.api.call(
+      this.api.client.POST('/instruments', {
+        body: { ticker, tick_value: tickValue },
       }),
     );
-    await this.loadRoots();
-    await this.loadCalendar();
+    await this.load();
+    await this.select(created.id);
+    await this.loadTickers();
   }
 
-  async deleteRoot(rootId: number): Promise<void> {
+  async setTickValue(
+    instrumentId: number,
+    tickValue: number | null,
+  ): Promise<void> {
     await this.api.call(
-      this.api.client.DELETE('/roots/{root_id}', {
-        params: { path: { root_id: rootId } },
+      this.api.client.PATCH('/instruments/{instrument_id}', {
+        params: { path: { instrument_id: instrumentId } },
+        body: { tick_value: tickValue },
       }),
     );
-    this.selectedId.set(null);
-    await this.loadRoots();
+    await this.load();
   }
 
-  async loadContracts(rootId: number): Promise<void> {
-    this.contracts.set(
+  async loadJournal(instrumentId: number): Promise<void> {
+    this.loads.set(
       await this.api.call(
-        this.api.client.GET('/roots/{root_id}/contracts', {
-          params: { path: { root_id: rootId } },
+        this.api.client.GET('/instruments/{instrument_id}/loads', {
+          params: { path: { instrument_id: instrumentId } },
         }),
       ),
     );
   }
 
-  async loadCalendar(): Promise<void> {
-    const root = this.selected();
-    if (!root) {
-      return;
-    }
-    const params = { params: { path: { code: root.calendar_code } } };
-    const [calendar, days] = await Promise.all([
-      this.api.call(this.api.client.GET('/calendars/{code}', params)),
-      this.api.call(this.api.client.GET('/calendars/{code}/days', params)),
-    ]);
-    this.calendar.set(calendar);
-    this.calendarDays.set(days);
-  }
-
-  async addContract(rootId: number, body: ContractIn): Promise<void> {
-    await this.api.call(
-      this.api.client.POST('/roots/{root_id}/contracts', {
-        params: { path: { root_id: rootId } },
-        body,
-      }),
-    );
-    await this.loadContracts(rootId);
-  }
-
-  async updateContract(contractId: number, body: ContractPatch): Promise<void> {
-    await this.api.call(
-      this.api.client.PATCH('/contracts/{contract_id}', {
-        params: { path: { contract_id: contractId } },
-        body,
-      }),
-    );
-    await this.reloadContracts();
-  }
-
-  async deleteContract(contractId: number): Promise<void> {
-    await this.api.call(
-      this.api.client.DELETE('/contracts/{contract_id}', {
-        params: { path: { contract_id: contractId } },
-      }),
-    );
-    await this.reloadContracts();
-  }
-
-  /** Обновляет стоимость шага цены из ISS: ставит задачу, ждёт её и перечитывает контракты. */
-  async refreshStepPrices(contractId: number): Promise<Job> {
+  /** Ставит задачу `candles.load` и ждёт её конца; по итогу обновляет покрытие. */
+  async loadCandles(
+    instrumentId: number,
+    period: LoadPeriod,
+    timeframes: string[] | null,
+  ): Promise<void> {
     const job = await this.api.call(
-      this.api.client.POST('/contracts/{contract_id}/step-prices/refresh', {
-        params: { path: { contract_id: contractId } },
+      this.api.client.POST('/instruments/{instrument_id}/load', {
+        params: { path: { instrument_id: instrumentId } },
+        body: {
+          period_from: period.from,
+          period_to: period.to,
+          timeframes,
+        },
       }),
     );
-    this.stepJob.set(job);
-    let last = job;
+    this.loadJob.set(job);
     try {
-      last = await lastValueFrom(this.jobs.watch(job.id), {
+      const last = await lastValueFrom(this.jobs.watch(job.id), {
         defaultValue: job,
       });
+      this.loadJob.set(last);
     } catch (error) {
-      this.stepJob.set({
+      this.loadJob.set({
         ...job,
         status: 'failed',
         error: (error as Error).message,
       });
-      return this.stepJob() ?? job;
     }
-    this.stepJob.set(last);
-    await this.reloadContracts();
-    return last;
-  }
-
-  private async reloadContracts(): Promise<void> {
-    const id = this.selectedId();
-    if (id !== null) {
-      await this.loadContracts(id);
-    }
-  }
-
-  // --- контракты из ISS -----------------------------------------------------
-
-  resetIss(): void {
-    this.issJob.set(null);
-    this.issCandidates.set([]);
-    this.issError.set(null);
-  }
-
-  /** Ставит запрос к ISS и ждёт результат по WebSocket; кандидаты — в `issCandidates`. */
-  async requestIssContracts(fromYear: number): Promise<void> {
-    const rootId = this.selectedId();
-    if (rootId === null) {
-      return;
-    }
-    this.resetIss();
-    const job = await this.api.call(
-      this.api.client.POST('/roots/{root_id}/iss-preview', {
-        params: { path: { root_id: rootId } },
-        body: { from_year: fromYear },
-      }),
-    );
-    this.issJob.set(job);
-    let last: Job = job;
-    try {
-      await lastValueFrom(
-        this.jobs.watch(job.id),
-        // Поток без значений (мгновенное закрытие) — берём то, что уже есть.
-        { defaultValue: job },
-      ).then((finished) => (last = finished));
-    } catch (error) {
-      this.issError.set((error as Error).message);
-      return;
-    }
-    this.issJob.set(last);
-    if (last.status !== 'succeeded') {
-      this.issError.set(last.error ?? `Запрос завершился: ${last.status}`);
-      return;
-    }
-    const known = new Set(this.contracts().map((c) => c.expiration_date));
-    const found = (last.result as unknown as IssJobResult).contracts;
-    this.issCandidates.set(
-      found.map((item) => ({
-        secid: item.secid,
-        expiration_date: item.expiration_date,
-        last_trade_date: item.last_trade_date,
-        exists: known.has(item.expiration_date),
-        selected: !known.has(item.expiration_date),
-      })),
-    );
-  }
-
-  toggleCandidate(secid: string, selected: boolean): void {
-    this.issCandidates.update((list) =>
-      list.map((c) => (c.secid === secid ? { ...c, selected } : c)),
-    );
-  }
-
-  setAllCandidates(selected: boolean): void {
-    this.issCandidates.update((list) => list.map((c) => ({ ...c, selected })));
-  }
-
-  /** Создаёт отмеченные контракты; `enqueueImports` — сразу поставить загрузку истории. */
-  async confirmIssContracts(enqueueImports: boolean): Promise<number> {
-    const rootId = this.selectedId();
-    const chosen = this.issCandidates().filter((c) => c.selected);
-    if (rootId === null || chosen.length === 0) {
-      return 0;
-    }
-    const result = await this.api.call(
-      this.api.client.POST('/roots/{root_id}/contracts/from-iss', {
-        params: { path: { root_id: rootId } },
-        body: {
-          contracts: chosen.map((c) => ({
-            secid: c.secid,
-            expiration_date: c.expiration_date,
-            last_trade_date: c.last_trade_date,
-          })),
-          enqueue_imports: enqueueImports,
-        },
-      }),
-    );
-    this.resetIss();
-    await this.loadContracts(rootId);
-    return result.created;
+    await this.load();
+    await this.loadJournal(instrumentId);
   }
 }

@@ -41,7 +41,6 @@ class HorizonOutcome:
     ambiguous_bar: bool
     crosses_session_gap: bool
     crosses_weekend: bool
-    crosses_roll: bool
 
 
 def atr_series(
@@ -61,10 +60,8 @@ def entry_index(bars: Sequence[BarInput], available_at: datetime) -> int | None:
     return None
 
 
-def _crossings(
-    window: Sequence[BarInput], roll_times: Sequence[datetime]
-) -> tuple[bool, bool, bool]:
-    """Есть ли на пути от входа (``window[0]``) пауза, выходные или ролл."""
+def _crossings(window: Sequence[BarInput]) -> tuple[bool, bool]:
+    """Есть ли на пути от входа (``window[0]``) пауза или выходные."""
     session = weekend = False
     for previous, current in zip(window, window[1:], strict=False):
         if current.timestamp > previous.close_time:
@@ -74,9 +71,7 @@ def _crossings(
             != current.trading_day.isocalendar()[:2]
         ):
             weekend = True
-    start, end = window[0].close_time, window[-1].close_time
-    roll = any(start < roll_time <= end for roll_time in roll_times)
-    return session, weekend, roll
+    return session, weekend
 
 
 def compute_outcomes(
@@ -87,7 +82,6 @@ def compute_outcomes(
     *,
     target: float | None = None,
     invalidated_at: datetime | None = None,
-    roll_times: Sequence[datetime] = (),
     horizons: Sequence[int] = DEFAULT_HORIZONS,
 ) -> list[HorizonOutcome]:
     """Исходы события на каждом горизонте.
@@ -120,7 +114,6 @@ def compute_outcomes(
                     False,
                     False,
                     False,
-                    False,
                 )
             )
             continue
@@ -135,7 +128,7 @@ def compute_outcomes(
             adverse = max(bar.high for bar in future) - price
         favorable, adverse = max(favorable, 0.0), max(adverse, 0.0)
         first_hit, ambiguous = _first_hit(future, direction, target, invalidated_at)
-        session, weekend, roll = _crossings(window, roll_times)
+        session, weekend = _crossings(window)
         outcomes.append(
             HorizonOutcome(
                 horizon=horizon,
@@ -150,7 +143,6 @@ def compute_outcomes(
                 ambiguous_bar=ambiguous,
                 crosses_session_gap=session,
                 crosses_weekend=weekend,
-                crosses_roll=roll,
             )
         )
     return outcomes

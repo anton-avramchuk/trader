@@ -89,7 +89,7 @@ def run_id(seed: Seed, database_url: str) -> int:
     engine = make_engine(database_url)
     with Session(engine) as session:
         result = advance_run(
-            session, "api_highs", None, bars(), "15m", contract_id=seed.a
+            session, "api_highs", None, bars(), "15m", instrument_id=seed.id
         )
         session.commit()
     engine.dispose()
@@ -112,17 +112,17 @@ class TestRuns:
 
         assert run == get_object(client, f"/engine-runs/{run_id}")
         assert run["engine"] == "api_highs" and run["timeframe"] == "15m"
-        assert run["contract_id"] == seed.a and run["root_id"] is None
+        assert run["instrument_id"] == seed.id
         assert run["bars_processed"] == len(CLOSES) and run["event_count"] == 8
-        assert run["params"] == {"step": 0.0} and run["dataset_version_id"] is None
+        assert run["params"] == {"step": 0.0}
 
     def test_filters(self, client: TestClient, seed: Seed, run_id: int) -> None:
         assert (
             len(get(client, "/engine-runs", engine="api_highs", timeframe="15m")) == 1
         )
         assert get(client, "/engine-runs", engine="other") == []
-        assert get(client, "/engine-runs", contract_id=seed.b) == []
-        assert get(client, "/engine-runs", root_id=seed.root_id) == []
+        assert get(client, "/engine-runs", instrument_id=seed.id + 1) == []
+        assert len(get(client, "/engine-runs", instrument_id=seed.id)) == 1
 
     def test_unknown_run_is_404(self, client: TestClient) -> None:
         assert client.get("/engine-runs/999").status_code == 404

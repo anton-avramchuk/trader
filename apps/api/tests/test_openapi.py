@@ -46,7 +46,11 @@ def test_error_responses_are_documented() -> None:
 def test_metadata_and_request_examples() -> None:
     document = schema()
     assert document["info"]["title"] == "Trader API"
-    assert {tag["name"] for tag in document["tags"]} >= {"jobs", "system", "roots"}
+    assert {tag["name"] for tag in document["tags"]} >= {
+        "jobs",
+        "system",
+        "instruments",
+    }
     assert document["components"]["schemas"]["JobCreate"]["examples"]
 
 

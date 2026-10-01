@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from threading import Lock
 from typing import Annotated
 
+import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -13,12 +14,12 @@ from trader_engine.indicators import IndicatorCache
 from trader_api.analogues_api import router as analogues_router
 from trader_api.backtests_api import router as backtests_router
 from trader_api.candles_api import router as candles_router
-from trader_api.catalog import router as catalog_router
+from trader_api.deps import ApiSettings
 from trader_api.engines_api import router as engines_router
 from trader_api.fib_grids_api import router as fib_grids_router
 from trader_api.forecast_api import router as forecast_router
-from trader_api.imports_api import router as imports_router
 from trader_api.indicators_api import router as indicators_router
+from trader_api.instruments_api import router as instruments_router
 from trader_api.jobs import router as jobs_router
 from trader_api.profiles_api import router as profiles_router
 from trader_api.stats_api import router as stats_router
@@ -33,7 +34,10 @@ def get_db_check(request: Request) -> DbCheck:
 
 
 def create_app(
-    *, migrate_on_startup: bool = True, job_poll_interval: float = 0.5
+    *,
+    migrate_on_startup: bool = True,
+    job_poll_interval: float = 0.5,
+    importer_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -43,15 +47,21 @@ def create_app(
         app.state.sessions = async_sessionmaker(
             app.state.engine, expire_on_commit=False
         )
+        app.state.importer = httpx.AsyncClient(
+            base_url=ApiSettings().importer_url,
+            transport=importer_transport,
+            timeout=30.0,
+        )
         try:
             yield
         finally:
+            await app.state.importer.aclose()
             await app.state.engine.dispose()
 
     app = FastAPI(
         title="Trader API",
         version="0.1.0",
-        summary="Исследовательская платформа по фьючерсам MOEX",
+        summary="Исследовательская платформа по рыночным данным",
         description=(
             "REST API платформы. Документация: `/docs` (Swagger UI), `/redoc`, "
             "схема — `/openapi.json`.\n\n"
@@ -62,26 +72,15 @@ def create_app(
         openapi_tags=[
             {
                 "name": "jobs",
-                "description": "Фоновые задачи: импорт, загрузка ISS, сборка баров.",
+                "description": "Фоновые задачи: загрузка свечей, прогоны, бэктесты.",
             },
-            {"name": "roots", "description": "Базовые активы (NG, BR, GOLD…)."},
             {
-                "name": "contracts",
-                "description": "Серии фьючерсов и их загрузка из ISS.",
-            },
-            {"name": "calendars", "description": "Торговые календари (только чтение)."},
-            {
-                "name": "imports",
-                "description": "Запуск импортов, отчёты, отклонённые строки.",
-            },
-            {"name": "files", "description": "Загруженные файлы и пресеты маппинга."},
-            {
-                "name": "conflicts",
-                "description": "Расхождения импорта с уже загруженными данными.",
+                "name": "instruments",
+                "description": "Инструменты и загрузка свечей из importer.",
             },
             {
                 "name": "candles",
-                "description": "Свечи, continuous-серия и snapshot as-of.",
+                "description": "Свечи инструмента и snapshot as-of.",
             },
             {"name": "indicators", "description": "Индикаторы и MTF-проекция."},
             {"name": "profiles", "description": "Профили графика (индикаторы, слои)."},
@@ -97,8 +96,7 @@ def create_app(
     app.state.indicator_cache = IndicatorCache()
     app.state.indicator_lock = Lock()
     app.include_router(jobs_router)
-    app.include_router(catalog_router)
-    app.include_router(imports_router)
+    app.include_router(instruments_router)
     app.include_router(candles_router)
     app.include_router(indicators_router)
     app.include_router(profiles_router)

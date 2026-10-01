@@ -192,7 +192,6 @@ def occurrence_outcomes(
     atrs: Sequence[float | None],
     index: Mapping[datetime, int],
     *,
-    roll_times: Sequence[datetime] = (),
     horizons: Sequence[int] = DEFAULT_HORIZONS,
 ) -> list[HorizonOutcome] | None:
     """Исходы вхождения; ``None``, если бара входа нет в данных."""
@@ -206,6 +205,5 @@ def occurrence_outcomes(
         atrs[entry],
         target=occurrence.target,
         invalidated_at=occurrence.invalidated_at,
-        roll_times=roll_times,
         horizons=horizons,
     )

@@ -30,7 +30,7 @@ def log_event(
     session: Session,
     event: str,
     *,
-    root_id: int | None = None,
+    instrument_id: int | None = None,
     timeframe_code: str | None = None,
     family: str | None = None,
     experiment_id: int | None = None,
@@ -42,7 +42,7 @@ def log_event(
 ) -> BacktestLog:
     entry = BacktestLog(
         event=event,
-        root_id=root_id,
+        instrument_id=instrument_id,
         timeframe_code=timeframe_code,
         family=family,
         experiment_id=experiment_id,
@@ -61,7 +61,7 @@ def create_experiment(
     session: Session,
     *,
     kind: str,
-    root_id: int,
+    instrument_id: int,
     timeframe_code: str,
     family: str,
     strategy: dict[str, Any],
@@ -69,29 +69,27 @@ def create_experiment(
     period_from: date,
     period_to: date,
     params_hash: str,
-    contracts: int = 1,
+    quantity: int = 1,
     test_from: date | None = None,
     test_to: date | None = None,
     walk_forward: dict[str, Any] | None = None,
-    dataset_version_id: int | None = None,
     versions: dict[str, Any] | None = None,
     job_id: int | None = None,
 ) -> BacktestExperiment:
     """Новый эксперимент (``queued``) и запись о запуске в журнале."""
     experiment = BacktestExperiment(
         kind=kind,
-        root_id=root_id,
+        instrument_id=instrument_id,
         timeframe_code=timeframe_code,
         family=family,
         strategy=strategy,
         costs=costs,
-        contracts=contracts,
+        quantity=quantity,
         period_from=period_from,
         period_to=period_to,
         test_from=test_from,
         test_to=test_to,
         walk_forward=walk_forward,
-        dataset_version_id=dataset_version_id,
         versions=versions or {},
         params_hash=params_hash,
         job_id=job_id,
@@ -101,7 +99,7 @@ def create_experiment(
     log_event(
         session,
         "walk_forward" if kind == "walk_forward" else "run",
-        root_id=root_id,
+        instrument_id=instrument_id,
         timeframe_code=timeframe_code,
         family=family,
         experiment_id=experiment.id,
@@ -141,7 +139,7 @@ def fail_experiment(
     log_event(
         session,
         "failed",
-        root_id=experiment.root_id,
+        instrument_id=experiment.instrument_id,
         timeframe_code=experiment.timeframe_code,
         family=experiment.family,
         experiment_id=experiment_id,
@@ -255,7 +253,7 @@ def open_test_period(
     session: Session,
     *,
     experiment_id: int,
-    root_id: int,
+    instrument_id: int,
     timeframe_code: str,
     family: str,
     test_from: date,
@@ -264,13 +262,13 @@ def open_test_period(
     """Открывает test один раз; повторная попытка отклоняется и пишется в журнал."""
     existing = session.scalars(
         select(BacktestTestLock).where(
-            BacktestTestLock.root_id == root_id,
+            BacktestTestLock.instrument_id == instrument_id,
             BacktestTestLock.timeframe_code == timeframe_code,
             BacktestTestLock.family == family,
         )
     ).one_or_none()
     common: dict[str, Any] = {
-        "root_id": root_id,
+        "instrument_id": instrument_id,
         "timeframe_code": timeframe_code,
         "family": family,
         "experiment_id": experiment_id,
@@ -290,7 +288,7 @@ def open_test_period(
         )
         return LockAttempt(False, existing)
     lock = BacktestTestLock(
-        root_id=root_id,
+        instrument_id=instrument_id,
         timeframe_code=timeframe_code,
         family=family,
         test_from=test_from,
@@ -306,7 +304,7 @@ def open_test_period(
 def unlock_test_period(
     session: Session,
     *,
-    root_id: int,
+    instrument_id: int,
     timeframe_code: str,
     family: str,
     note: str,
@@ -314,7 +312,7 @@ def unlock_test_period(
     """Явная разблокировка: блокировка снимается, причина — в журнале."""
     lock = session.scalars(
         select(BacktestTestLock).where(
-            BacktestTestLock.root_id == root_id,
+            BacktestTestLock.instrument_id == instrument_id,
             BacktestTestLock.timeframe_code == timeframe_code,
             BacktestTestLock.family == family,
         )
@@ -324,7 +322,7 @@ def unlock_test_period(
     log_event(
         session,
         "unlock",
-        root_id=root_id,
+        instrument_id=instrument_id,
         timeframe_code=timeframe_code,
         family=family,
         experiment_id=lock.experiment_id,
@@ -339,7 +337,7 @@ def unlock_test_period(
 
 
 def count_runs(
-    session: Session, *, root_id: int, timeframe_code: str, family: str
+    session: Session, *, instrument_id: int, timeframe_code: str, family: str
 ) -> int:
     """Сколько запусков (включая неудачные) уже было по связке — для оценки перебора."""
     return int(
@@ -347,7 +345,7 @@ def count_runs(
             select(func.count())
             .select_from(BacktestLog)
             .where(
-                BacktestLog.root_id == root_id,
+                BacktestLog.instrument_id == instrument_id,
                 BacktestLog.timeframe_code == timeframe_code,
                 BacktestLog.family == family,
                 BacktestLog.event.in_(["run", "walk_forward"]),
@@ -360,14 +358,14 @@ def count_runs(
 def list_log(
     session: Session,
     *,
-    root_id: int | None = None,
+    instrument_id: int | None = None,
     timeframe_code: str | None = None,
     family: str | None = None,
     limit: int = 200,
 ) -> list[BacktestLog]:
     query = select(BacktestLog)
-    if root_id is not None:
-        query = query.where(BacktestLog.root_id == root_id)
+    if instrument_id is not None:
+        query = query.where(BacktestLog.instrument_id == instrument_id)
     if timeframe_code is not None:
         query = query.where(BacktestLog.timeframe_code == timeframe_code)
     if family is not None:

@@ -1,112 +1,128 @@
-"""Общие тестовые данные API: root с двумя контрактами, барами и роллом."""
+"""Общие тестовые данные API: инструмент и свечи всех таймфреймов (ADR-0028)."""
 
+import random
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
-from trader_db import (
-    build_bars,
-    extend_dataset_version,
-    finish_import,
-    insert_candles,
-    load_trading_calendar,
-    make_engine,
-    start_import,
-    update_rolls,
-)
-from trader_engine.aggregation import TIMEFRAMES
-from trader_engine.calendar import TradingCalendar, moex_forts_calendar
-from trader_engine.ingest import Candle1m
+from trader_db import CandleRow, create_instrument, make_engine, upsert_candles
+from trader_engine.timeframes import TIMEFRAMES
 
-CALENDAR = moex_forts_calendar()
-BEFORE = [date(2026, 9, 28), date(2026, 9, 29)]
-AFTER = [date(2026, 10, 5), date(2026, 10, 6)]
-FAR = datetime(2030, 1, 1, tzinfo=UTC)
-FACTOR = Decimal(2)
-MINUTE = timedelta(minutes=1)
-
-
-def day_candles(day: date, factor: Decimal) -> list[Candle1m]:
-    candles: list[Candle1m] = []
-    index = 0
-    for session in CALENDAR.sessions_on(day):
-        moment = session.start
-        while moment < session.end:
-            if index % 7 == 0:
-                base = Decimal(100 + index % 17)
-                candles.append(
-                    Candle1m(
-                        timestamp=moment,
-                        open=base * factor,
-                        high=(base + 3) * factor,
-                        low=(base - 2) * factor,
-                        close=(base + 1) * factor,
-                        volume=Decimal(index % 5 + 1),
-                    )
-                )
-            index += 1
-            moment += MINUTE
-    return candles
+MSK = ZoneInfo("Europe/Moscow")
+# две торговые недели с разрывом: 28–29 сентября и 5–6 октября 2026
+DAYS = [date(2026, 9, 28), date(2026, 9, 29), date(2026, 10, 5), date(2026, 10, 6)]
+BARS_PER_DAY = 36  # 15-минутные свечи с 10:00 до 19:00 по Москве
+TICKER = "SBER"
 
 
 @dataclass
 class Seed:
-    root_id: int
-    a: int
-    b: int
-    roll_at: datetime
+    id: int
+    ticker: str
 
 
-def load(session: Session, contract_id: int, candles: list[Candle1m]) -> None:
-    import_id = start_import(
-        session, provider_code="csv", contract_id=contract_id, source_type="file"
-    )
-    insert_candles(session, import_id, candles)
-    finish_import(session, import_id)
-    extend_dataset_version(session, import_id)
+def _day_candles(day: date, start_price: float, rng: random.Random) -> list[CandleRow]:
+    rows: list[CandleRow] = []
+    price = start_price
+    opened = datetime(day.year, day.month, day.day, 10, tzinfo=MSK)
+    for i in range(BARS_PER_DAY):
+        wave = 0.6 if (i // 9) % 2 == 0 else -0.6
+        close = price + wave * rng.uniform(0.2, 1.0) + rng.gauss(0, 0.5)
+        high = max(price, close) + rng.uniform(0, 0.6)
+        low = min(price, close) - rng.uniform(0, 0.6)
+        start = (opened + timedelta(minutes=15 * i)).astimezone(UTC)
+        rows.append(
+            CandleRow(
+                open_time=start,
+                close_time=start + timedelta(minutes=15),
+                open=Decimal(f"{price:.4f}"),
+                high=Decimal(f"{high:.4f}"),
+                low=Decimal(f"{low:.4f}"),
+                close=Decimal(f"{close:.4f}"),
+                volume=Decimal(rng.randint(10, 500)),
+                trading_day=day,
+            )
+        )
+        price = close
+    return rows
+
+
+def _bucket(moment: datetime, timeframe: str) -> datetime:
+    local = moment.astimezone(MSK)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    if timeframe == "1h":
+        start = local.replace(minute=0, second=0, microsecond=0)
+    elif timeframe == "4h":
+        start = midnight + timedelta(hours=local.hour // 4 * 4)
+    elif timeframe == "1d":
+        start = midnight
+    else:  # 1w — понедельник
+        start = midnight - timedelta(days=local.weekday())
+    return start.astimezone(UTC)
+
+
+def _aggregate(rows: list[CandleRow], timeframe: str) -> list[CandleRow]:
+    length = TIMEFRAMES[timeframe]
+    buckets: dict[datetime, list[CandleRow]] = {}
+    for row in rows:
+        buckets.setdefault(_bucket(row.open_time, timeframe), []).append(row)
+    result: list[CandleRow] = []
+    for start in sorted(buckets):
+        group = buckets[start]
+        result.append(
+            CandleRow(
+                open_time=start,
+                close_time=start + length,
+                open=group[0].open,
+                high=max(r.high for r in group),
+                low=min(r.low for r in group),
+                close=group[-1].close,
+                volume=sum((r.volume for r in group), Decimal(0)),
+                trading_day=start.astimezone(MSK).date(),
+            )
+        )
+    return result
+
+
+def make_candles() -> dict[str, list[CandleRow]]:
+    """Свечи всех таймфреймов, согласованные между собой (агрегат от 15m)."""
+    rng = random.Random(20260928)
+    base: list[CandleRow] = []
+    price = 100.0
+    for day in DAYS:
+        rows = _day_candles(day, price, rng)
+        base += rows
+        price = float(rows[-1].close)
+    return {"15m": base} | {
+        tf: _aggregate(base, tf) for tf in TIMEFRAMES if tf != "15m"
+    }
 
 
 def seed_database(client: TestClient, database_url: str) -> Seed:
-    """Root с двумя контрактами: B в два раза дороже A; ролл в неделю с 05.10."""
-    root = client.post(
-        "/roots",
-        json={
-            "code": "NG",
-            "name": "Gas",
-            "quote_currency": "USD",
-            "tick_size": "0.001",
-            "roll_trading_days": 5,
-        },
-    ).json()
-    ids = [
-        client.post(
-            f"/roots/{root['id']}/contracts", json={"expiration_date": expiration}
-        ).json()["id"]
-        for expiration in ("2026-10-15", "2026-11-12")
-    ]
+    """Инструмент SBER с синтетическими свечами 15m, 1h, 4h, 1d, 1w."""
+    del client  # приложение уже мигрировало БД; данные кладём напрямую
     engine = make_engine(database_url)
     with Session(engine) as session:
-        calendar: TradingCalendar = load_trading_calendar(session, "moex_forts")
-        for contract_id, factor in zip(ids, (Decimal(1), FACTOR), strict=True):
-            candles = [c for d in BEFORE + AFTER for c in day_candles(d, factor)]
-            load(session, contract_id, candles)
-            for timeframe in TIMEFRAMES:
-                build_bars(
-                    session,
-                    contract_id,
-                    timeframe,
-                    calendar,
-                    include_weekend_sessions=False,
-                    complete_until=FAR,
-                )
-        events = update_rolls(session, root["id"], calendar)
+        instrument = create_instrument(
+            session,
+            ticker=TICKER,
+            name="Сбербанк",
+            currency="RUB",
+            tick_size=Decimal("0.01"),
+            timezone="Europe/Moscow",
+            source="test",
+            tick_value=Decimal("1"),
+        )
+        for timeframe, rows in make_candles().items():
+            upsert_candles(session, instrument.id, timeframe, rows)
         session.commit()
-        roll_at = events[0].rolled_at
+        seed = Seed(instrument.id, TICKER)
     engine.dispose()
-    return Seed(root["id"], ids[0], ids[1], roll_at)
+    return seed
 
 
 def iso(moment: datetime) -> str:
