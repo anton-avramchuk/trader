@@ -169,13 +169,61 @@ def test_trades_roundtrip_in_order_and_segments(session: Session, root_id: int) 
     assert stored.params == {"stop_atr": 1.5} and stored.valid_metrics is None
 
 
+def test_trades_of_several_windows_are_numbered_continuously(
+    session: Session, root_id: int
+) -> None:
+    e = experiment(session, root_id)
+    ids = [
+        add_window(
+            session,
+            e.id,
+            i,
+            train=(date(2026, 1, 1), date(2026, 2, 1)),
+            valid=(date(2026, 2, 2), date(2026, 3, 1)),
+            params={},
+        ).id
+        for i in range(2)
+    ]
+    add_trades(
+        session,
+        e.id,
+        [trade_row(), trade_row()],
+        segment="validation",
+        window_id=ids[0],
+    )
+    add_trades(session, e.id, [trade_row()], segment="validation", window_id=ids[1])
+    add_trades(session, e.id, [trade_row()], segment="test")
+    session.commit()
+
+    stored = list_trades(session, e.id, segment="validation")
+    assert [(t.window_id, t.sequence) for t in stored] == [
+        (ids[0], 0),
+        (ids[0], 1),
+        (ids[1], 2),
+    ]
+    assert [t.sequence for t in list_trades(session, e.id, segment="test")] == [0]
+
+
+def test_long_error_is_truncated(session: Session, root_id: int) -> None:
+    e = experiment(session, root_id)
+
+    fail_experiment(session, e.id, "x" * 10_000)
+
+    assert len(session.get_one(BacktestExperiment, e.id).error or "") == 2000
+
+
 def test_constraints_reject_bad_rows(session: Session, root_id: int) -> None:
     e = experiment(session, root_id)
     add_trades(session, e.id, [trade_row()])
     session.commit()
 
     with pytest.raises(IntegrityError):  # тот же (эксперимент, сегмент, номер)
-        add_trades(session, e.id, [trade_row()])
+        session.add(
+            BacktestTrade(
+                experiment_id=e.id, segment="single", sequence=0, **trade_row()
+            )
+        )
+        session.flush()
     session.rollback()
     with pytest.raises(IntegrityError):
         add_trades(session, e.id, [trade_row(side="flat")])

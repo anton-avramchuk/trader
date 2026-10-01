@@ -1,0 +1,725 @@
+import { DecimalPipe } from '@angular/common';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { TuiButton } from '@taiga-ui/core';
+import type { BacktestLock } from '@trader/api-client';
+import {
+  equityChart,
+  metricRows,
+  metricWarnings,
+  type MetricUnit,
+  resolved,
+  SOURCE_TITLES,
+  STATUS_TITLES,
+  STOP_KINDS,
+  TARGET_KINDS,
+  testInfo,
+  tradeRows,
+  UNIT_TITLES,
+  windowRows,
+  GRID_KEYS,
+} from './backtest-model';
+import { BacktestStore } from './backtest.store';
+
+const TIMEFRAMES = ['15m', '1h', '4h', '1d', '1w'];
+const MIN_NOTE = 5;
+
+/** Backtest: параметры стратегии и издержек, walk-forward, результат и сделки (ADR-0027). */
+@Component({
+  selector: 'app-backtest',
+  imports: [DecimalPipe, FormsModule, TuiButton],
+  providers: [BacktestStore],
+  template: `
+    <h1>Backtest</h1>
+    <p class="note">
+      Стратегия «вход по событию»: сигнал на закрытии бара, вход по open
+      следующего бара в реальном фронтовом контракте. Метрики — не единственный
+      критерий оценки: смотрите число сделок и предупреждения.
+    </p>
+
+    <form class="grid" (ngSubmit)="store.run()">
+      <label>
+        Инструмент
+        <select
+          name="root"
+          [ngModel]="form().rootId"
+          (ngModelChange)="store.patch({ rootId: $event })"
+        >
+          @for (r of store.roots(); track r.id) {
+            <option [ngValue]="r.id">{{ r.code }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        TF
+        <select
+          name="tf"
+          [ngModel]="form().timeframe"
+          (ngModelChange)="store.patch({ timeframe: $event })"
+        >
+          @for (tf of timeframes; track tf) {
+            <option [value]="tf">{{ tf }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Режим
+        <select
+          name="kind"
+          [ngModel]="form().kind"
+          (ngModelChange)="store.patch({ kind: $event })"
+        >
+          <option value="single">Один период</option>
+          <option value="walk_forward">Walk-forward</option>
+        </select>
+      </label>
+      <label>
+        С
+        <input
+          name="from"
+          type="date"
+          [ngModel]="form().periodFrom"
+          (ngModelChange)="store.patch({ periodFrom: $event })"
+        />
+      </label>
+      <label>
+        По
+        <input
+          name="to"
+          type="date"
+          [ngModel]="form().periodTo"
+          (ngModelChange)="store.patch({ periodTo: $event })"
+        />
+      </label>
+
+      <label>
+        Сигнал
+        <select
+          name="source"
+          [ngModel]="form().source"
+          (ngModelChange)="store.patch({ source: $event })"
+        >
+          @for (s of sources; track s.value) {
+            <option [value]="s.value">{{ s.title }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Типы (через запятую)
+        <input
+          name="groups"
+          [ngModel]="form().groups"
+          (ngModelChange)="store.patch({ groups: $event })"
+          placeholder="все"
+        />
+      </label>
+      <label>
+        Сторона
+        <select
+          name="side"
+          [ngModel]="form().side"
+          (ngModelChange)="store.patch({ side: $event })"
+        >
+          <option value="follow">по событию</option>
+          <option value="fade">обратная</option>
+        </select>
+      </label>
+      <label>
+        Стоп
+        <select
+          name="stopKind"
+          [ngModel]="form().stopKind"
+          (ngModelChange)="store.patch({ stopKind: $event })"
+        >
+          @for (k of stopKinds; track k.value) {
+            <option [value]="k.value">{{ k.title }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        ATR
+        <input
+          name="stopValue"
+          type="number"
+          step="0.1"
+          [ngModel]="form().stopValue"
+          (ngModelChange)="store.patch({ stopValue: $event })"
+        />
+      </label>
+      <label>
+        Цель
+        <select
+          name="targetKind"
+          [ngModel]="form().targetKind"
+          (ngModelChange)="store.patch({ targetKind: $event })"
+        >
+          @for (k of targetKinds; track k.value) {
+            <option [value]="k.value">{{ k.title }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        ATR
+        <input
+          name="targetValue"
+          type="number"
+          step="0.1"
+          [ngModel]="form().targetValue"
+          (ngModelChange)="store.patch({ targetValue: $event })"
+        />
+      </label>
+      <label>
+        Макс. баров
+        <input
+          name="maxBars"
+          type="number"
+          [ngModel]="form().maxBars"
+          (ngModelChange)="store.patch({ maxBars: $event || null })"
+        />
+      </label>
+      <label>
+        Качество от
+        <input
+          name="qualityMin"
+          type="number"
+          [ngModel]="form().qualityMin"
+          (ngModelChange)="store.patch({ qualityMin: $event || null })"
+        />
+      </label>
+
+      <label>
+        Контрактов
+        <input
+          name="contracts"
+          type="number"
+          min="1"
+          [ngModel]="form().contracts"
+          (ngModelChange)="store.patch({ contracts: $event })"
+        />
+      </label>
+      <label>
+        Полуспред, тиков
+        <input
+          name="halfSpread"
+          type="number"
+          step="0.1"
+          [ngModel]="form().halfSpread"
+          (ngModelChange)="store.patch({ halfSpread: $event })"
+        />
+      </label>
+      <label>
+        Проскальзывание, тиков
+        <input
+          name="slippage"
+          type="number"
+          step="0.1"
+          [ngModel]="form().slippage"
+          (ngModelChange)="store.patch({ slippage: $event })"
+        />
+      </label>
+      <label>
+        Комиссия, ₽/контракт
+        <input
+          name="commission"
+          type="number"
+          step="0.1"
+          [ngModel]="form().commission"
+          (ngModelChange)="store.patch({ commission: $event })"
+        />
+      </label>
+
+      @if (form().kind === 'walk_forward') {
+        <label>
+          Train, дней
+          <input
+            name="train"
+            type="number"
+            [ngModel]="form().trainDays"
+            (ngModelChange)="store.patch({ trainDays: $event })"
+          />
+        </label>
+        <label>
+          Validation, дней
+          <input
+            name="valid"
+            type="number"
+            [ngModel]="form().validDays"
+            (ngModelChange)="store.patch({ validDays: $event })"
+          />
+        </label>
+        <label>
+          Шаг, дней
+          <input
+            name="step"
+            type="number"
+            [ngModel]="form().stepDays"
+            (ngModelChange)="store.patch({ stepDays: $event })"
+          />
+        </label>
+        <label>
+          Цель подбора
+          <select
+            name="objective"
+            [ngModel]="form().objective"
+            (ngModelChange)="store.patch({ objective: $event })"
+          >
+            <option value="profit_factor">Profit factor</option>
+            <option value="net">Net</option>
+          </select>
+        </label>
+        <label>
+          Мин. сделок на train
+          <input
+            name="minTrades"
+            type="number"
+            [ngModel]="form().minTrades"
+            (ngModelChange)="store.patch({ minTrades: $event })"
+          />
+        </label>
+        <label class="wide">
+          Сетка ({{ gridKeys }})
+          <textarea
+            name="grid"
+            rows="3"
+            [ngModel]="form().grid"
+            (ngModelChange)="store.patch({ grid: $event })"
+          ></textarea>
+        </label>
+        <label>
+          Test с
+          <input
+            name="testFrom"
+            type="date"
+            [ngModel]="form().testFrom"
+            (ngModelChange)="store.patch({ testFrom: $event })"
+          />
+        </label>
+        <label>
+          Test по
+          <input
+            name="testTo"
+            type="date"
+            [ngModel]="form().testTo"
+            (ngModelChange)="store.patch({ testTo: $event })"
+          />
+        </label>
+      }
+      <div class="actions">
+        <button tuiButton type="submit" size="s" [disabled]="store.running()">
+          Запустить
+        </button>
+        @if (form().kind === 'walk_forward') {
+          <span class="hint"
+            >Test открывается один раз на связку инструмент/TF/сигнал.</span
+          >
+        }
+      </div>
+    </form>
+
+    @if (store.error(); as error) {
+      <p class="error" role="alert">{{ error }}</p>
+    }
+    @if (store.progress(); as progress) {
+      <p class="hint" role="status">
+        {{ progress.message || 'выполняется' }} ·
+        {{ progress.fraction * 100 | number: '1.0-0' }}%
+      </p>
+    }
+
+    @if (store.current(); as backtest) {
+      <section class="result" aria-label="Результат">
+        <h2>Бэктест №{{ backtest.id }} — {{ statusTitle(backtest.status) }}</h2>
+        <p class="hint">
+          {{ backtest.timeframe_code }} · {{ backtest.period_from }} …
+          {{ backtest.period_to }} · хеш
+          {{ backtest.params_hash.slice(0, 8) }}
+          @if (runsForSeries() !== null) {
+            · запусков по связке: {{ runsForSeries() }}
+          }
+        </p>
+        @if (backtest.status === 'succeeded') {
+          <div class="units" role="group" aria-label="Единицы">
+            @for (u of units; track u.value) {
+              <button
+                type="button"
+                class="unit"
+                [class.active]="store.unit() === u.value"
+                [attr.aria-pressed]="store.unit() === u.value"
+                (click)="store.unit.set(u.value)"
+              >
+                {{ u.title }}
+              </button>
+            }
+          </div>
+          @if (backtest.kind === 'walk_forward') {
+            <p class="hint">
+              Метрики ниже — по validation-окнам (параметры выбраны только по
+              train).
+              @if (finalParams(); as final) {
+                Финальные параметры: <strong>{{ final }}</strong
+                >.
+              }
+            </p>
+          }
+          <table class="metrics">
+            <tbody>
+              @for (row of rows(); track row.title) {
+                <tr>
+                  <th>{{ row.title }}</th>
+                  <td>{{ row.value }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          @for (warning of warnings(); track warning) {
+            <p class="warning">⚠ {{ warning }}</p>
+          }
+          @if (equity(); as chart) {
+            <svg
+              class="equity"
+              role="img"
+              aria-label="Equity по сделкам"
+              [attr.viewBox]="'0 0 ' + chart.width + ' ' + chart.height"
+            >
+              <line
+                class="zero"
+                x1="0"
+                [attr.x2]="chart.width"
+                [attr.y1]="chart.zero"
+                [attr.y2]="chart.zero"
+              />
+              <polyline class="curve" [attr.points]="chart.points" />
+            </svg>
+            <p class="hint">
+              Накопленный результат по закрытым сделкам ({{
+                unitTitle(store.unit())
+              }}).
+            </p>
+          }
+
+          @if (windows().length) {
+            <h3>Окна walk-forward</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Train</th>
+                  <th>Validation</th>
+                  <th>Параметры</th>
+                  <th>Сделок train</th>
+                  <th>Сделок valid</th>
+                  <th>Net valid (тики)</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (w of windows(); track w.id) {
+                  <tr>
+                    <td>{{ w.train }}</td>
+                    <td>{{ w.valid }}</td>
+                    <td>{{ w.params }}</td>
+                    <td>{{ w.trainTrades }}</td>
+                    <td>{{ w.validTrades }}</td>
+                    <td>{{ w.validNet }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+          @if (test(); as t) {
+            <h3>Test</h3>
+            <p [class.warning]="t.status !== 'evaluated'">{{ t.title }}</p>
+            @if (t.params) {
+              <p class="hint">Параметры: {{ t.params }}</p>
+            }
+            @if (testRows().length) {
+              <table class="metrics">
+                <tbody>
+                  @for (row of testRows(); track row.title) {
+                    <tr>
+                      <th>{{ row.title }}</th>
+                      <td>{{ row.value }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          }
+
+          <h3>Сделки ({{ store.trades().length }})</h3>
+          @if (!tradeList().length) {
+            <p class="hint">Сделок нет.</p>
+          } @else {
+            <table class="trades">
+              <thead>
+                <tr>
+                  <th>Сегмент</th>
+                  <th>Сторона</th>
+                  <th>Событие</th>
+                  <th>Вход</th>
+                  <th>Выход</th>
+                  <th>Причина</th>
+                  <th>Net</th>
+                  <th>Флаги</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (t of tradeList(); track t.id) {
+                  <tr>
+                    <td>{{ t.segment }}</td>
+                    <td>{{ t.side }}</td>
+                    <td>{{ t.ref }}</td>
+                    <td>{{ t.entry }}</td>
+                    <td>{{ t.exit }}</td>
+                    <td>{{ t.reason }}</td>
+                    <td>{{ t.net }}</td>
+                    <td>{{ t.flags }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        }
+      </section>
+    }
+
+    @if (store.locks().length) {
+      <section class="locks" aria-label="Заблокированные test-периоды">
+        <h3>Заблокированные test-периоды</h3>
+        @for (lock of store.locks(); track lock.id) {
+          <div class="lock">
+            {{ lock.family }} · {{ lock.timeframe_code }} ·
+            {{ lock.test_from }} … {{ lock.test_to }}
+            <button
+              type="button"
+              class="unit"
+              (click)="startUnlock(lock)"
+              [attr.aria-label]="'Разблокировать ' + lock.family"
+            >
+              Разблокировать
+            </button>
+          </div>
+        }
+        @if (unlocking(); as lock) {
+          <div class="unlock">
+            <label>
+              Причина разблокировки (попадёт в журнал)
+              <input
+                name="note"
+                [ngModel]="note()"
+                (ngModelChange)="note.set($event)"
+              />
+            </label>
+            <button
+              tuiButton
+              type="button"
+              size="xs"
+              [disabled]="note().trim().length < minNote"
+              (click)="confirmUnlock(lock)"
+            >
+              Разблокировать
+            </button>
+          </div>
+        }
+      </section>
+    }
+
+    @if (store.history().length) {
+      <section class="history" aria-label="История">
+        <h3>Последние бэктесты</h3>
+        <table>
+          <tbody>
+            @for (b of store.history(); track b.id) {
+              <tr>
+                <td>№{{ b.id }}</td>
+                <td>{{ b.kind === 'single' ? 'период' : 'walk-forward' }}</td>
+                <td>{{ b.timeframe_code }}</td>
+                <td>{{ b.family }}</td>
+                <td>{{ statusTitle(b.status) }}</td>
+                <td>
+                  <button type="button" class="unit" (click)="store.open(b.id)">
+                    Открыть
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    }
+  `,
+  styles: `
+    .note,
+    .hint {
+      opacity: 0.7;
+      font-size: 0.85rem;
+      margin: 0.2rem 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+      gap: 0.5rem 0.8rem;
+      align-items: end;
+      margin: 0.75rem 0;
+    }
+    label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.8rem;
+      gap: 0.15rem;
+    }
+    .wide {
+      grid-column: span 2;
+    }
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    .units {
+      display: inline-flex;
+      margin: 0.4rem 0;
+    }
+    .unit {
+      border: 1px solid var(--tui-border-normal);
+      background: none;
+      color: inherit;
+      padding: 0 0.6rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .unit.active {
+      background: var(--tui-background-neutral-1);
+      font-weight: 600;
+    }
+    table {
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th,
+    td {
+      padding: 0.1rem 0.6rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .metrics th {
+      font-weight: 500;
+      opacity: 0.7;
+    }
+    .metrics td {
+      text-align: right;
+    }
+    .equity {
+      width: 100%;
+      max-width: 28rem;
+      height: auto;
+      display: block;
+    }
+    .zero {
+      stroke: var(--tui-border-normal);
+      stroke-dasharray: 3 3;
+    }
+    .curve {
+      fill: none;
+      stroke: var(--tui-text-action, #3b82f6);
+      stroke-width: 2;
+    }
+    .warning {
+      color: var(--tui-text-warning, #b26a00);
+      font-size: 0.8rem;
+      margin: 0.15rem 0;
+    }
+    .error {
+      color: var(--tui-text-negative);
+    }
+    .lock {
+      margin: 0.2rem 0;
+      font-size: 0.85rem;
+    }
+    .unlock {
+      display: flex;
+      gap: 0.5rem;
+      align-items: end;
+      margin-top: 0.4rem;
+    }
+  `,
+})
+export class Backtest implements OnInit {
+  protected readonly store = inject(BacktestStore);
+  protected readonly timeframes = TIMEFRAMES;
+  protected readonly stopKinds = STOP_KINDS;
+  protected readonly targetKinds = TARGET_KINDS;
+  protected readonly gridKeys = GRID_KEYS.join(', ');
+  protected readonly minNote = MIN_NOTE;
+  protected readonly sources = Object.entries(SOURCE_TITLES).map(
+    ([value, title]) => ({ value, title }),
+  );
+  protected readonly units = (
+    Object.entries(UNIT_TITLES) as [MetricUnit, string][]
+  ).map(([value, title]) => ({ value, title }));
+
+  protected readonly form = this.store.form;
+  protected readonly note = signal('');
+  protected readonly unlocking = signal<BacktestLock | null>(null);
+
+  private readonly data = computed(() => resolved(this.store.current()));
+  protected readonly rows = computed(() =>
+    metricRows(this.data().metrics[this.store.unit()]),
+  );
+  protected readonly warnings = computed(() =>
+    metricWarnings(this.data().metrics[this.store.unit()]),
+  );
+  protected readonly equity = computed(() =>
+    equityChart(
+      this.data().equity[this.store.unit() === 'rub' ? 'rub' : 'ticks'],
+    ),
+  );
+  protected readonly windows = computed(() => windowRows(this.store.windows()));
+  protected readonly tradeList = computed(() =>
+    tradeRows(this.store.trades(), this.store.unit()),
+  );
+  protected readonly test = computed(() =>
+    testInfo(this.store.current(), this.store.unit()),
+  );
+  protected readonly testRows = computed(() =>
+    metricRows(this.test()?.metrics),
+  );
+  protected readonly runsForSeries = computed(() => {
+    const result = this.store.current()?.result as {
+      runs_for_series?: number;
+    } | null;
+    return result?.runs_for_series ?? null;
+  });
+  protected readonly finalParams = computed(() => {
+    const result = this.store.current()?.result as {
+      walk_forward?: { final_params?: Record<string, unknown> | null };
+    } | null;
+    const params = result?.walk_forward?.final_params;
+    return params && Object.keys(params).length
+      ? Object.entries(params)
+          .map(([k, v]) => `${k}=${String(v)}`)
+          .join(', ')
+      : null;
+  });
+
+  ngOnInit(): void {
+    void this.store.init();
+  }
+
+  protected statusTitle(status: string): string {
+    return STATUS_TITLES[status] ?? status;
+  }
+
+  protected unitTitle(unit: MetricUnit): string {
+    return UNIT_TITLES[unit];
+  }
+
+  protected startUnlock(lock: BacktestLock): void {
+    this.note.set('');
+    this.unlocking.set(lock);
+  }
+
+  protected async confirmUnlock(lock: BacktestLock): Promise<void> {
+    if (await this.store.unlock(lock, this.note().trim())) {
+      this.unlocking.set(null);
+    }
+  }
+}

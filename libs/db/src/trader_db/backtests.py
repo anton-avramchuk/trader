@@ -23,6 +23,8 @@ from trader_db.models import (
     BacktestWindow,
 )
 
+ERROR_LIMIT = 2000
+
 
 def log_event(
     session: Session,
@@ -133,7 +135,7 @@ def fail_experiment(
 ) -> BacktestExperiment:
     experiment = session.get_one(BacktestExperiment, experiment_id)
     experiment.status = "failed"
-    experiment.error = error
+    experiment.error = error[:ERROR_LIMIT]
     experiment.finished_at = datetime.now(UTC)
     session.flush()
     log_event(
@@ -184,14 +186,25 @@ def add_trades(
     segment: str = "single",
     window_id: int | None = None,
 ) -> int:
-    """Сохраняет сделки; ``sequence`` — порядок в переданном списке."""
-    for sequence, row in enumerate(rows):
+    """Сохраняет сделки; ``sequence`` — сквозной номер по эксперименту и сегменту.
+
+    Сделки нескольких окон одного сегмента (validation) нумеруются подряд, поэтому
+    повторные вызовы продолжают нумерацию, а не начинают её с нуля.
+    """
+    last = session.scalar(
+        select(func.max(BacktestTrade.sequence)).where(
+            BacktestTrade.experiment_id == experiment_id,
+            BacktestTrade.segment == segment,
+        )
+    )
+    start = 0 if last is None else last + 1
+    for offset, row in enumerate(rows):
         session.add(
             BacktestTrade(
                 experiment_id=experiment_id,
                 window_id=window_id,
                 segment=segment,
-                sequence=sequence,
+                sequence=start + offset,
                 **row,
             )
         )

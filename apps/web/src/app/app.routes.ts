@@ -38,8 +38,8 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'backtest',
-    loadComponent: placeholder,
-    data: { title: 'Backtest', note: 'Тестирование стратегий.' },
+    loadComponent: () =>
+      import('./pages/backtest/backtest').then((m) => m.Backtest),
   },
   { path: '**', redirectTo: 'data/instruments' },
 ];
