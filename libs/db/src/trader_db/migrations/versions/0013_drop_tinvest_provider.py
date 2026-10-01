@@ -20,4 +20,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("INSERT INTO data_providers (code, name) VALUES ('tinvest', 'T-Invest')")
+    # 0001 больше не создаёт tinvest; откатывать нечего.
+    pass
