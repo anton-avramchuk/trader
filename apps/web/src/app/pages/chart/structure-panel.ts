@@ -7,6 +7,7 @@ import { allowedSourceTimeframes } from './indicators';
 import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
 import { PatternGallery } from './pattern-gallery';
 import { AnaloguesBlock } from './analogues-block';
+import { ForecastBlock } from './forecast-block';
 import { StatsBlock } from './stats-block';
 import { LAYER_TITLES, LAYERS } from './structure';
 import { StructureStore } from './structure.store';
@@ -43,6 +44,7 @@ const REASONS: Record<string, string> = {
     MskPipe,
     PatternGallery,
     AnaloguesBlock,
+    ForecastBlock,
     StatsBlock,
     TuiButton,
   ],
@@ -201,6 +203,14 @@ const REASONS: Record<string, string> = {
         [unit]="store.statsUnit()"
         [canPattern]="!!store.selectedPatternInfo()"
         (lookup)="store.findAnalogues($event)"
+      />
+      <app-forecast-block
+        [view]="store.forecast()"
+        [calibration]="store.calibration()"
+        [unit]="store.statsUnit()"
+        [canPattern]="!!store.selectedPatternInfo()"
+        (lookup)="store.findForecast($event)"
+        (calibrate)="store.findCalibration()"
       />
     }
     @if (store.layers().patterns) {
