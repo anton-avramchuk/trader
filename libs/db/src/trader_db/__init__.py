@@ -1,5 +1,21 @@
 """Доступ к PostgreSQL: настройки, движки SQLAlchemy, миграции Alembic."""
 
+from trader_db.backtests import (
+    LockAttempt,
+    add_trades,
+    add_window,
+    count_runs,
+    create_experiment,
+    fail_experiment,
+    finish_experiment,
+    list_log,
+    list_trades,
+    list_windows,
+    log_event,
+    mark_running,
+    open_test_period,
+    unlock_test_period,
+)
 from trader_db.calendars import load_contract_calendar, load_trading_calendar
 from trader_db.continuous import (
     load_rolls,
@@ -72,6 +88,20 @@ from trader_db.step_prices import (
 )
 
 __all__ = [
+    "LockAttempt",
+    "add_trades",
+    "add_window",
+    "count_runs",
+    "create_experiment",
+    "fail_experiment",
+    "finish_experiment",
+    "list_log",
+    "list_trades",
+    "list_windows",
+    "log_event",
+    "mark_running",
+    "open_test_period",
+    "unlock_test_period",
     "AGGREGATE_JOB_TYPE",
     "Base",
     "BuildResult",
