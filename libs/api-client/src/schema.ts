@@ -850,6 +850,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Прогноз исходов: Empirical и KNN
+         * @description Вероятности роста и падения на порогах (в ATR или %), квантили дохода, медианные MFE/MAE и 95% CI на горизонтах. Два метода рядом, в ценовой системе (вверх — плюс): **Empirical** — исходы вхождений того же типа и направления (только для вхождения-запроса `key`), **KNN** — исходы ближайших по DTW аналогов (и для вхождения, и для окна последних `window` баров). Только то, что известно на `as_of` (у вхождения по умолчанию — момент подтверждения). Это статистика прошлого, а не гарантия: смотрите N, эффективный N и предупреждения. Результат кэшируется.
+         */
+        get: operations["getForecast"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -1466,6 +1486,34 @@ export interface components {
              */
             delimiter: string | null;
         };
+        /** ForecastOut */
+        ForecastOut: {
+            query: components["schemas"]["FormationOut"];
+            /** Occurrence Key */
+            occurrence_key: string | null;
+            /**
+             * Direction
+             * @description Направление вхождения-запроса; у окна нет
+             */
+            direction: ("bullish" | "bearish") | null;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /** Thresholds */
+            thresholds: number[];
+            /** @description Только для вхождения-запроса; у окна — null */
+            empirical: components["schemas"]["MethodOut"] | null;
+            knn: components["schemas"]["MethodOut"];
+            /** Warnings */
+            warnings: string[];
+        };
         /** FormationOut */
         FormationOut: {
             /** Series Key */
@@ -1488,6 +1536,51 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HorizonForecastOut */
+        HorizonForecastOut: {
+            /**
+             * Horizon
+             * @description Горизонт, баров торгового времени TF ряда
+             */
+            horizon: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "atr" | "pct";
+            /** N Raw */
+            n_raw: number;
+            /**
+             * N Effective
+             * @description После de-overlap (окно = горизонт)
+             */
+            n_effective: number;
+            /** Censored */
+            censored: number;
+            /** Missing Atr */
+            missing_atr: number;
+            /** Mean Ret */
+            mean_ret: number | null;
+            /** Median Ret */
+            median_ret: number | null;
+            ret_ci: components["schemas"]["IntervalOut"] | null;
+            /** Quantiles */
+            quantiles: components["schemas"]["QuantileOut"][];
+            /**
+             * Median Mfe
+             * @description Медианный максимальный рост по цене
+             */
+            median_mfe: number | null;
+            /**
+             * Median Mae
+             * @description Медианное максимальное падение
+             */
+            median_mae: number | null;
+            /** Probabilities */
+            probabilities: components["schemas"]["ProbabilityOut"][];
+            /** Warnings */
+            warnings: string[];
         };
         /** HorizonOutcomeOut */
         HorizonOutcomeOut: {
@@ -1907,6 +2000,23 @@ export interface components {
              */
             trajectory: number[] | null;
         };
+        /** MethodOut */
+        MethodOut: {
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "empirical" | "knn";
+            /**
+             * Sample
+             * @description Вхождений (empirical) или аналогов (KNN)
+             */
+            sample: number;
+            /** Horizons */
+            horizons: components["schemas"]["HorizonForecastOut"][];
+            /** Warnings */
+            warnings: string[];
+        };
         /** OccurrenceDetailOut */
         OccurrenceDetailOut: {
             occurrence: components["schemas"]["OccurrenceOut"];
@@ -1985,6 +2095,26 @@ export interface components {
             /** Builtin */
             builtin: boolean;
             mapping: components["schemas"]["FileMapping"];
+        };
+        /** ProbabilityOut */
+        ProbabilityOut: {
+            /**
+             * Threshold
+             * @description Порог в единицах прогноза (ATR или %)
+             */
+            threshold: number;
+            /**
+             * Up
+             * @description P(доход ≥ +порог) по цене
+             */
+            up: number;
+            /**
+             * Down
+             * @description P(доход ≤ −порог) по цене
+             */
+            down: number;
+            up_ci: components["schemas"]["IntervalOut"] | null;
+            down_ci: components["schemas"]["IntervalOut"] | null;
         };
         /** ProfileConfig */
         ProfileConfig: {
@@ -2071,6 +2201,13 @@ export interface components {
             id_type: string;
             /** External Id */
             external_id: string;
+        };
+        /** QuantileOut */
+        QuantileOut: {
+            /** Q */
+            q: number;
+            /** Value */
+            value: number;
         };
         /** ResolveIn */
         ResolveIn: {
@@ -4511,6 +4648,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AnaloguesOut"];
+                };
+            };
+            /** @description Не найдено */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Неверные параметры */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getForecast: {
+        parameters: {
+            query: {
+                /** @description Прогон, чей ряд — запрос */
+                query_run_id: number;
+                /** @description Прогоны истории (по умолчанию — запроса) */
+                run_id?: number[] | null;
+                /** @description Ключ вхождения-запроса; без него — окно */
+                key?: string | null;
+                /** @description Горизонты, баров */
+                horizon?: number[] | null;
+                unit?: "atr" | "pct";
+                /** @description Пороги в единицах прогноза */
+                threshold?: number[] | null;
+                /** @description Empirical: только тот же режим (тренд × волатильность) */
+                same_regime?: boolean;
+                window?: number;
+                pip_points?: number;
+                normalization?: "atr" | "percent";
+                k?: number;
+                max_distance?: number | null;
+                band?: number;
+                include_candidates?: boolean;
+                as_of?: string | null;
+                seed?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastOut"];
                 };
             };
             /** @description Не найдено */

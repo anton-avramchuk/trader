@@ -47,4 +47,7 @@ export type OutcomeBucket = components['schemas']['BucketOut'];
 export type HorizonStats = components['schemas']['HorizonStatsOut'];
 export type OccurrenceOutcomes = components['schemas']['OccurrenceDetailOut'];
 export type Analogues = components['schemas']['AnaloguesOut'];
+export type Forecast = components['schemas']['ForecastOut'];
+export type MethodForecast = components['schemas']['MethodOut'];
+export type HorizonForecast = components['schemas']['HorizonForecastOut'];
 export type AnalogueMatch = components['schemas']['MatchOut'];
