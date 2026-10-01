@@ -46,7 +46,7 @@
 
 ## Данные
 
-- **Provider** — источник данных (MOEX ISS, T-Invest, CSV). Реализует `MarketDataProvider`.
+- **Provider** — источник данных (MOEX ISS, CSV). Реализует `MarketDataProvider`.
 - **Data import** — одна операция импорта с `data_import_id`, отчётом и ошибками.
 - **Bitemporal raw** — raw-строки не изменяются и не удаляются; новая версия значения помечает старую `superseded_by_import_id`.
 - **Resolution import** — импорт (`kind = conflict_resolution`), под которым записываются принятые значения конфликтов; замещённые строки помечаются его id.
@@ -55,7 +55,7 @@
 - **Provenance** — происхождение derived-свечей (например, `aggregated(iss_1m)`).
 - **Import preset** — сохранённый `FileMapping` (сопоставление колонок файла); встроенные — `finam`, `finam_no_header`, `iso_utc`.
 - **Loaded window** — окно дат, уже загруженное у поставщика (по завершённым импортам, `params.window`); загрузка возобновляется с первого незагруженного куска.
-- **Reconciliation** — сверка наших свечей со свечами другого провайдера (T-Invest); расхождения — в отчёт, не исправляются.
+- **Reconciliation** — сверка наших свечей со свечами другого провайдера; не реализуется (отказ от T-Invest, ADR-0024).
 
 ## Вычисления
 
