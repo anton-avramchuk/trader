@@ -40,47 +40,59 @@ def test_levels_of_an_up_leg() -> None:
     assert got["extension"]["127.2"] == pytest.approx(138.16)
 
 
-def test_grid_follows_the_leg_and_restarts_on_new_swing() -> None:
+def test_grid_is_built_on_confirmed_swings_not_on_the_running_leg() -> None:
     bars = closes(SERIES)
 
     events = run_engine(create("fibonacci", PERCENT), bars)
 
-    assert legs(events)[:6] == [
-        ("detected", 120, 105),
-        ("revised", 120, 100),
-        ("detected", 100, 110),
-        ("revised", 100, 130),
-        ("detected", 130, 115),
-        ("revised", 130, 105),
+    # нога появляется, только когда подтверждены оба её конца; колено «в процессе»
+    # (кандидат ZigZag) сетку не двигает
+    assert legs(events) == [
+        ("detected", 120, 100),
+        ("detected", 100, 130),
+        ("detected", 130, 85),
     ]
-    assert events[0].available_at == bars[3].close_time
-    assert events[1].revises == events[0].seq and events[2].revises is None
-    assert (
-        events[0].payload["direction"] == "down"
-        and events[2].payload["direction"] == "up"
-    )
+    assert events[0].available_at == bars[5].close_time
+    assert all(e.revises is None for e in events)
+    assert events[0].payload["direction"] == "down"
+    assert events[1].payload["direction"] == "up"
     assert events[0].payload["start"]["timestamp"] == bars[2].timestamp.isoformat()
 
 
-def test_current_picture_is_the_latest_grid_only_per_leg() -> None:
+def test_small_swings_after_a_big_leg_extend_it_instead_of_new_grids() -> None:
+    series = [100.0, 110, 120, 105, 100, 110, 130, 127, 131, 128, 132, 129]
+
+    events = run_engine(create("fibonacci", {**PERCENT, "percent": 2}), closes(series))
+
+    assert legs(events) == [
+        ("detected", 120, 100),
+        ("detected", 100, 130),
+        ("revised", 100, 131),
+        ("revised", 100, 132),
+    ]
+
+
+def test_leg_shorter_than_min_leg_mult_gives_no_grid() -> None:
+    series = [100.0, 103, 100, 103, 100, 103, 100, 103]
+
+    events = run_engine(create("fibonacci", {**PERCENT, "percent": 2}), closes(series))
+
+    assert events == []
+
+
+def test_current_picture_is_the_latest_grid_per_chain() -> None:
     events = run_engine(create("fibonacci", PERCENT), closes(SERIES))
 
-    current = current_events(events)
-
-    assert legs(current)[:3] == [
-        ("revised", 120, 100),
-        ("revised", 100, 130),
-        ("revised", 130, 105),
-    ]
+    assert legs(current_events(events)) == legs(events)
 
 
 def test_as_of_hides_later_grids() -> None:
     bars = closes(SERIES)
     events = run_engine(create("fibonacci", PERCENT), bars)
 
-    known = known_at(events, bars[4].close_time)
+    known = known_at(events, bars[6].close_time)
 
-    assert legs(current_events(known)) == [("revised", 120, 100)]
+    assert legs(current_events(known)) == [("detected", 120, 100)]
 
 
 def test_no_grid_before_first_confirmed_swing() -> None:

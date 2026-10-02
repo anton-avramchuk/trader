@@ -1,18 +1,22 @@
-"""Fibonacci Engine: автоматическая сетка на source TF (ADR-0012, spec §23).
+"""Fibonacci Engine: автоматическая сетка на значимой ноге (ADR-0030, spec §23).
 
-Сетка строится по ноге «последний подтверждённый swing → экстремум текущего колена»
-(текущий кандидат ZigZag). Пока колено растёт, сетка пересматривается (``revised``);
-подтверждение нового swing — новая сетка (``detected``, без ``revises``): одна цепочка
-на ногу. Уровни: retracement 23.6/38.2/50/61.8/78.6 и extension 100/127.2/161.8.
+Сетка строится по подтверждённым swing ZigZag, а не по бегущему колену: в окне из
+последних ``window`` подтверждённых swing берётся размах «минимум ↔ максимум», нога —
+от более раннего экстремума к более позднему. Нога должна быть не короче
+``min_leg_mult`` порогов ZigZag, иначе сетка не строится (мелкие колебания шума не
+дают сетку). Откат считается от конца ноги, то есть показывает, где может закончиться
+текущая коррекция. Новая сетка — ``detected``; если нога выросла от того же начала —
+``revised``. Уровни: retracement 23.6/38.2/50/61.8/78.6 и extension 100/127.2/161.8.
 """
 
+from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from trader_engine.events.base import EventEngine
 from trader_engine.events.registry import register
-from trader_engine.events.swing import ZigZag, ZigZagParams
+from trader_engine.events.swing import HIGH, ZigZag, ZigZagParams
 from trader_engine.indicators.base import BarInput
 
 KIND = "fib_grid"
@@ -46,6 +50,16 @@ def grid_payload(
     }
 
 
+class FibonacciParams(ZigZagParams):
+    atr_mult: float = Field(default=2.0, gt=0, le=50, description="Множитель ATR")
+    window: int = Field(
+        default=8, ge=2, le=200, description="Сколько последних swing учитывать"
+    )
+    min_leg_mult: float = Field(
+        default=2.0, gt=0, le=50, description="Минимум ноги в порогах ZigZag"
+    )
+
+
 def point(payload: dict[str, Any]) -> dict[str, Any]:
     return {"price": payload["price"], "timestamp": payload["timestamp"]}
 
@@ -54,44 +68,50 @@ def point(payload: dict[str, Any]) -> dict[str, Any]:
 class Fibonacci(EventEngine):
     name = "fibonacci"
     title = "Fibonacci: автоматическая сетка"
-    Params = ZigZagParams
+    version = 2
+    Params = FibonacciParams
 
     def __init__(self, params: BaseModel | None = None) -> None:
         super().__init__(params)
         self._zigzag = ZigZag(self.params)
-        self._start: dict[str, Any] | None = None  # последний подтверждённый swing
-        self._end: dict[str, Any] | None = None  # экстремум текущего колена
+        self._swings: list[dict[str, Any]] = []  # подтверждённые, последние ``window``
         self._method = ""
         self._grid: int | None = None  # последнее событие цепочки сетки
-        self._shown: list[dict[str, Any]] | None = (
-            None  # (start, end) в последнем событии
-        )
+        self._shown: list[dict[str, Any]] | None = None  # (start, end) в событии
 
     def on_bar(self, bar: BarInput) -> None:
         for event in self._zigzag.update(bar):
             self._method = event.payload["method"]
             if event.status == "confirmed":
-                self._start, self._end = point(event.payload), None
-            else:
-                self._end = point(event.payload)
-        if self._start is None or self._end is None:
+                self._confirmed(event.payload)
+
+    def _confirmed(self, payload: dict[str, Any]) -> None:
+        p = self.typed_params(FibonacciParams)
+        self._swings.append({**point(payload), "type": payload["type"]})
+        del self._swings[: -p.window]
+        highs = [s for s in self._swings if s["type"] == HIGH]
+        lows = [s for s in self._swings if s["type"] != HIGH]
+        if not highs or not lows:
             return
-        pair = [self._start, self._end]
+        top = max(highs, key=lambda s: (s["price"], _ts(s)))
+        bottom = min(lows, key=lambda s: (s["price"], -_ts(s)))
+        if top["price"] - bottom["price"] < p.min_leg_mult * payload["threshold"]:
+            return
+        start, end = (bottom, top) if _ts(bottom) < _ts(top) else (top, bottom)
+        pair = [point(start), point(end)]
         if pair == self._shown:
             return
-        payload = grid_payload(self._start, self._end, self._method)
-        new_leg = self._shown is None or self._shown[0] != self._start
-        if new_leg:
-            self._grid = self.emit(KIND, "detected", payload).seq
+        body = grid_payload(pair[0], pair[1], self._method)
+        if self._shown is not None and self._shown[0] == pair[0]:
+            self._grid = self.emit(KIND, "revised", body, revises=self._grid).seq
         else:
-            self._grid = self.emit(KIND, "revised", payload, revises=self._grid).seq
+            self._grid = self.emit(KIND, "detected", body).seq
         self._shown = pair
 
     def get_state(self) -> dict[str, Any]:
         return {
             "zigzag": self._zigzag.dump_state(),
-            "start": self._start,
-            "end": self._end,
+            "swings": self._swings,
             "method": self._method,
             "grid": self._grid,
             "shown": self._shown,
@@ -99,8 +119,11 @@ class Fibonacci(EventEngine):
 
     def set_state(self, state: dict[str, Any]) -> None:
         self._zigzag.load_state(state["zigzag"])
-        self._start = state["start"]
-        self._end = state["end"]
+        self._swings = state["swings"]
         self._method = state["method"]
         self._grid = state["grid"]
         self._shown = state["shown"]
+
+
+def _ts(swing: dict[str, Any]) -> float:
+    return datetime.fromisoformat(swing["timestamp"]).timestamp()
