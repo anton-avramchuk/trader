@@ -6,6 +6,9 @@ import { type ChartTimeframe, prependCandles } from './chart-data';
 /** Сколько свечей запрашивается за раз (первая загрузка и подгрузка истории). */
 export const PAGE_SIZE = 1500;
 
+/** Предохранитель: не больше стольких страниц истории ради перехода к дате. */
+const MAX_PAGES_TO_DATE = 40;
+
 @Injectable()
 export class ChartStore {
   private readonly api = inject(ApiService);
@@ -23,13 +26,16 @@ export class ChartStore {
     () => `${this.instrumentId()}:${this.timeframe()}`,
   );
 
-  async loadInstruments(): Promise<void> {
+  /** Список инструментов; выбирается `preferred` (запомненный), иначе первый. */
+  async loadInstruments(preferred: number | null = null): Promise<void> {
     this.instruments.set(
       await this.api.call(this.api.client.GET('/instruments')),
     );
-    const first = this.instruments()[0];
-    if (this.instrumentId() === null && first) {
-      await this.selectInstrument(first.id);
+    const pick =
+      this.instruments().find((i) => i.id === preferred) ??
+      this.instruments()[0];
+    if (this.instrumentId() === null && pick) {
+      await this.selectInstrument(pick.id);
     }
   }
 
@@ -105,6 +111,22 @@ export class ChartStore {
     } finally {
       if (seq === this.sequence) {
         this.loading.set(false);
+      }
+    }
+  }
+
+  /** Подгружает историю, пока самая ранняя свеча не станет не позже `timestamp` (или история не кончится). */
+  async loadUntil(timestamp: string): Promise<void> {
+    const target = new Date(timestamp).getTime();
+    for (let guard = 0; guard < MAX_PAGES_TO_DATE; guard++) {
+      const first = this.candles()[0];
+      if (!first || new Date(first.timestamp).getTime() <= target) {
+        return;
+      }
+      const before = this.candles().length;
+      await this.loadOlder();
+      if (!this.hasOlder() && this.candles().length === before) {
+        return;
       }
     }
   }

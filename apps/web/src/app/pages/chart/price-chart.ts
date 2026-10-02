@@ -8,6 +8,7 @@ import {
   inject,
   input,
   output,
+  untracked,
   viewChild,
 } from '@angular/core';
 import type { Candle } from '@trader/api-client';
@@ -31,6 +32,9 @@ import { StructurePrimitive } from './structure-primitive';
 
 /** Порог (в барах) у левого края, с которого просим более раннюю историю. */
 const LOAD_MORE_THRESHOLD = 30;
+
+/** Полуширина окна (в барах), если текущего видимого диапазона ещё нет. */
+const FOCUS_HALF_WIDTH = 60;
 
 const asTime = (value: number) => value as UTCTimestamp;
 
@@ -64,6 +68,10 @@ export class PriceChart {
   readonly indicators = input<ChartIndicator[]>([]);
   /** Слои структуры: маркеры, линии и зоны. */
   readonly overlay = input<Overlay>(EMPTY_OVERLAY);
+  /** Логарифмическая шкала цены. */
+  readonly logScale = input(false);
+  /** Запрос «показать момент»: `seq` отличает повторный запрос на то же время. */
+  readonly focus = input<{ time: number; seq: number } | null>(null);
 
   /** Пользователь докрутил до левого края: нужна более ранняя история. */
   readonly needOlder = output<void>();
@@ -71,6 +79,8 @@ export class PriceChart {
   readonly hover = output<Candle | null>();
   /** Клик по графику: время бара (с) и цена под курсором (ручная сетка Fibonacci). */
   readonly pointPicked = output<{ time: number; price: number }>();
+  /** Клик по линии уровня (`levelId` сегмента). */
+  readonly levelPicked = output<number>();
 
   private readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
 
@@ -81,6 +91,7 @@ export class PriceChart {
   private readonly structure = new StructurePrimitive();
   private lastFirstTime: number | null = null;
   private lastKey: string | null = null;
+  private lastFocusSeq = 0;
   private readonly indicatorSeries = new Map<
     string,
     ISeriesApi<'Line'> | ISeriesApi<'Histogram'>
@@ -98,6 +109,46 @@ export class PriceChart {
     effect(() => {
       this.syncOverlay(this.candles(), this.overlay());
     });
+    effect(() => {
+      // читаем сигнал до проверки графика, иначе эффект не подпишется на него
+      const mode = this.logScale() ? 1 : 0;
+      this.chart?.priceScale('right').applyOptions({ mode });
+    });
+    // после `render`: свечи уже на графике, когда нужно показать момент
+    effect(() => {
+      const request = this.focus();
+      const candles = this.candles();
+      untracked(() => this.applyFocus(request, candles));
+    });
+  }
+
+  /** Вписать всю загруженную историю. */
+  fit(): void {
+    this.chart?.timeScale().fitContent();
+  }
+
+  /** К последней свече. */
+  toLast(): void {
+    this.chart?.timeScale().scrollToRealTime();
+  }
+
+  /** Центрирует график на баре, ближайшем к `time` (ширина окна сохраняется). */
+  private applyFocus(
+    request: { time: number; seq: number } | null,
+    candles: Candle[],
+  ): void {
+    if (!this.chart || !request || request.seq === this.lastFocusSeq) {
+      return;
+    }
+    this.lastFocusSeq = request.seq;
+    const index = candles.findIndex(
+      (c) => toChartTime(c.timestamp) >= request.time,
+    );
+    const target = index < 0 ? candles.length - 1 : index;
+    const scale = this.chart.timeScale();
+    const range = scale.getVisibleLogicalRange();
+    const half = range ? (range.to - range.from) / 2 : FOCUS_HALF_WIDTH;
+    scale.setVisibleLogicalRange({ from: target - half, to: target + half });
   }
 
   private create(): void {
@@ -114,7 +165,10 @@ export class PriceChart {
         tickMarkFormatter: (time: Time, type: number) =>
           formatMsk((time as number) * 1000, type >= 3 ? 'time' : 'date'),
       },
-      rightPriceScale: { scaleMargins: { top: 0.05, bottom: 0.25 } },
+      rightPriceScale: {
+        scaleMargins: { top: 0.05, bottom: 0.25 },
+        mode: this.logScale() ? 1 : 0,
+      },
     });
     this.chart = chart;
     this.candleSeries = chart.addSeries(CandlestickSeries, {
@@ -146,7 +200,14 @@ export class PriceChart {
     });
     chart.subscribeClick((param) => {
       const series = this.candleSeries;
-      if (!series || param.time === undefined || !param.point) {
+      if (!series || !param.point) {
+        return;
+      }
+      const level = this.structure.levelAt(param.point.y);
+      if (level !== null) {
+        this.levelPicked.emit(level);
+      }
+      if (param.time === undefined) {
         return;
       }
       const price = series.coordinateToPrice(param.point.y);

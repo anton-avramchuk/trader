@@ -13,6 +13,23 @@ import { EMPTY_OVERLAY, type Overlay, snapToBar } from './structure';
 
 const FONT = '11px sans-serif';
 const LABEL_GAP = 4;
+/** Минимальный шаг между подписями у правого края, px. */
+const LABEL_STEP = 13;
+/** Насколько близко (px) клик должен быть к линии уровня. */
+const HIT_DISTANCE = 6;
+
+/** Раздвигает подписи по вертикали, чтобы не налезали друг на друга (порядок сверху вниз). */
+export function spreadLabels(ys: readonly number[]): number[] {
+  const order = ys.map((y, index) => ({ y, index })).sort((a, b) => a.y - b.y);
+  const placed = new Array<number>(ys.length);
+  let previous = -Infinity;
+  for (const { y, index } of order) {
+    const next = Math.max(y, previous + LABEL_STEP);
+    placed[index] = next;
+    previous = next;
+  }
+  return placed;
+}
 
 /** Рисует зоны и линии структуры поверх свечей (primitive Lightweight Charts v5). */
 export class StructurePrimitive implements ISeriesPrimitive<Time> {
@@ -52,6 +69,29 @@ export class StructurePrimitive implements ISeriesPrimitive<Time> {
     this.redraw?.();
   }
 
+  /** Уровень (`levelId`), чья линия ближе всего к высоте `y` (px графика), либо `null`. */
+  levelAt(y: number): number | null {
+    const series = this.series;
+    if (!series) {
+      return null;
+    }
+    let best: { id: number; distance: number } | null = null;
+    for (const segment of this.overlay.segments) {
+      if (segment.levelId === undefined) {
+        continue;
+      }
+      const line = series.priceToCoordinate(segment.price1);
+      if (line === null) {
+        continue;
+      }
+      const distance = Math.abs(line - y);
+      if (distance <= HIT_DISTANCE && (!best || distance < best.distance)) {
+        best = { id: segment.levelId, distance };
+      }
+    }
+    return best?.id ?? null;
+  }
+
   /** X в пикселях: события привязываются к ближайшему бару не позже их времени. */
   private x(time: number): number | null {
     const chart = this.chart;
@@ -85,6 +125,7 @@ export class StructurePrimitive implements ISeriesPrimitive<Time> {
         ctx.fillStyle = '#607d8b';
         ctx.fillText(zone.label, x + LABEL_GAP, top + 11);
       }
+      const labels: { text: string; color: string; y: number }[] = [];
       for (const segment of this.overlay.segments) {
         const x1 = this.x(segment.time1);
         const y1 = series.priceToCoordinate(segment.price1);
@@ -102,11 +143,20 @@ export class StructurePrimitive implements ISeriesPrimitive<Time> {
         ctx.lineTo(x2, y2);
         ctx.stroke();
         if (segment.label && segment.time2 === null) {
-          ctx.fillStyle = segment.color;
-          const width = ctx.measureText(segment.label).width;
-          ctx.fillText(segment.label, x2 - width - LABEL_GAP, y1 - LABEL_GAP);
+          labels.push({ text: segment.label, color: segment.color, y: y1 });
         }
       }
+      ctx.setLineDash([]);
+      const ys = spreadLabels(labels.map((label) => label.y));
+      labels.forEach((label, index) => {
+        const width = ctx.measureText(label.text).width;
+        ctx.fillStyle = label.color;
+        ctx.fillText(
+          label.text,
+          mediaSize.width - width - LABEL_GAP,
+          (ys[index] ?? label.y) - LABEL_GAP,
+        );
+      });
       ctx.setLineDash([]);
     });
   }

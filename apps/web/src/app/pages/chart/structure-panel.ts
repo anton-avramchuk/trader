@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
 import { UiNumber, type UiOption, UiSelect } from '../../core/ui';
 import { MskPipe } from '../../core/time/msk';
+import { higherTimeframes } from './chart-data';
 import { allowedSourceTimeframes } from './indicators';
 import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
 import { PatternGallery } from './pattern-gallery';
@@ -132,6 +133,15 @@ const REASONS: Record<string, string> = {
             [ngModel]="store.levelFilter().minScore"
             (ngModelChange)="store.setLevelFilter({ minScore: $event ?? 0 })"
           />
+          @if (higherOptions().length > 1) {
+            <app-select
+              label="Уровни старшего TF"
+              aria-label="Уровни старшего TF"
+              [options]="higherOptions()"
+              [ngModel]="store.higherTimeframe() ?? ''"
+              (ngModelChange)="store.setHigherTimeframe($event || null)"
+            />
+          }
         }
         <app-number
           label="Свечей (0 — все)"
@@ -419,6 +429,13 @@ export class StructurePanel {
   }
 
   /** Старшие TF, уровни которых можно добавить в зоны (chart TF используется всегда). */
+  protected readonly higherOptions = computed(() => [
+    { value: '', label: 'Нет' },
+    ...higherTimeframes(this.chartTimeframe()).map((tf) => ({
+      value: tf as string,
+      label: tf,
+    })),
+  ]);
   protected readonly sources = computed(() =>
     allowedSourceTimeframes(this.chartTimeframe()).filter(
       (tf) => tf !== this.chartTimeframe(),

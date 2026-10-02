@@ -8,6 +8,7 @@ import {
   emptyLayers,
   EMPTY_OVERLAY,
   fibonacciSegments,
+  higherLevelSegments,
   LAYER_ENGINES,
   LAYERS,
   type LayerKey,
@@ -60,6 +61,8 @@ import {
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
 /** Горизонт проверки калибровки, баров. */
 const CALIBRATION_HORIZON = 10;
+/** Уровней старшего TF с каждой стороны цены. */
+const HIGHER_PER_SIDE = 3;
 /** Свечей по умолчанию для паттернов и уровней (как в worker). */
 export const DEFAULT_LAST_BARS = 1000;
 
@@ -120,12 +123,24 @@ export class StructureStore {
   /** Цена и ATR графика — опора фильтра уровней. */
   readonly reference = signal<LevelReference | null>(null);
   readonly levelFilter = signal<LevelFilter>(DEFAULT_LEVEL_FILTER);
+  /** Старший TF, чьи уровни показываются рядом с уровнями графика (`null` — нет). */
+  readonly higherTimeframe = signal<string | null>(null);
+  private readonly higherEvents = signal<EngineEvent[]>([]);
 
   /** Уровни после фильтра — они же на графике и в списке. */
   readonly levels = computed(() =>
     chartLevels(levelInfos(this.events()['levels'] ?? []), {
       ...this.levelFilter(),
       reference: this.reference(),
+    }),
+  );
+  /** Уровни старшего TF: без ограничения по расстоянию, по 3 с каждой стороны. */
+  readonly higherLevels = computed(() =>
+    chartLevels(levelInfos(this.higherEvents()), {
+      ...this.levelFilter(),
+      reference: this.reference(),
+      maxDistanceAtr: null,
+      perSide: HIGHER_PER_SIDE,
     }),
   );
   readonly trend = computed(() =>
@@ -173,6 +188,12 @@ export class StructureStore {
         ...(layers.zigzag ? zigzagSegments(zigzag) : []),
         ...(layers.levels
           ? levelSegments(this.levels(), this.selectedLevel())
+          : []),
+        ...(layers.levels && this.higherTimeframe()
+          ? higherLevelSegments(
+              this.higherLevels(),
+              this.higherTimeframe() as string,
+            )
           : []),
         ...(layers.pivot ? pivotSegments(events['pivot'] ?? []) : []),
         ...(layers.patterns
@@ -224,6 +245,35 @@ export class StructureStore {
     this.lastBars.set(Math.max(0, Math.floor(count)));
     this.runs.clear();
     return this.refresh();
+  }
+
+  setHigherTimeframe(timeframe: string | null): Promise<void> {
+    this.higherTimeframe.set(timeframe);
+    return this.refresh();
+  }
+
+  /**
+   * Восстановление сохранённого вида без запроса: данные подгрузит следующий `refresh`
+   * (его вызывает страница, когда появятся свечи).
+   */
+  restore(view: {
+    layers?: Partial<Record<LayerKey, boolean>>;
+    levelFilter?: Omit<LevelFilter, 'reference'>;
+    lastBars?: number;
+    higherTimeframe?: string | null;
+  }): void {
+    if (view.layers) {
+      this.layers.set({ ...emptyLayers(), ...view.layers });
+    }
+    if (view.levelFilter) {
+      this.levelFilter.set({ ...view.levelFilter, reference: null });
+    }
+    if (view.lastBars !== undefined) {
+      this.lastBars.set(view.lastBars);
+    }
+    if (view.higherTimeframe !== undefined) {
+      this.higherTimeframe.set(view.higherTimeframe);
+    }
   }
 
   setReference(reference: LevelReference | null): void {
@@ -356,6 +406,7 @@ export class StructureStore {
     const seq = ++this.sequence;
     if (!engines.size && !layers.fibonacci) {
       this.events.set({});
+      this.higherEvents.set([]);
       this.zones.set([]);
       this.statsViews.set([]);
       this.error.set(null);
@@ -374,12 +425,21 @@ export class StructureStore {
           );
         }),
       );
+      const higher = layers.levels ? this.higherTimeframe() : null;
+      const higherEvents = higher
+        ? await this.loadEvents(
+            await this.ensureRun('levels', higher),
+            current.asOf,
+            'current',
+          )
+        : [];
       const zones = layers.zones ? await this.loadZones(current) : [];
       const manual = layers.fibonacci ? await this.loadManual(current) : [];
       if (seq !== this.sequence) {
         return; // пришёл ответ на устаревший запрос
       }
       this.events.set(events);
+      this.higherEvents.set(higherEvents);
       this.zones.set(zones);
       this.manual.set(manual);
       this.error.set(null);

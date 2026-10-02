@@ -1,5 +1,10 @@
 import type { Candle } from '@trader/api-client';
-import { describeBar, prependCandles, toChartData } from './chart-data';
+import {
+  describeBar,
+  higherTimeframes,
+  prependCandles,
+  toChartData,
+} from './chart-data';
 
 function candle(timestamp: string, overrides: Partial<Candle> = {}): Candle {
   const start = new Date(timestamp);
@@ -72,5 +77,13 @@ describe('склейка страниц', () => {
       '2026-09-28T04:15:00Z',
       '2026-09-28T04:30:00Z',
     ]);
+  });
+});
+
+describe('higherTimeframes', () => {
+  it('таймфреймы строго старше заданного', () => {
+    expect(higherTimeframes('1h')).toEqual(['4h', '1d', '1w']);
+    expect(higherTimeframes('1w')).toEqual([]);
+    expect(higherTimeframes('3m')).toEqual([]);
   });
 });
