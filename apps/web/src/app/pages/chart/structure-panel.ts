@@ -99,6 +99,68 @@ const REASONS: Record<string, string> = {
       <p class="hint">Состояние тренда: {{ trendTitles[trend] }}</p>
     }
 
+    @if (store.layers().levels) {
+      <div class="row" role="group" aria-label="Фильтр уровней">
+        <label class="field">
+          Дальше цены не более
+          <select
+            [ngModel]="store.levelFilter().maxDistanceAtr"
+            (ngModelChange)="store.setLevelFilter({ maxDistanceAtr: $event })"
+          >
+            @for (option of distances; track option) {
+              <option [ngValue]="option">
+                {{ option === null ? 'без ограничения' : option + ' ATR' }}
+              </option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          С каждой стороны
+          <select
+            [ngModel]="store.levelFilter().perSide"
+            (ngModelChange)="store.setLevelFilter({ perSide: $event })"
+          >
+            @for (option of sides; track option) {
+              <option [ngValue]="option">{{ option }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          Сила от
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="5"
+            [ngModel]="store.levelFilter().minScore"
+            (ngModelChange)="store.setLevelFilter({ minScore: +$event || 0 })"
+          />
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            [ngModel]="store.levelFilter().derived"
+            (ngModelChange)="store.setLevelFilter({ derived: $event })"
+          />
+          Fib и pivot
+        </label>
+      </div>
+    }
+    @if (store.layers().levels || store.layers().patterns) {
+      <div class="row">
+        <label class="field">
+          Свечей для расчёта (0 — все)
+          <input
+            type="number"
+            min="0"
+            step="100"
+            [ngModel]="store.lastBars()"
+            (change)="setLastBars($event)"
+          />
+        </label>
+      </div>
+    }
+
     @if (store.layers().levels && store.levels().length) {
       <div class="levels" role="list" aria-label="Уровни">
         @for (level of shownLevels(); track level.id) {
@@ -330,6 +392,15 @@ export class StructurePanel {
   protected readonly layers = LAYERS;
   protected readonly titles = LAYER_TITLES;
   protected readonly trendTitles = TREND_TITLES;
+  protected readonly distances = [5, 10, 20, 40, null];
+  protected readonly sides = [2, 3, 4, 6, 10];
+
+  protected setLastBars(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    if (Number.isFinite(value)) {
+      void this.store.setLastBars(value);
+    }
+  }
 
   /** Старшие TF, уровни которых можно добавить в зоны (chart TF используется всегда). */
   protected readonly sources = computed(() =>

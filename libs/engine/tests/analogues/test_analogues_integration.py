@@ -189,7 +189,7 @@ def test_regression_top_matches_on_fixed_series() -> None:
 
 
 REGRESSION_HEAD: list[tuple[str, float]] = [
-    ("levels:86:160", 0.603653187),
-    ("levels:52:106", 0.816854929),
-    ("levels:123:233", 0.887448126),
+    ("levels:84:158", 0.603653187),
+    ("levels:62:105", 0.816854929),
+    ("levels:121:231", 0.887448126),
 ]

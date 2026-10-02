@@ -20,6 +20,8 @@ SWING_ONLY: dict[str, Any] = {
     "atr_period": 2,
     "pivot": False,
     "fibonacci": False,
+    "cluster_k": 0,  # без слияния и простоя: проверяем «чистый» жизненный цикл
+    "max_idle": 0,
 }
 CLOSES = (
     [100.0, 110, 120, 105]
@@ -204,3 +206,42 @@ class TestContract:
                 assert by_seq[event.revises].payload["id"] == event.payload["id"]
             else:
                 assert event.status == "detected"
+
+
+class TestNoiseReduction:
+    """ADR-0029: слияние близких swing-уровней и простой."""
+
+    def test_a_swing_near_an_active_level_confirms_it_instead_of_adding_a_line(
+        self,
+    ) -> None:
+        plain = run_engine(create("levels", SWING_ONLY), wick_bars(CLOSES))
+        merged = run_engine(
+            create("levels", SWING_ONLY | {"cluster_k": 0.5}), wick_bars(CLOSES)
+        )
+
+        def detected(events: list[Event]) -> int:
+            return sum(1 for e in events if e.status == "detected")
+
+        assert detected(merged) < detected(plain)
+        confirmations = [e for e in merged if e.payload.get("change") == "merged"]
+        assert confirmations
+        assert all(
+            e.status == "revised" and e.payload["state"] == "active"
+            for e in confirmations
+        )
+
+    def test_a_swing_level_without_retouch_expires_by_idle(self) -> None:
+        events = run_engine(
+            create("levels", SWING_ONLY | {"max_idle": 5}), wick_bars(CLOSES)
+        )
+
+        idle = [e for e in events if e.payload.get("reason") == "idle"]
+        assert idle
+        assert all(
+            e.status == "invalidated" and e.payload["state"] == "expired" for e in idle
+        )
+
+    def test_idle_is_off_by_zero_and_does_not_touch_other_families(self) -> None:
+        events = run_engine(create("levels", SWING_ONLY), wick_bars(CLOSES))
+
+        assert not [e for e in events if e.payload.get("reason") == "idle"]

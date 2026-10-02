@@ -18,6 +18,7 @@ import { ProfilesStore } from '../chart/profiles.store';
 import { IndicatorsStore } from '../chart/indicators.store';
 import { PriceChart } from '../chart/price-chart';
 import { StructurePanel } from '../chart/structure-panel';
+import { levelReference } from '../chart/structure';
 import { StructureStore } from '../chart/structure.store';
 import {
   REPLAY_TIMEFRAMES,
@@ -303,6 +304,7 @@ export class Replay implements OnInit, OnDestroy {
         return;
       }
       untracked(() => {
+        this.structure.setReference(levelReference(this.store.visible()));
         if (this.refreshTimer !== null) {
           clearTimeout(this.refreshTimer);
         }

@@ -13,6 +13,9 @@ import {
   type LayerKey,
   type LayerState,
   chartLevels,
+  DEFAULT_LEVEL_FILTER,
+  type LevelFilter,
+  type LevelReference,
   levelInfos,
   levelSegments,
   manualFibSegments,
@@ -57,6 +60,8 @@ import {
 /** Что рисовать: серия, chart TF и (для replay) момент знания. */
 /** Горизонт проверки калибровки, баров. */
 const CALIBRATION_HORIZON = 10;
+/** Свечей по умолчанию для паттернов и уровней (как в worker). */
+export const DEFAULT_LAST_BARS = 1000;
 
 export interface StructureContext {
   instrument_id: number;
@@ -110,9 +115,18 @@ export class StructureStore {
   private sequence = 0;
   private statsSequence = 0;
 
-  /** Сильнейшие активные уровни — они же на графике и в списке. */
+  /** Сколько последних свечей использовать движкам (0 — вся история); в replay — вся. */
+  readonly lastBars = signal(DEFAULT_LAST_BARS);
+  /** Цена и ATR графика — опора фильтра уровней. */
+  readonly reference = signal<LevelReference | null>(null);
+  readonly levelFilter = signal<LevelFilter>(DEFAULT_LEVEL_FILTER);
+
+  /** Уровни после фильтра — они же на графике и в списке. */
   readonly levels = computed(() =>
-    chartLevels(levelInfos(this.events()['levels'] ?? [])),
+    chartLevels(levelInfos(this.events()['levels'] ?? []), {
+      ...this.levelFilter(),
+      reference: this.reference(),
+    }),
   );
   readonly trend = computed(() =>
     currentTrend(this.events()['market_structure'] ?? []),
@@ -199,6 +213,21 @@ export class StructureStore {
   setZoneSources(timeframes: string[]): Promise<void> {
     this.zoneSources.set(timeframes);
     return this.refresh();
+  }
+
+  setLevelFilter(change: Partial<LevelFilter>): void {
+    this.levelFilter.update((filter) => ({ ...filter, ...change }));
+  }
+
+  /** Окно свечей движков: прогоны сбрасываются и считаются заново. */
+  setLastBars(count: number): Promise<void> {
+    this.lastBars.set(Math.max(0, Math.floor(count)));
+    this.runs.clear();
+    return this.refresh();
+  }
+
+  setReference(reference: LevelReference | null): void {
+    this.reference.set(reference);
   }
 
   selectPattern(key: string | null): void {
@@ -387,7 +416,13 @@ export class StructureStore {
       this.api.client.POST('/jobs', {
         body: {
           type: 'engine.run',
-          params: { engine, timeframe, ...this.seriesQuery() },
+          params: {
+            engine,
+            timeframe,
+            // в replay нужна вся история: окно «последних» свечей скрыло бы прошлое
+            last_bars: this.context?.asOf ? 0 : this.lastBars(),
+            ...this.seriesQuery(),
+          },
         },
       }),
     );

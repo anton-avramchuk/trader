@@ -242,15 +242,111 @@ export function levelInfos(events: EngineEvent[]): LevelInfo[] {
     .sort((a, b) => b.score - a.score);
 }
 
-/** Сколько сильнейших активных уровней рисовать: остальные тонут в шуме. */
-export const LEVELS_ON_CHART = 12;
+/** Опорная цена и ATR графика: от них считаются расстояние и слияние уровней. */
+export interface LevelReference {
+  price: number;
+  atr: number;
+}
 
-/** Активные уровни (пробитые не рисуются), сильнейшие первыми, не более `limit`. */
+/** Что показывать из уровней: остальное тонет в шуме (ADR-0029). */
+export interface LevelFilter {
+  reference: LevelReference | null;
+  /** Не дальше N·ATR от цены; `null` — без ограничения. */
+  maxDistanceAtr: number | null;
+  minScore: number;
+  /** Для swing-уровней: не меньше стольких касаний. */
+  minTouches: number;
+  /** Сколько уровней выше и ниже цены. */
+  perSide: number;
+  /** Показывать ли fib- и pivot-уровни (у них есть свои слои). */
+  derived: boolean;
+}
+
+/** Уровни ближе этого расстояния (в ATR) считаются дублем: остаётся сильнейший. */
+export const LEVEL_MERGE_ATR = 0.5;
+const DERIVED_FAMILIES = ['fib', 'pivot'];
+
+export const DEFAULT_LEVEL_FILTER: LevelFilter = {
+  reference: null,
+  maxDistanceAtr: 20,
+  minScore: 0,
+  minTouches: 0,
+  perSide: 4,
+  derived: false,
+};
+
+/** ATR(`period`) по последним свечам (простое среднее TR) и последняя цена. */
+export function levelReference(
+  candles: {
+    high: number | string;
+    low: number | string;
+    close: number | string;
+  }[],
+  period = 14,
+): LevelReference | null {
+  const last = candles.at(-1);
+  if (candles.length < 2 || !last) {
+    return null;
+  }
+  const tail = candles.slice(-(period + 1));
+  let sum = 0;
+  for (let i = 1; i < tail.length; i++) {
+    const c = tail[i]!;
+    const previous = Number(tail[i - 1]!.close);
+    sum += Math.max(
+      Number(c.high) - Number(c.low),
+      Math.abs(Number(c.high) - previous),
+      Math.abs(Number(c.low) - previous),
+    );
+  }
+  const atr = sum / (tail.length - 1);
+  return atr > 0 ? { price: Number(last.close), atr } : null;
+}
+
+/**
+ * Уровни для графика и списка: активные, не дальше `maxDistanceAtr`, без близких
+ * дублей, сильнейшие `perSide` выше и ниже цены; порядок — по силе.
+ * Без опорной цены расстояние и слияние не применяются, сторона — по роли.
+ */
 export function chartLevels(
   levels: LevelInfo[],
-  limit = LEVELS_ON_CHART,
+  filter: LevelFilter = DEFAULT_LEVEL_FILTER,
 ): LevelInfo[] {
-  return levels.filter((l) => l.state === 'active').slice(0, limit);
+  const { reference } = filter;
+  const candidates = levels.filter(
+    (l) =>
+      l.state === 'active' &&
+      (filter.derived || !DERIVED_FAMILIES.includes(l.family)) &&
+      l.score >= filter.minScore &&
+      (l.family !== 'swing' || l.touches >= filter.minTouches) &&
+      (!reference ||
+        filter.maxDistanceAtr === null ||
+        Math.abs(l.price - reference.price) <=
+          filter.maxDistanceAtr * reference.atr),
+  );
+  const chosen: LevelInfo[] = [];
+  const count = { above: 0, below: 0 };
+  for (const level of candidates) {
+    const above = reference
+      ? level.price > reference.price
+      : level.role === 'resistance';
+    const side = above ? 'above' : 'below';
+    if (count[side] >= filter.perSide) {
+      continue;
+    }
+    if (
+      reference &&
+      chosen.some(
+        (c) =>
+          Math.abs(c.price - level.price) <= LEVEL_MERGE_ATR * reference.atr,
+      )
+    ) {
+      continue;
+    }
+    chosen.push(level);
+    count[side]++;
+  }
+  return chosen;
 }
 
 /** Линии уровней: сила задаёт толщину, пробитые — бледным пунктиром. */

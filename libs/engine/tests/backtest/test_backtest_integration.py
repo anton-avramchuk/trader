@@ -61,7 +61,7 @@ def summary(ev: Evaluation) -> list[tuple[int, str, float]]:
 
 
 @pytest.mark.parametrize("spec", [TOUCH, BREAK])
-@pytest.mark.parametrize("cut", [80, 130, 190])
+@pytest.mark.parametrize("cut", [130, 150, 190])
 def test_trades_closed_before_the_cut_do_not_depend_on_the_future(
     spec: StrategySpec, cut: int
 ) -> None:
@@ -137,7 +137,7 @@ def test_accounting_identities() -> None:
 def test_regression_on_the_fixed_series() -> None:
     touch, brk = run(DATA, TOUCH), run(DATA, BREAK)
 
-    assert len(touch.priced) == len(summary(touch)) == 9
+    assert len(touch.priced) == len(summary(touch)) == 6
     assert summary(touch)[:3] == REGRESSION_TOUCH
     assert len(brk.priced) == 30
     assert summary(brk)[:3] == REGRESSION_BREAK
@@ -148,9 +148,9 @@ def test_regression_on_the_fixed_series() -> None:
 
 
 REGRESSION_TOUCH: list[tuple[int, str, float]] = [
-    (54, "stop", -348.623606),
     (120, "target", 692.545234),
-    (148, "stop", -377.74781),
+    (186, "stop", -312.598387),
+    (192, "target", 581.643422),
 ]
 REGRESSION_BREAK: list[tuple[int, str, float]] = [
     (41, "time", 9.0),

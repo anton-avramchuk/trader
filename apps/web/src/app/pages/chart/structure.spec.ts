@@ -1,6 +1,8 @@
 import type { EngineEvent, FibGrid, LevelZone } from '@trader/api-client';
 import {
   chartLevels,
+  DEFAULT_LEVEL_FILTER,
+  levelReference,
   currentTrend,
   fibonacciSegments,
   levelInfos,
@@ -152,18 +154,95 @@ describe('уровни', () => {
     expect(infos[0]?.components).toEqual({ touches: 2, age: 5 });
   });
 
-  it('на график идут только сильнейшие активные уровни', () => {
-    const many = Array.from({ length: 15 }, (_, i) =>
-      level(i + 1, i + 1, 'active', 'support'),
-    );
-    const infos = levelInfos([...many, level(99, 99, 'broken', 'resistance')]);
+  describe('фильтр на график', () => {
+    const at = (
+      id: number,
+      price: number,
+      score: number,
+      family = 'swing',
+    ) => ({
+      ...levelInfos([level(id, score, 'active', 'support')])[0]!,
+      id,
+      price,
+      family,
+      touches: 2,
+    });
+    const reference = { price: 100, atr: 1 };
+    const filter = { ...DEFAULT_LEVEL_FILTER, reference };
 
-    const shown = chartLevels(infos);
+    it('только активные, сильнейшие первыми, не больше perSide с каждой стороны', () => {
+      const many = Array.from({ length: 10 }, (_, i) =>
+        at(i + 1, 90 + i * 2, i + 1),
+      );
+      const infos = levelInfos([level(99, 99, 'broken', 'resistance')]);
 
-    expect(shown).toHaveLength(12);
-    expect(shown.some((l) => l.state === 'broken')).toBe(false);
-    expect(shown[0]?.score).toBe(15);
-    expect(chartLevels(infos, 3)).toHaveLength(3);
+      const shown = chartLevels(
+        [...many, ...infos].sort((a, b) => b.score - a.score),
+        {
+          ...filter,
+          maxDistanceAtr: null,
+          perSide: 2,
+        },
+      );
+
+      expect(shown.some((l) => l.state === 'broken')).toBe(false);
+      expect(shown.filter((l) => l.price <= 100)).toHaveLength(2);
+      expect(shown.filter((l) => l.price > 100)).toHaveLength(2);
+      expect(shown[0]?.score).toBeGreaterThan(shown[3]?.score ?? 0);
+    });
+
+    it('далёкие от цены уровни не занимают места', () => {
+      const shown = chartLevels(
+        [at(1, 60, 90), at(2, 99, 10), at(3, 105, 20)],
+        { ...filter, maxDistanceAtr: 10 },
+      );
+
+      expect(shown.map((l) => l.id)).toEqual([2, 3]);
+    });
+
+    it('близкие дубли сливаются: остаётся сильнейший', () => {
+      const shown = chartLevels(
+        [at(2, 99.3, 70, 'prev'), at(1, 99, 50), at(3, 96, 30)],
+        filter,
+      );
+
+      expect(shown.map((l) => l.id)).toEqual([2, 3]);
+    });
+
+    it('fib и pivot скрыты по умолчанию; swing с малым числом касаний — по порогу', () => {
+      const infos = [
+        at(1, 98, 50, 'fib'),
+        at(2, 97, 50, 'pivot'),
+        at(3, 96, 50),
+      ];
+
+      expect(chartLevels(infos, filter).map((l) => l.id)).toEqual([3]);
+      expect(
+        chartLevels(infos, { ...filter, derived: true }).map((l) => l.id),
+      ).toEqual([1, 2, 3]);
+      expect(chartLevels(infos, { ...filter, minTouches: 3 })).toEqual([]);
+      expect(chartLevels(infos, { ...filter, minScore: 60 })).toEqual([]);
+    });
+
+    it('без опорной цены сторона берётся по роли, расстояние не применяется', () => {
+      const shown = chartLevels([at(1, 500, 40)], DEFAULT_LEVEL_FILTER);
+
+      expect(shown).toHaveLength(1);
+    });
+  });
+
+  it('опорная цена и ATR считаются по последним свечам', () => {
+    const bars = Array.from({ length: 20 }, (_, i) => ({
+      high: 101 + i,
+      low: 99 + i,
+      close: 100 + i,
+    }));
+
+    const ref = levelReference(bars);
+
+    expect(ref?.price).toBe(119);
+    expect(ref?.atr).toBe(2); // TR = max(high−low, |high−prevClose|, |low−prevClose|) = 2
+    expect(levelReference([])).toBeNull();
   });
 });
 

@@ -11,6 +11,11 @@ High/Low/Close; ``fib`` — уровни сетки завершённой но�
 ±``touch_k``·ATR и отбой на ``touch_m``·ATR от крайней точки без закрытия за зоной;
 пробой — закрытие за зоной. Сила — вектор компонентов и агрегат v1
 (``docs/levels-strength-v1.md``). Пока ATR не прогрет, состояния уровней не меняются.
+
+Против шума (ADR-0029): swing в пределах ``cluster_k``·ATR от активного swing-уровня
+не создаёт новый уровень, а подтверждает старый (``revised``, ``change=merged``);
+swing-уровень, к которому цена не возвращалась ``max_idle`` баров, истекает
+(``invalidated``, ``idle``).
 """
 
 from typing import Any
@@ -55,6 +60,14 @@ PREVIOUS = ("high", "low", "close")
 
 
 class LevelsParams(ZigZagParams):
+    # уровням нужны более значимые swing, чем разметке структуры (ADR-0029)
+    atr_mult: float = Field(default=2.0, gt=0, le=50, description="Множитель ATR")
+    cluster_k: float = Field(
+        default=0.5, ge=0, le=5, description="Слияние swing ближе k·ATR; 0 — выкл."
+    )
+    max_idle: int = Field(
+        default=300, ge=0, description="Баров без касания до истечения; 0 — выкл."
+    )
     touch_k: float = Field(default=0.25, gt=0, le=5, description="Зона ± k·ATR")
     touch_m: float = Field(default=0.5, gt=0, le=10, description="Отбой ≥ m·ATR")
     max_age: int = Field(default=1000, ge=1, description="Возраст жизни, баров")
@@ -89,6 +102,7 @@ def strength(level: dict[str, Any], others: int) -> dict[str, Any]:
 @register
 class Levels(EventEngine):
     name = "levels"
+    version = 2
     title = "Levels: уровни S/R, касания, пробои, сила"
     Params = LevelsParams
 
@@ -120,6 +134,7 @@ class Levels(EventEngine):
         price, role = level["price"], level["role"]
         zone = p.touch_k * atr
         level["age"] += 1
+        level["idle"] = level.get("idle", 0) + 1
         beyond = (
             bar.close > price + zone if role == RESISTANCE else bar.close < price - zone
         )
@@ -142,6 +157,10 @@ class Levels(EventEngine):
             )
             self._levels.remove(level)
             return
+        if p.max_idle and level["family"] == "swing" and level["idle"] > p.max_idle:
+            self._emit(level, "invalidated", bar, atr, state="expired", reason="idle")
+            self._levels.remove(level)
+            return
         overlaps = bar.high >= price - zone and bar.low <= price + zone
         if not overlaps:
             level["armed"] = True
@@ -162,6 +181,7 @@ class Levels(EventEngine):
         if rebound >= p.touch_m * atr:
             level["touches"] += 1
             level["rebound_sum"] += rebound / atr
+            level["idle"] = 0
             level["in_touch"], level["armed"] = False, False
             self._emit(level, "revised", bar, atr, state="active", change="touch")
 
@@ -172,7 +192,7 @@ class Levels(EventEngine):
     ) -> None:
         p = self.typed_params(LevelsParams)
         price = swing["price"]
-        if p.swing:
+        if p.swing and not self._merge_swing(price, bar, atr):
             self._add(f"swing_{swing['type']}", "swing", "swing", price, bar, atr)
         self._swings = [*self._swings[-1:], price]
         if p.fibonacci and len(self._swings) == 2:
@@ -182,6 +202,23 @@ class Levels(EventEngine):
             for key, value in grid["extension"].items():
                 if key != "100":
                     self._add(f"fib_ext_{key}", "fib", "fib", value, bar, atr)
+
+    def _merge_swing(self, price: float, bar: BarInput, atr: float | None) -> bool:
+        """Swing рядом с активным swing-уровнем подтверждает его, а не множит линии."""
+        k = self.typed_params(LevelsParams).cluster_k
+        if atr is None or not k:
+            return False
+        near = [
+            x
+            for x in self._levels
+            if x["family"] == "swing" and abs(x["price"] - price) <= k * atr
+        ]
+        if not near:
+            return False
+        target = min(near, key=lambda x: abs(x["price"] - price))
+        target["idle"] = 0
+        self._emit(target, "revised", bar, atr, state="active", change="merged")
+        return True
 
     def _on_pivot(
         self, payload: dict[str, Any], bar: BarInput, atr: float | None
@@ -240,6 +277,7 @@ class Levels(EventEngine):
             "in_touch": False,
             "extreme": None,
             "armed": False,
+            "idle": 0,
             "chain": None,
         }
         self._next_id += 1

@@ -387,16 +387,16 @@
   {
    "horizons": [
     {
-     "baseline_n": 34,
+     "baseline_n": 36,
      "baseline_ret": {
       "mean": 0.0,
       "median": 0.0
      },
      "censored": 0,
-     "edge": 1.1417,
+     "edge": 1.14365,
      "edge_ci": {
-      "high": 1.53123,
-      "low": 0.71376
+      "high": 1.52709,
+      "low": 0.75295
      },
      "flags": {
       "ambiguous_bar": 0,
@@ -406,23 +406,23 @@
      "horizon": 3,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 0.48214,
+      "mean": 0.48321,
       "median": 0.27045
      },
      "mfe": {
-      "mean": 1.63135,
+      "mean": 1.63039,
       "median": 1.55199
      },
      "missing_atr": 0,
      "n_effective": 37,
-     "n_raw": 67,
+     "n_raw": 66,
      "ret": {
-      "mean": 1.1417,
+      "mean": 1.14365,
       "median": 1.26396
      },
      "ret_ci": {
-      "high": 1.4945,
-      "low": 0.77965
+      "high": 1.49701,
+      "low": 0.78302
      },
      "target_rate": 0.0,
      "unit": "atr",
@@ -443,23 +443,23 @@
      "horizon": 8,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 0.69405,
-      "median": 0.27882
+      "mean": 0.61044,
+      "median": 0.24832
      },
      "mfe": {
-      "mean": 3.15201,
-      "median": 3.36449
+      "mean": 3.31381,
+      "median": 3.47759
      },
      "missing_atr": 0,
-     "n_effective": 20,
-     "n_raw": 67,
+     "n_effective": 19,
+     "n_raw": 66,
      "ret": {
-      "mean": 2.07555,
-      "median": 2.93687
+      "mean": 2.19627,
+      "median": 2.94474
      },
      "ret_ci": {
-      "high": 3.03674,
-      "low": 1.16191
+      "high": 2.98581,
+      "low": 1.3422
      },
      "target_rate": 0.0,
      "unit": "atr",
@@ -467,7 +467,7 @@
       "small_sample",
       "no_baseline"
      ],
-     "win_rate": 0.85
+     "win_rate": 0.89474
     },
     {
      "baseline_n": 0,
@@ -483,23 +483,23 @@
      "horizon": 20,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 1.49113,
-      "median": 0.34652
+      "mean": 1.48115,
+      "median": 0.31458
      },
      "mfe": {
-      "mean": 6.83739,
+      "mean": 6.58797,
       "median": 7.49703
      },
      "missing_atr": 0,
      "n_effective": 10,
-     "n_raw": 64,
+     "n_raw": 63,
      "ret": {
-      "mean": 3.87443,
+      "mean": 3.55192,
       "median": 5.58592
      },
      "ret_ci": {
-      "high": 6.41473,
-      "low": 0.87664
+      "high": 5.88586,
+      "low": 0.70114
      },
      "target_rate": 0.0,
      "unit": "atr",
@@ -511,21 +511,21 @@
     }
    ],
    "key": "level_break",
-   "n_occurrences": 67
+   "n_occurrences": 66
   },
   {
    "horizons": [
     {
-     "baseline_n": 67,
+     "baseline_n": 56,
      "baseline_ret": {
-      "mean": 0.03728,
-      "median": -0.28442
+      "mean": -0.11932,
+      "median": -0.67415
      },
      "censored": 0,
-     "edge": -0.40263,
+     "edge": -0.10032,
      "edge_ci": {
-      "high": 0.25996,
-      "low": -1.01752
+      "high": 0.70863,
+      "low": -0.88165
      },
      "flags": {
       "ambiguous_bar": 0,
@@ -535,42 +535,42 @@
      "horizon": 3,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 1.09082,
-      "median": 0.90243
+      "mean": 1.05718,
+      "median": 0.74988
      },
      "mfe": {
-      "mean": 0.75352,
-      "median": 0.43404
+      "mean": 0.81986,
+      "median": 0.45407
      },
      "missing_atr": 0,
-     "n_effective": 10,
-     "n_raw": 15,
+     "n_effective": 7,
+     "n_raw": 12,
      "ret": {
-      "mean": -0.36535,
-      "median": -0.28295
+      "mean": -0.21964,
+      "median": -0.0
      },
      "ret_ci": {
-      "high": 0.14541,
-      "low": -0.7895
+      "high": 0.52643,
+      "low": -0.92985
      },
      "target_rate": 0.0,
      "unit": "atr",
      "warnings": [
       "small_sample"
      ],
-     "win_rate": 0.4
+     "win_rate": 0.42857
     },
     {
-     "baseline_n": 49,
+     "baseline_n": 39,
      "baseline_ret": {
-      "mean": 0.11779,
-      "median": 2.79239
+      "mean": -0.18805,
+      "median": -2.53491
      },
      "censored": 1,
-     "edge": -2.10983,
+     "edge": -0.70143,
      "edge_ci": {
-      "high": -0.2232,
-      "low": -3.82306
+      "high": 2.54301,
+      "low": -3.72835
      },
      "flags": {
       "ambiguous_bar": 0,
@@ -580,74 +580,79 @@
      "horizon": 8,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 3.54165,
-      "median": 4.22866
+      "mean": 3.07598,
+      "median": 3.0786
      },
      "mfe": {
-      "mean": 0.95421,
-      "median": 0.37588
+      "mean": 1.31228,
+      "median": 0.49503
      },
      "missing_atr": 0,
-     "n_effective": 6,
-     "n_raw": 14,
+     "n_effective": 4,
+     "n_raw": 11,
      "ret": {
-      "mean": -1.99204,
-      "median": -3.29049
+      "mean": -0.88949,
+      "median": -1.257
      },
      "ret_ci": {
-      "high": -0.27328,
-      "low": -3.76969
+      "high": 2.07968,
+      "low": -3.85865
      },
      "target_rate": 0.0,
      "unit": "atr",
      "warnings": [
       "small_sample"
      ],
-     "win_rate": 0.33333
+     "win_rate": 0.5
     },
     {
-     "baseline_n": 0,
-     "baseline_ret": null,
-     "censored": 2,
-     "edge": null,
-     "edge_ci": null,
+     "baseline_n": 5,
+     "baseline_ret": {
+      "mean": -7.93073,
+      "median": -7.78106
+     },
+     "censored": 1,
+     "edge": 12.63753,
+     "edge_ci": {
+      "high": 16.71468,
+      "low": 8.808
+     },
      "flags": {
       "ambiguous_bar": 0,
-      "crosses_session_gap": 5,
-      "crosses_weekend": 2
+      "crosses_session_gap": 3,
+      "crosses_weekend": 1
      },
      "horizon": 20,
      "invalidated_rate": 0.0,
      "mae": {
-      "mean": 4.98938,
-      "median": 5.2302
+      "mean": 3.10272,
+      "median": 3.0786
      },
      "mfe": {
-      "mean": 3.52011,
-      "median": 1.69554
+      "mean": 5.16112,
+      "median": 4.4798
      },
      "missing_atr": 0,
-     "n_effective": 6,
-     "n_raw": 13,
+     "n_effective": 4,
+     "n_raw": 11,
      "ret": {
-      "mean": 0.63992,
-      "median": 1.00394
+      "mean": 4.7068,
+      "median": 4.15844
      },
      "ret_ci": {
-      "high": 3.3757,
-      "low": -2.36463
+      "high": 8.40967,
+      "low": 1.00394
      },
      "target_rate": 0.0,
      "unit": "atr",
      "warnings": [
-      "small_sample",
-      "no_baseline"
+      "small_sample"
      ],
-     "win_rate": 0.5
+     "win_rate": 0.75
     }
    ],
    "key": "level_touch",
-   "n_occurrences": 15
+   "n_occurrences": 12
   },
   {
    "horizons": [
@@ -1178,7 +1183,7 @@
    "n_occurrences": 1
   }
  ],
- "matched": 93,
+ "matched": 89,
  "unit": "atr",
  "warnings": []
 }
