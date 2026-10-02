@@ -53,7 +53,7 @@ def grid_payload(
 class FibonacciParams(ZigZagParams):
     atr_mult: float = Field(default=2.0, gt=0, le=50, description="Множитель ATR")
     window: int = Field(
-        default=20, ge=2, le=200, description="Сколько последних swing учитывать"
+        default=100, ge=2, le=500, description="Сколько последних swing учитывать"
     )
     min_leg_mult: float = Field(
         default=2.0, gt=0, le=50, description="Минимум ноги в порогах ZigZag"
@@ -68,7 +68,7 @@ def point(payload: dict[str, Any]) -> dict[str, Any]:
 class Fibonacci(EventEngine):
     name = "fibonacci"
     title = "Fibonacci: автоматическая сетка"
-    version = 3
+    version = 4
     Params = FibonacciParams
 
     def __init__(self, params: BaseModel | None = None) -> None:
