@@ -273,4 +273,18 @@ describe('Chart', () => {
     ).filter(([path, o]) => path === '/candles' && o?.params.query.end);
     expect(withEnd).toHaveLength(1);
   });
+
+  it('«Догрузить» без загруженных свечей подсказывает, что делать', async () => {
+    const { fixture } = setup();
+    fixture.detectChanges();
+    await settle(fixture);
+    const button = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ).find((b) => b.textContent?.trim() === 'Догрузить');
+
+    button?.click();
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('загрузите период на странице Instruments');
+  });
 });

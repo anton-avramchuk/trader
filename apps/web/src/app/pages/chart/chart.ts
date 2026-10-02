@@ -30,6 +30,7 @@ import { ProfilesStore } from './profiles.store';
 import { IndicatorsStore } from './indicators.store';
 import { PriceChart } from './price-chart';
 import { StructurePanel } from './structure-panel';
+import { describeTrend, TREND_ARROWS } from './trend';
 import { levelReference, type Overlay } from './structure';
 import { StructureStore } from './structure.store';
 import { loadView, persistedFilter, saveView } from './view-state';
@@ -93,6 +94,15 @@ const DRAWING_HINTS: Record<DrawingTool, string> = {
           </button>
         }
       </tui-segmented>
+      @if (trendBadge(); as badge) {
+        <span
+          class="trend-badge"
+          [class]="badge.info.state"
+          title="Тренд на текущем таймфрейме"
+        >
+          {{ badge.arrow }} {{ badge.text }}
+        </span>
+      }
       @if (store.loading()) {
         <span class="muted">Загрузка…</span>
       }
@@ -162,6 +172,21 @@ const DRAWING_HINTS: Record<DrawingTool, string> = {
           >
             Тренд
           </button>
+          <span class="divider"></span>
+          <button
+            tuiButton
+            type="button"
+            size="s"
+            appearance="secondary"
+            title="Загрузить свечи от последней загруженной даты до сегодняшнего дня"
+            [disabled]="store.catchingUp()"
+            (click)="catchUp()"
+          >
+            Догрузить
+          </button>
+          @if (store.catchUpMessage(); as message) {
+            <span class="muted" role="status">{{ message }}</span>
+          }
           <span class="divider"></span>
           <app-date
             label="Перейти к дате"
@@ -284,6 +309,19 @@ const DRAWING_HINTS: Record<DrawingTool, string> = {
       height: 1.5rem;
       background: var(--tui-border-normal);
     }
+    .trend-badge {
+      padding: 0.2rem 0.7rem;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .trend-badge.uptrend {
+      color: #26a69a;
+    }
+    .trend-badge.downtrend {
+      color: #ef5350;
+    }
     .profiles {
       margin-inline-start: auto;
     }
@@ -372,6 +410,17 @@ export class Chart implements OnInit {
     };
   });
 
+  protected readonly trendBadge = computed(() => {
+    const info = this.structure.trends()[0]?.info;
+    return info
+      ? {
+          info,
+          arrow: TREND_ARROWS[info.state],
+          text: describeTrend(info),
+        }
+      : null;
+  });
+
   protected readonly replayLink = computed(() => {
     const time = this.pickedTime();
     const instrument = this.store.instrumentId();
@@ -425,6 +474,7 @@ export class Chart implements OnInit {
           start: first.timestamp,
         });
         void this.structure.refresh({ ...series, chartTimeframe: timeframe });
+        void this.structure.refreshTrend();
       });
     });
 
@@ -460,6 +510,13 @@ export class Chart implements OnInit {
   protected onProfileTimeframe(timeframe: string): void {
     if ((TIMEFRAMES as readonly string[]).includes(timeframe)) {
       void this.store.selectTimeframe(timeframe as ChartTimeframe);
+    }
+  }
+
+  /** Догрузка новых свечей; движки и индикаторы пересчитываются на новых барах. */
+  protected async catchUp(): Promise<void> {
+    if (await this.store.catchUp()) {
+      void this.structure.recompute().then(() => this.structure.refreshTrend());
     }
   }
 

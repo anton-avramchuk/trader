@@ -1,7 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TuiButton } from '@taiga-ui/core';
+import { TuiButton, TuiHint } from '@taiga-ui/core';
 import { UiNumber, type UiOption, UiSelect } from '../../core/ui';
 import { MskPipe } from '../../core/time/msk';
 import { higherTimeframes } from './chart-data';
@@ -11,14 +11,10 @@ import { PatternGallery } from './pattern-gallery';
 import { AnaloguesBlock } from './analogues-block';
 import { ForecastBlock } from './forecast-block';
 import { StatsBlock } from './stats-block';
-import { LAYER_TITLES, LAYERS } from './structure';
+import { LAYER_HINTS, LAYER_TITLES, LAYERS } from './structure';
+import { TrendBlock } from './trend-block';
 import { StructureStore } from './structure.store';
 
-const TREND_TITLES: Record<string, string> = {
-  uptrend: 'восходящий',
-  downtrend: 'нисходящий',
-  range: 'боковик',
-};
 const COMPONENT_TITLES: Record<string, string> = {
   touches: 'касания',
   source: 'важность источника',
@@ -48,15 +44,23 @@ const REASONS: Record<string, string> = {
     AnaloguesBlock,
     ForecastBlock,
     StatsBlock,
+    TrendBlock,
     TuiButton,
+    TuiHint,
     UiNumber,
     UiSelect,
   ],
   template: `
+    <app-trend-block />
+
     <h2 class="section-title">Слои</h2>
     <div class="layers" role="group" aria-label="Слои структуры">
       @for (layer of layers; track layer) {
-        <label class="toggle-chip">
+        <label
+          class="toggle-chip"
+          [tuiHint]="hints[layer]"
+          tuiHintDirection="bottom"
+        >
           <input
             type="checkbox"
             [ngModel]="store.layers()[layer]"
@@ -101,10 +105,6 @@ const REASONS: Record<string, string> = {
 
     @if (store.error(); as error) {
       <p class="error" role="alert">{{ error }}</p>
-    }
-
-    @if (store.layers().structure && store.trend(); as trend) {
-      <p class="muted">Состояние тренда: {{ trendTitles[trend] }}</p>
     }
 
     @if (store.layers().levels || store.layers().patterns) {
@@ -409,7 +409,7 @@ export class StructurePanel {
   readonly chartTimeframe = input('1d');
   protected readonly layers = LAYERS;
   protected readonly titles = LAYER_TITLES;
-  protected readonly trendTitles = TREND_TITLES;
+  protected readonly hints = LAYER_HINTS;
   protected readonly distances: UiOption<number | null>[] = [
     ...[5, 10, 20, 40].map((n) => ({
       value: n as number | null,

@@ -41,6 +41,8 @@ CONFIGS: list[tuple[str, dict[str, Any]]] = [
     ),
     ("trendlines", FAST_ATR | {"tol_atr": 3.0, "min_height_atr": 0.5}),
     ("range_breakout", FAST_ATR | {"tol_atr": 3.0, "min_height_atr": 0.5}),
+    ("trend", FAST_ATR | {"ema_period": 5, "er_period": 5}),
+    ("trend", PERCENT | {"atr_period": 5, "ema_period": 5, "er_period": 5}),
 ]
 IDS = [f"{name}-{i}" for i, (name, _) in enumerate(CONFIGS)]
 ENGINES = pytest.mark.parametrize(("name", "params"), CONFIGS, ids=IDS)

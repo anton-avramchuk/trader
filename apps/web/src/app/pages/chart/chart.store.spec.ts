@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import type { Candle } from '@trader/api-client';
+import { of } from 'rxjs';
 import { API_CLIENT } from '../../core/api/api';
+import { JobsService } from '../../core/jobs/jobs';
 import { ChartStore } from './chart.store';
 
 const ok = <T>(data: T) => Promise.resolve({ data, response: { status: 200 } });
@@ -22,6 +24,7 @@ interface Query {
   instrument_id?: number;
   timeframe: string;
   end?: string;
+  start?: string;
   tail?: boolean;
   limit?: number;
 }
@@ -186,5 +189,107 @@ describe('ChartStore', () => {
       '2026-09-30T04:00:00Z',
     ]);
     expect(store.loading()).toBe(false);
+  });
+});
+
+describe('ChartStore: догрузка', () => {
+  const coverage = [
+    {
+      timeframe: '1d',
+      count: 1,
+      first: '2026-09-01T00:00:00Z',
+      last: '2026-09-30T16:00:00Z',
+    },
+  ];
+
+  function setupCatchUp(jobStatus = 'succeeded') {
+    const posted: { body: Record<string, unknown> }[] = [];
+    const client = {
+      GET: vi.fn((path: string, options?: { params?: { query?: Query } }) => {
+        if (path === '/instruments') {
+          return ok([{ id: 1, ticker: 'SBER', coverage }]);
+        }
+        if (options?.params?.query?.start) {
+          return ok({
+            candles: [
+              candle('2026-09-30T04:00:00Z'),
+              candle('2026-10-01T04:00:00Z'),
+            ],
+            truncated: false,
+            next_start: null,
+          });
+        }
+        return ok({
+          candles: [candle('2026-09-30T04:00:00Z')],
+          truncated: false,
+        });
+      }),
+      POST: vi.fn(
+        (_path: string, options: { body: Record<string, unknown> }) => {
+          posted.push(options);
+          return ok({ id: 7, status: 'queued' });
+        },
+      ),
+    };
+    const jobs = {
+      watch: vi.fn(() =>
+        of({
+          id: 7,
+          status: jobStatus,
+          error: jobStatus === 'failed' ? 'importer недоступен' : null,
+          result: { loaded: { '1d': 2, '1h': 5 } },
+        }),
+      ),
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        ChartStore,
+        { provide: API_CLIENT, useValue: client },
+        { provide: JobsService, useValue: jobs },
+      ],
+    });
+    return { store: TestBed.inject(ChartStore), client, posted };
+  }
+
+  it('грузит от последней даты до завтра и добавляет новые свечи на график', async () => {
+    const { store, client, posted } = setupCatchUp();
+    await store.loadInstruments();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-02T12:00:00Z'));
+
+    const ok = await store.catchUp();
+    vi.useRealTimers();
+
+    expect(ok).toBe(true);
+    expect(posted[0]?.body).toEqual({
+      period_from: '2026-09-30',
+      period_to: '2026-10-03',
+      timeframes: null,
+    });
+    expect(store.candles().map((c) => c.timestamp)).toEqual([
+      '2026-09-30T04:00:00Z',
+      '2026-10-01T04:00:00Z',
+    ]);
+    expect(store.catchUpMessage()).toBe('Догружено свечей: 7');
+    expect(store.catchingUp()).toBe(false);
+    expect(
+      (
+        client.GET.mock.calls as unknown as [
+          string,
+          { params?: { query?: Query } }?,
+        ][]
+      ).some(([, o]) => o?.params?.query?.start === '2026-09-30T04:00:00Z'),
+    ).toBe(true);
+  });
+
+  it('ошибка задачи показывается и график не трогается', async () => {
+    const { store } = setupCatchUp('failed');
+    await store.loadInstruments();
+
+    expect(await store.catchUp()).toBe(false);
+
+    expect(store.catchUpMessage()).toBe('importer недоступен');
+    expect(store.candles()).toHaveLength(1);
+    expect(store.catchingUp()).toBe(false);
   });
 });
