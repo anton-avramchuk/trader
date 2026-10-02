@@ -42,7 +42,8 @@ export class InstrumentsStore {
     );
   });
 
-  async load(): Promise<void> {
+  /** Список инструментов; если ничего не выбрано, выбирается `preferredTicker` (из адреса), иначе первый. */
+  async load(preferredTicker: string | null = null): Promise<void> {
     this.loading.set(true);
     try {
       this.instruments.set(
@@ -52,7 +53,10 @@ export class InstrumentsStore {
       this.loading.set(false);
     }
     if (this.selectedId() === null || !this.selected()) {
-      await this.select(this.instruments()[0]?.id ?? null);
+      const preferred = this.instruments().find(
+        (i) => i.ticker === preferredTicker,
+      );
+      await this.select(preferred?.id ?? this.instruments()[0]?.id ?? null);
     }
   }
 

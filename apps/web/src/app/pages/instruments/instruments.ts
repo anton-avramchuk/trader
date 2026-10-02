@@ -1,5 +1,14 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
 import { UiDate, UiNumber, UiSelect } from '../../core/ui';
@@ -201,14 +210,37 @@ export class Instruments implements OnInit {
       .available()
       .map((t) => ({ value: t.ticker, label: `${t.ticker} — ${t.name}` })),
   );
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   protected ticker = '';
   protected newTickValue: number | null = null;
   protected editedTickValue: number | null | undefined = undefined;
   protected from = isoDate(new Date(Date.now() - DEFAULT_YEARS * 365 * DAY_MS));
   protected to = isoDate(new Date(Date.now() + DAY_MS));
 
+  constructor() {
+    // Выбранный инструмент живёт в адресе (`#SBER`): обновление страницы его сохраняет.
+    effect(() => {
+      const ticker = this.store.selected()?.ticker;
+      if (ticker && ticker !== this.route.snapshot.fragment) {
+        void this.router.navigate([], {
+          relativeTo: this.route,
+          fragment: ticker,
+          replaceUrl: true,
+        });
+      }
+    });
+    // Ручная правка `#TICKER` или переход по ссылке меняют выбор.
+    this.route.fragment.pipe(takeUntilDestroyed()).subscribe((fragment) => {
+      const item = this.store.instruments().find((i) => i.ticker === fragment);
+      if (item && item.id !== this.store.selectedId()) {
+        void this.choose(item.id);
+      }
+    });
+  }
+
   ngOnInit(): void {
-    void this.store.load();
+    void this.store.load(this.route.snapshot.fragment);
     void this.store.loadTickers();
   }
 

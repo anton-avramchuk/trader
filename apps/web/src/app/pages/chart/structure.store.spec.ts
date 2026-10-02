@@ -841,4 +841,73 @@ describe('StructureStore', () => {
       expect(client.POST).not.toHaveBeenCalled();
     });
   });
+  describe('тренд', () => {
+    const trendEvent = (state: string): EngineEvent => ({
+      seq: 0,
+      kind: 'trend',
+      status: 'confirmed',
+      payload: {
+        state,
+        strength: 70,
+        bucket: 'medium',
+        since: '2026-09-28T04:00:00Z',
+        efficiency: 0.4,
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: '2026-09-28T04:00:00Z',
+      available_at: '2026-09-28T04:00:00Z',
+      revises: null,
+    });
+
+    it('считается для chart TF и старших, без включённых слоёв', async () => {
+      const { store, client } = setup();
+      client.GET.mockImplementation((path: string) =>
+        ok(
+          path === '/engine-runs/{run_id}/events'
+            ? [trendEvent('uptrend')]
+            : [],
+        ),
+      );
+      await store.refresh({ instrument_id: 1, chartTimeframe: '4h' });
+
+      await store.refreshTrend();
+
+      expect(store.trends().map((r) => r.timeframe)).toEqual([
+        '4h',
+        '1d',
+        '1w',
+      ]);
+      expect(store.trends()[0]?.info?.state).toBe('uptrend');
+      const engines = calls(client.POST)
+        .map(([, r]) => r?.body?.params?.engine)
+        .filter(Boolean);
+      expect(engines).toEqual(['trend', 'trend', 'trend']);
+    });
+
+    it('ошибка одного TF даёт строку без данных, остальные считаются', async () => {
+      const { store, client } = setup();
+      let n = 0;
+      client.POST.mockImplementation(() =>
+        ++n === 2
+          ? Promise.reject(new Error('нет связи'))
+          : ok(job(n, { run_id: 40 + n })),
+      );
+      client.GET.mockImplementation((path: string) =>
+        ok(
+          path === '/engine-runs/{run_id}/events'
+            ? [trendEvent('downtrend')]
+            : [],
+        ),
+      );
+      await store.refresh({ instrument_id: 1, chartTimeframe: '4h' });
+
+      await store.refreshTrend();
+
+      expect(store.trends().map((r) => r.info?.state ?? null)).toEqual([
+        'downtrend',
+        null,
+        'downtrend',
+      ]);
+    });
+  });
 });

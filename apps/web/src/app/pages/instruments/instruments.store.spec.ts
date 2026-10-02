@@ -139,4 +139,24 @@ describe('InstrumentsStore', () => {
       error: 'Нет связи',
     });
   });
+
+  it('load выбирает инструмент из адреса, а неизвестный тикер заменяет первым', async () => {
+    const first = setup().store;
+    await first.load('SBER');
+    expect(first.selectedId()).toBe(1);
+
+    TestBed.resetTestingModule();
+    const second = setup().store;
+    await second.load('NOPE');
+    expect(second.selectedId()).toBe(2); // первый в списке — GAZP
+  });
+
+  it('повторный load не сбрасывает уже выбранный инструмент', async () => {
+    const { store } = setup();
+    await store.load('SBER');
+
+    await store.load('GAZP');
+
+    expect(store.selectedId()).toBe(1);
+  });
 });

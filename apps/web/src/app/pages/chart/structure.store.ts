@@ -29,7 +29,8 @@ import {
   zigzagSegments,
   zoneRects,
 } from './structure';
-import { toChartTime } from './chart-data';
+import { higherTimeframes, toChartTime } from './chart-data';
+import { type TrendRow, trendInfo } from './trend';
 import {
   chartPatterns,
   type PatternInfo,
@@ -125,6 +126,9 @@ export class StructureStore {
   readonly levelFilter = signal<LevelFilter>(DEFAULT_LEVEL_FILTER);
   /** Старший TF, чьи уровни показываются рядом с уровнями графика (`null` — нет). */
   readonly higherTimeframe = signal<string | null>(null);
+  /** Тренд на текущем и старших TF (не зависит от слоёв). */
+  readonly trends = signal<TrendRow[]>([]);
+  private trendSequence = 0;
   private readonly higherEvents = signal<EngineEvent[]>([]);
 
   /** Уровни после фильтра — они же на графике и в списке. */
@@ -462,6 +466,33 @@ export class StructureStore {
       if (seq === this.sequence) {
         this.loading.set(false);
       }
+    }
+  }
+
+  /** Тренд на chart TF и старших; ошибка одного TF не мешает остальным. */
+  async refreshTrend(): Promise<void> {
+    const current = this.context;
+    if (!current) {
+      return;
+    }
+    const seq = ++this.trendSequence;
+    const timeframes = [
+      current.chartTimeframe,
+      ...higherTimeframes(current.chartTimeframe),
+    ];
+    const rows = await Promise.all(
+      timeframes.map(async (timeframe): Promise<TrendRow> => {
+        try {
+          const runId = await this.ensureRun('trend', timeframe);
+          const events = await this.loadEvents(runId, current.asOf, 'current');
+          return { timeframe, info: trendInfo(events) };
+        } catch {
+          return { timeframe, info: null };
+        }
+      }),
+    );
+    if (seq === this.trendSequence) {
+      this.trends.set(rows);
     }
   }
 
