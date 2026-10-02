@@ -1,3 +1,4 @@
+import { ChangeDetectorRef } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import {
   ActivatedRoute,
@@ -105,9 +106,9 @@ describe('Replay', () => {
     fixture.detectChanges();
     await settle(fixture);
     const root = fixture.nativeElement as HTMLElement;
-    const input = root.querySelector('input[type="date"]') as HTMLInputElement;
-    input.value = '2026-09-28';
-    input.dispatchEvent(new Event('input'));
+    (fixture.componentInstance as unknown as { date: string }).date =
+      '2026-09-28';
+    fixture.componentRef.injector.get(ChangeDetectorRef).markForCheck();
     fixture.detectChanges();
     button(root, 'Начать').click();
     await settle(fixture);
@@ -123,7 +124,7 @@ describe('Replay', () => {
     const root = fixture.nativeElement as HTMLElement;
     expect(root.textContent).toContain('баров 2 из 5 (будущее скрыто)');
     expect(
-      (root.querySelector('input[type="date"]') as HTMLInputElement).value,
+      (fixture.componentInstance as unknown as { date: string }).date,
     ).toBe('2026-09-28');
   });
 
@@ -145,8 +146,8 @@ describe('Replay', () => {
     const root = fixture.nativeElement as HTMLElement;
 
     expect(root.textContent).toContain('Выберите дату');
-    expect(button(root, 'Next candle').disabled).toBe(true);
-    expect(button(root, 'Restart').disabled).toBe(true);
+    expect(button(root, 'Следующая').disabled).toBe(true);
+    expect(button(root, 'Сначала').disabled).toBe(true);
   });
 
   it('после старта видно 2 бара из 5, «Next» открывает следующий', async () => {
@@ -156,12 +157,12 @@ describe('Replay', () => {
     expect(root.textContent).toContain('баров 2 из 5 (будущее скрыто)');
     expect(root.textContent).toContain('Система знает на');
 
-    button(root, 'Next candle').click();
+    button(root, 'Следующая').click();
     await settle(fixture);
     expect(root.textContent).toContain('баров 3 из 5');
 
-    button(root, 'Prev').click();
-    button(root, 'Prev').click();
+    button(root, 'Назад').click();
+    button(root, 'Назад').click();
     await settle(fixture);
     expect(root.textContent).toContain('баров 1 из 5');
   });
@@ -174,7 +175,7 @@ describe('Replay', () => {
     expect(root.textContent).toContain('баров 5 из 5');
     expect(root.textContent).toContain('Данные закончились');
 
-    button(root, 'Restart').click();
+    button(root, 'Сначала').click();
     await settle(fixture);
 
     expect(root.textContent).toContain('баров 2 из 5');

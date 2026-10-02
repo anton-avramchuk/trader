@@ -9,7 +9,9 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { TuiButton, TuiInput } from '@taiga-ui/core';
+import { TuiButton } from '@taiga-ui/core';
+import { TuiSegmented } from '@taiga-ui/kit/components/segmented';
+import { UiDate, UiSelect } from '../../core/ui';
 import { MskPipe } from '../../core/time/msk';
 import { describeBar } from '../chart/chart-data';
 import { IndicatorPanel } from '../chart/indicator-panel';
@@ -40,232 +42,214 @@ const REFRESH_DELAY_MS = 250;
     ProfileBar,
     StructurePanel,
     TuiButton,
-    TuiInput,
+    TuiSegmented,
+    UiDate,
+    UiSelect,
   ],
   providers: [ReplayStore, IndicatorsStore, ProfilesStore, StructureStore],
   template: `
     <h1>Replay</h1>
 
-    <div class="inline">
-      <label class="check">
-        Инструмент:
-        <select
-          [ngModel]="store.instrumentId()"
-          (ngModelChange)="store.selectInstrument($event)"
-        >
-          @for (i of store.instruments(); track i.id) {
-            <option [ngValue]="i.id">{{ i.ticker }}</option>
-          }
-        </select>
-      </label>
-      <label class="check">
-        TF:
-        <select
-          [ngModel]="store.timeframe()"
-          (ngModelChange)="store.selectTimeframe($event)"
-        >
-          @for (tf of timeframes; track tf) {
-            <option [value]="tf">{{ tf }}</option>
-          }
-        </select>
-      </label>
-      <tui-textfield>
-        <label tuiLabel>Дата старта (МСК)</label>
-        <input tuiInput type="date" name="date" [(ngModel)]="date" />
-      </tui-textfield>
+    <div class="card toolbar">
+      <app-select
+        label="Инструмент"
+        aria-label="Инструмент"
+        [options]="instrumentOptions()"
+        [ngModel]="store.instrumentId()"
+        (ngModelChange)="store.selectInstrument($event)"
+      />
+      <tui-segmented
+        size="m"
+        aria-label="Таймфрейм"
+        [activeItemIndex]="timeframes.indexOf(store.timeframe())"
+      >
+        @for (tf of timeframes; track tf) {
+          <button type="button" (click)="store.selectTimeframe(tf)">
+            {{ tf }}
+          </button>
+        }
+      </tui-segmented>
+      <app-date label="Дата старта (МСК)" name="date" [(ngModel)]="date" />
       <button
         tuiButton
         type="button"
-        size="s"
+        size="m"
         [disabled]="!date || store.loading()"
         (click)="store.start(date)"
       >
         {{ store.timeline().length ? 'Перейти к дате' : 'Начать' }}
       </button>
       @if (store.loading()) {
-        <span class="status">Загрузка…</span>
+        <span class="muted">Загрузка…</span>
       }
+      <app-profile-bar
+        class="profiles"
+        [instrumentId]="store.instrumentId()"
+        [chartTimeframe]="store.timeframe()"
+        (timeframeRequested)="onProfileTimeframe($event)"
+      />
     </div>
 
-    <div class="inline controls" role="toolbar" aria-label="Управление replay">
+    <div
+      class="card toolbar controls"
+      role="toolbar"
+      aria-label="Управление replay"
+    >
       <button
         tuiButton
         type="button"
         size="s"
         appearance="secondary"
+        iconStart="@tui.rotate-ccw"
         [disabled]="!ready()"
         (click)="store.restart()"
       >
-        Restart
+        Сначала
       </button>
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready()"
-        (click)="store.move(-100)"
-      >
-        −100
-      </button>
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready()"
-        (click)="store.move(-10)"
-      >
-        −10
-      </button>
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready()"
-        (click)="store.move(-1)"
-      >
-        ◀ Prev
-      </button>
+      <tui-segmented size="s" aria-label="Шаг назад">
+        <button type="button" [disabled]="!ready()" (click)="store.move(-100)">
+          −100
+        </button>
+        <button type="button" [disabled]="!ready()" (click)="store.move(-10)">
+          −10
+        </button>
+        <button type="button" [disabled]="!ready()" (click)="store.move(-1)">
+          ◀ Назад
+        </button>
+      </tui-segmented>
       @if (store.playing()) {
-        <button tuiButton type="button" size="s" (click)="store.pause()">
-          Pause
+        <button
+          tuiButton
+          type="button"
+          size="s"
+          iconStart="@tui.pause"
+          (click)="store.pause()"
+        >
+          Пауза
         </button>
       } @else {
         <button
           tuiButton
           type="button"
           size="s"
+          iconStart="@tui.play"
           [disabled]="!ready() || store.atEnd()"
           (click)="store.play()"
         >
-          Play
+          Пуск
         </button>
       }
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready() || store.atEnd()"
-        (click)="store.move(1)"
-      >
-        Next candle ▶
-      </button>
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready() || store.atEnd()"
-        (click)="store.move(10)"
-      >
-        +10
-      </button>
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="secondary"
-        [disabled]="!ready() || store.atEnd()"
-        (click)="store.move(100)"
-      >
-        +100
-      </button>
-      <label class="check">
-        Speed:
-        <select
-          [ngModel]="store.speed()"
-          (ngModelChange)="store.setSpeed($event)"
+      <tui-segmented size="s" aria-label="Шаг вперёд">
+        <button
+          type="button"
+          [disabled]="!ready() || store.atEnd()"
+          (click)="store.move(1)"
         >
-          @for (s of speeds; track s) {
-            <option [ngValue]="s">{{ s }} бар/с</option>
-          }
-        </select>
-      </label>
-    </div>
-
-    <app-profile-bar
-      [instrumentId]="store.instrumentId()"
-      [chartTimeframe]="store.timeframe()"
-      (timeframeRequested)="onProfileTimeframe($event)"
-    />
-    <app-indicator-panel [chartTimeframe]="store.timeframe()" />
-    <app-structure-panel [chartTimeframe]="store.timeframe()" />
-
-    <p class="known" aria-live="polite">
-      @if (store.asOf(); as t) {
-        <strong>Система знает на {{ t | msk: 'full' }} МСК:</strong>
-        баров {{ store.visible().length }} из
-        {{ store.timeline().length }} (будущее скрыто).
-        @if (store.atEnd()) {
-          Данные закончились.
-        }
-      } @else {
-        Выберите дату и нажмите «Начать».
-      }
-    </p>
-    <p class="legend">{{ legend() }}</p>
-
-    <div class="chart">
-      <app-price-chart
-        [candles]="store.visible()"
-        [datasetKey]="store.datasetKey()"
-        [follow]="true"
-        [indicators]="indicators.series()"
-        [overlay]="structure.overlay()"
+          Следующая ▶
+        </button>
+        <button
+          type="button"
+          [disabled]="!ready() || store.atEnd()"
+          (click)="store.move(10)"
+        >
+          +10
+        </button>
+        <button
+          type="button"
+          [disabled]="!ready() || store.atEnd()"
+          (click)="store.move(100)"
+        >
+          +100
+        </button>
+      </tui-segmented>
+      <app-select
+        label="Скорость"
+        aria-label="Скорость"
+        [options]="speedOptions"
+        [ngModel]="store.speed()"
+        (ngModelChange)="store.setSpeed($event)"
       />
     </div>
 
-    <div class="inline">
-      <button
-        tuiButton
-        type="button"
-        size="s"
-        appearance="flat"
-        [disabled]="!ready()"
-        (click)="store.verifyWithServer()"
-      >
-        Сверить с серверным snapshot
-      </button>
-      @if (store.verify(); as v) {
-        <span [class.bad]="v.mismatches > 0" [class.good]="v.mismatches === 0">
-          {{
-            v.mismatches === 0 ? 'Совпадает' : 'Расхождения: ' + v.mismatches
-          }}
-          (проверено {{ v.checked }} баров на {{ v.asOf | msk: 'full' }} МСК)
-        </span>
-      }
+    <div class="workbench">
+      <section class="stack">
+        <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+        <p class="known" aria-live="polite">
+          @if (store.asOf(); as t) {
+            <strong>Система знает на {{ t | msk: 'full' }} МСК:</strong>
+            баров {{ store.visible().length }} из
+            {{ store.timeline().length }} (будущее скрыто).
+            @if (store.atEnd()) {
+              Данные закончились.
+            }
+          } @else {
+            Выберите дату и нажмите «Начать».
+          }
+        </p>
+        <p class="legend">{{ legend() }}</p>
+        <div class="chart">
+          <app-price-chart
+            [candles]="store.visible()"
+            [datasetKey]="store.datasetKey()"
+            [follow]="true"
+            [indicators]="indicators.series()"
+            [overlay]="structure.overlay()"
+          />
+        </div>
+        <div class="toolbar">
+          <button
+            tuiButton
+            type="button"
+            size="s"
+            appearance="flat"
+            [disabled]="!ready()"
+            (click)="store.verifyWithServer()"
+          >
+            Сверить с серверным snapshot
+          </button>
+          @if (store.verify(); as v) {
+            <span
+              [class.bad]="v.mismatches > 0"
+              [class.good]="v.mismatches === 0"
+            >
+              {{
+                v.mismatches === 0
+                  ? 'Совпадает'
+                  : 'Расхождения: ' + v.mismatches
+              }}
+              (проверено {{ v.checked }} баров на
+              {{ v.asOf | msk: 'full' }} МСК)
+            </span>
+          }
+        </div>
+      </section>
+      <aside class="side card">
+        <app-structure-panel [chartTimeframe]="store.timeframe()" />
+      </aside>
     </div>
   `,
   styles: `
-    .inline {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-      margin-bottom: 0.75rem;
+    .toolbar {
+      margin-bottom: 1rem;
     }
-    .check {
-      display: flex;
-      gap: 0.4rem;
-      align-items: center;
+    .toolbar .toolbar {
+      margin-bottom: 0;
+    }
+    .profiles {
+      margin-inline-start: auto;
     }
     .known,
     .legend {
+      margin: 0;
       font-size: 0.9rem;
-      min-height: 1.4rem;
+      min-height: 1.25rem;
     }
     .legend {
       font-family: monospace;
     }
     .chart {
-      height: 55vh;
+      height: calc(100vh - 26rem);
       min-height: 24rem;
-    }
-    .status {
-      opacity: 0.7;
     }
     .good {
       color: #2e7d32;
@@ -282,7 +266,13 @@ export class Replay implements OnInit, OnDestroy {
   protected readonly structure = inject(StructureStore);
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly timeframes: readonly ReplayTimeframe[] = REPLAY_TIMEFRAMES;
-  protected readonly speeds = SPEEDS;
+  protected readonly speedOptions = SPEEDS.map((s) => ({
+    value: s,
+    label: `${s} бар/с`,
+  }));
+  protected readonly instrumentOptions = computed(() =>
+    this.store.instruments().map((i) => ({ value: i.id, label: i.ticker })),
+  );
   protected date = '';
 
   protected readonly ready = computed(() => this.store.timeline().length > 0);

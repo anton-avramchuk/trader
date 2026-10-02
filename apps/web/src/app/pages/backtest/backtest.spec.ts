@@ -6,6 +6,7 @@ import { provideEventPlugins } from '@taiga-ui/event-plugins';
 import { of } from 'rxjs';
 import { API_CLIENT } from '../../core/api/api';
 import { JobsService } from '../../core/jobs/jobs';
+import { enterDate, enterText } from '../../core/ui/testing';
 import { Backtest as BacktestPage } from './backtest';
 
 const ok = (data: unknown) =>
@@ -141,7 +142,7 @@ describe('Backtest page', () => {
     expect(el.querySelector('h1')?.textContent).toBe('Backtest');
     expect(el.textContent).toContain('Последние бэктесты');
     expect(el.textContent).toContain('2026-07-01 … 2026-09-01');
-    expect(el.querySelector('select[name="kind"]')).toBeTruthy();
+    expect(el.querySelector('app-select[name="kind"]')).toBeTruthy();
     expect(el.querySelector('textarea[name="grid"]')).toBeNull(); // только WF
   });
 
@@ -149,12 +150,8 @@ describe('Backtest page', () => {
     const { fixture, client, el } = setup();
     fixture.detectChanges();
     await settle(fixture);
-    const from = el.querySelector<HTMLInputElement>('input[name="from"]');
-    const to = el.querySelector<HTMLInputElement>('input[name="to"]');
-    from!.value = '2026-01-01';
-    from!.dispatchEvent(new Event('input'));
-    to!.value = '2026-06-30';
-    to!.dispatchEvent(new Event('input'));
+    enterDate(fixture, 'app-date[name="from"]', '2026-01-01');
+    enterDate(fixture, 'app-date[name="to"]', '2026-06-30');
     fixture.detectChanges();
 
     el.querySelector<HTMLFormElement>('form')!.dispatchEvent(
@@ -219,9 +216,7 @@ describe('Backtest page', () => {
     fixture.detectChanges();
     const confirm = el.querySelector<HTMLButtonElement>('.unlock button')!;
     expect(confirm.disabled).toBe(true);
-    const note = el.querySelector<HTMLInputElement>('.unlock input')!;
-    note.value = 'ошибка в данных';
-    note.dispatchEvent(new Event('input'));
+    enterText(fixture, '.unlock app-text', 'ошибка в данных');
     fixture.detectChanges();
     await settle(fixture);
     el.querySelector<HTMLButtonElement>('.unlock button')!.click();

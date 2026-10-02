@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   effect,
   inject,
   input,
@@ -8,112 +9,135 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TuiButton } from '@taiga-ui/core';
+import { firstValueFrom } from 'rxjs';
+import { TuiButton, TuiDialogService } from '@taiga-ui/core';
+import { TUI_CONFIRM } from '@taiga-ui/kit/components/confirm';
+import { UiSelect, UiText } from '../../core/ui';
 import { ProfilesStore, type ProfileScope } from './profiles.store';
 
 /** Профили графика: выбор, сохранение, переименование, удаление; последний запоминается. */
 @Component({
   selector: 'app-profile-bar',
-  imports: [FormsModule, TuiButton],
+  imports: [FormsModule, TuiButton, UiSelect, UiText],
   template: `
     <div class="bar" role="group" aria-label="Профили графика">
-      <label class="field">
-        Профиль
-        <select
-          [ngModel]="store.selectedId()"
-          (ngModelChange)="choose($event)"
-          aria-label="Профиль"
-        >
-          <option [ngValue]="null">— без профиля —</option>
-          @for (p of store.profiles(); track p.id) {
-            <option [ngValue]="p.id">
-              {{ p.name }}{{ p.instrument_id === null ? ' (глобальный)' : '' }}
-            </option>
-          }
-        </select>
-      </label>
-
-      @if (store.selected()) {
-        <button
-          tuiButton
-          type="button"
-          size="xs"
-          appearance="secondary"
-          (click)="update()"
-        >
-          Сохранить изменения
-        </button>
-        <label class="field">
-          Новое имя
-          <input type="text" [(ngModel)]="renameTo" aria-label="Новое имя" />
-        </label>
-        <button
-          tuiButton
-          type="button"
-          size="xs"
-          appearance="flat"
-          [disabled]="!renameTo.trim()"
-          (click)="rename()"
-        >
-          Переименовать
-        </button>
-        <button
-          tuiButton
-          type="button"
-          size="xs"
-          appearance="flat-destructive"
-          (click)="remove()"
-        >
-          Удалить
-        </button>
-      }
-
-      <label class="field">
-        Сохранить как
-        <input
-          type="text"
-          [(ngModel)]="newName"
-          aria-label="Имя нового профиля"
-        />
-      </label>
-      <label class="field">
-        Область
-        <select [(ngModel)]="scope" aria-label="Область профиля">
-          <option value="global">Глобальный</option>
-          <option value="instrument" [disabled]="instrumentId() === null">
-            Для этого инструмента
-          </option>
-        </select>
-      </label>
+      <app-select
+        label="Профиль"
+        aria-label="Профиль"
+        [options]="profileOptions()"
+        [ngModel]="store.selectedId()"
+        (ngModelChange)="choose($event)"
+      />
       <button
         tuiButton
         type="button"
-        size="xs"
-        [disabled]="!newName.trim()"
-        (click)="saveNew()"
+        size="s"
+        appearance="secondary"
+        iconStart="@tui.settings-2"
+        (click)="manage.set(!manage())"
       >
-        Сохранить
+        {{ manage() ? 'Скрыть' : 'Управление' }}
       </button>
     </div>
+
+    @if (manage()) {
+      <div class="manage card" role="group" aria-label="Управление профилями">
+        @if (store.selected()) {
+          <div class="row">
+            <button
+              tuiButton
+              type="button"
+              size="s"
+              appearance="secondary"
+              (click)="update()"
+            >
+              Сохранить изменения
+            </button>
+            <app-text
+              label="Новое имя"
+              aria-label="Новое имя"
+              [(ngModel)]="renameTo"
+            />
+            <button
+              tuiButton
+              type="button"
+              size="s"
+              appearance="flat"
+              [disabled]="!renameTo.trim()"
+              (click)="rename()"
+            >
+              Переименовать
+            </button>
+            <button
+              tuiButton
+              type="button"
+              size="s"
+              appearance="flat-destructive"
+              (click)="remove()"
+            >
+              Удалить
+            </button>
+          </div>
+        }
+        <div class="row">
+          <app-text
+            label="Сохранить как"
+            aria-label="Имя нового профиля"
+            [(ngModel)]="newName"
+          />
+          <app-select
+            label="Область"
+            aria-label="Область профиля"
+            [options]="scopeOptions()"
+            [(ngModel)]="scope"
+          />
+          <button
+            tuiButton
+            type="button"
+            size="s"
+            [disabled]="!newName.trim()"
+            (click)="saveNew()"
+          >
+            Сохранить
+          </button>
+        </div>
+      </div>
+    }
   `,
   styles: `
+    :host {
+      position: relative;
+    }
+    .bar app-select {
+      min-width: 16rem;
+    }
     .bar {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.6rem;
-      align-items: end;
-      margin-bottom: 0.5rem;
-      font-size: 0.8rem;
+      gap: 0.5rem;
+      align-items: center;
     }
-    .field {
+    .manage {
+      position: absolute;
+      inset-inline-end: 0;
+      top: calc(100% + 0.5rem);
+      z-index: 5;
       display: flex;
       flex-direction: column;
-      gap: 0.15rem;
+      gap: 0.75rem;
+      min-width: 32rem;
+      box-shadow: var(--tui-shadow-medium);
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
     }
   `,
 })
 export class ProfileBar {
   protected readonly store = inject(ProfilesStore);
+  private readonly dialogs = inject(TuiDialogService);
 
   readonly instrumentId = input<number | null>(null);
   readonly chartTimeframe = input.required<string>();
@@ -124,6 +148,26 @@ export class ProfileBar {
   protected renameTo = '';
   protected scope: ProfileScope = 'global';
   protected readonly ready = signal(false);
+  protected readonly manage = signal(false);
+
+  protected readonly profileOptions = computed(() => [
+    { value: null as number | null, label: '— без профиля —' },
+    ...this.store.profiles().map((p) => ({
+      value: p.id as number | null,
+      label: `${p.name}${p.instrument_id === null ? ' (глобальный)' : ''}`,
+    })),
+  ]);
+  protected readonly scopeOptions = computed(() => [
+    { value: 'global' as ProfileScope, label: 'Глобальный' },
+    ...(this.instrumentId() === null
+      ? []
+      : [
+          {
+            value: 'instrument' as ProfileScope,
+            label: 'Для этого инструмента',
+          },
+        ]),
+  ]);
 
   constructor() {
     effect(() => {
@@ -165,7 +209,20 @@ export class ProfileBar {
   }
 
   protected async remove(): Promise<void> {
-    if (confirm(`Удалить профиль «${this.store.selected()?.name ?? ''}»?`)) {
+    const name = this.store.selected()?.name ?? '';
+    const confirmed = await firstValueFrom(
+      this.dialogs.open<boolean>(TUI_CONFIRM, {
+        label: `Удалить профиль «${name}»?`,
+        size: 's',
+        data: {
+          content: 'Это действие нельзя отменить.',
+          yes: 'Удалить',
+          no: 'Отмена',
+        },
+      }),
+      { defaultValue: false },
+    );
+    if (confirmed) {
       await this.store.remove();
     }
   }

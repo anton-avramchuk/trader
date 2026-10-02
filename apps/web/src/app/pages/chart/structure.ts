@@ -290,15 +290,18 @@ export function levelReference(
   }
   const tail = candles.slice(-(period + 1));
   let sum = 0;
-  for (let i = 1; i < tail.length; i++) {
-    const c = tail[i]!;
-    const previous = Number(tail[i - 1]!.close);
+  tail.forEach((c, i) => {
+    const before = tail[i - 1];
+    if (!before) {
+      return;
+    }
+    const previous = Number(before.close);
     sum += Math.max(
       Number(c.high) - Number(c.low),
       Math.abs(Number(c.high) - previous),
       Math.abs(Number(c.low) - previous),
     );
-  }
+  });
   const atr = sum / (tail.length - 1);
   return atr > 0 ? { price: Number(last.close), atr } : null;
 }

@@ -1,7 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
+import { UiDate, UiNumber, UiSelect } from '../../core/ui';
 import { InstrumentsStore } from './instruments.store';
 
 const DAY_MS = 86_400_000;
@@ -12,7 +13,7 @@ const isoDate = (moment: Date): string => moment.toISOString().slice(0, 10);
 /** Data → Instruments: тикеры importer, заведённые инструменты, загрузка свечей. */
 @Component({
   selector: 'app-instruments',
-  imports: [DatePipe, FormsModule, TuiButton],
+  imports: [DatePipe, FormsModule, TuiButton, UiDate, UiNumber, UiSelect],
   providers: [InstrumentsStore],
   template: `
     <h1>Instruments</h1>
@@ -51,26 +52,18 @@ const isoDate = (moment: Date): string => moment.toISOString().slice(0, 10);
           <p class="empty">Все тикеры importer уже добавлены.</p>
         } @else {
           <div class="inline">
-            <label class="check">
-              Тикер:
-              <select name="ticker" [(ngModel)]="ticker">
-                @for (t of store.available(); track t.ticker) {
-                  <option [ngValue]="t.ticker">
-                    {{ t.ticker }} — {{ t.name }}
-                  </option>
-                }
-              </select>
-            </label>
-            <label class="check">
-              Стоимость тика (для денег):
-              <input
-                name="tickValue"
-                type="number"
-                min="0"
-                step="any"
-                [(ngModel)]="newTickValue"
-              />
-            </label>
+            <app-select
+              label="Тикер"
+              name="ticker"
+              [options]="tickerOptions()"
+              [(ngModel)]="ticker"
+            />
+            <app-number
+              label="Стоимость тика (для денег)"
+              name="tickValue"
+              [min]="0"
+              [(ngModel)]="newTickValue"
+            />
             <button
               tuiButton
               type="button"
@@ -95,27 +88,26 @@ const isoDate = (moment: Date): string => moment.toISOString().slice(0, 10);
           <dd>{{ item.tick_size }}</dd>
           <dt>Часовой пояс</dt>
           <dd>{{ item.timezone }}</dd>
-          <dt>Стоимость тика</dt>
-          <dd>
-            <input
-              name="tickValueEdit"
-              type="number"
-              min="0"
-              step="any"
-              [ngModel]="item.tick_value"
-              (ngModelChange)="editedTickValue = $event"
-            />
-            <button
-              tuiButton
-              type="button"
-              size="xs"
-              appearance="secondary"
-              (click)="saveTickValue(item.id, item.tick_value)"
-            >
-              Сохранить
-            </button>
-          </dd>
         </dl>
+        <div class="inline">
+          <app-number
+            label="Стоимость тика"
+            name="tickValueEdit"
+            placeholder="не задана"
+            [min]="0"
+            [ngModel]="toNumber(item.tick_value)"
+            (ngModelChange)="editedTickValue = $event"
+          />
+          <button
+            tuiButton
+            type="button"
+            size="s"
+            appearance="secondary"
+            (click)="saveTickValue(item.id, item.tick_value)"
+          >
+            Сохранить
+          </button>
+        </div>
 
         <h3>Покрытие свечами</h3>
         @if (!item.coverage?.length) {
@@ -145,14 +137,8 @@ const isoDate = (moment: Date): string => moment.toISOString().slice(0, 10);
 
         <h3>Загрузить свечи из importer</h3>
         <div class="inline">
-          <label class="check">
-            С:
-            <input name="from" type="date" [(ngModel)]="from" />
-          </label>
-          <label class="check">
-            По (исключительно):
-            <input name="to" type="date" [(ngModel)]="to" />
-          </label>
+          <app-date label="С" name="from" [(ngModel)]="from" />
+          <app-date label="По (исключительно)" name="to" [(ngModel)]="to" />
           <button
             tuiButton
             type="button"
@@ -210,6 +196,11 @@ const isoDate = (moment: Date): string => moment.toISOString().slice(0, 10);
 export class Instruments implements OnInit {
   protected readonly store = inject(InstrumentsStore);
   protected readonly adding = signal(false);
+  protected readonly tickerOptions = computed(() =>
+    this.store
+      .available()
+      .map((t) => ({ value: t.ticker, label: `${t.ticker} — ${t.name}` })),
+  );
   protected ticker = '';
   protected newTickValue: number | null = null;
   protected editedTickValue: number | null | undefined = undefined;
@@ -219,6 +210,10 @@ export class Instruments implements OnInit {
   ngOnInit(): void {
     void this.store.load();
     void this.store.loadTickers();
+  }
+
+  protected toNumber(value: number | string | null): number | null {
+    return value === null || value === '' ? null : Number(value);
   }
 
   protected toggleAdd(): void {
