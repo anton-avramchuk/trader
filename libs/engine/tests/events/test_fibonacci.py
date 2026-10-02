@@ -80,6 +80,17 @@ def test_leg_shorter_than_min_leg_mult_gives_no_grid() -> None:
     assert events == []
 
 
+def test_dominant_high_far_to_the_left_is_not_lost_in_a_long_consolidation() -> None:
+    # хай 200, затем 30 колебаний 100↔112 (60 swing), затем обвал до 90 и отскок
+    series = [100.0, 200, 100] + [112.0, 100] * 30 + [90, 100]
+
+    events = run_engine(create("fibonacci", PERCENT), closes(series))
+    short = run_engine(create("fibonacci", {**PERCENT, "window": 20}), closes(series))
+
+    assert legs(events)[-1] == ("revised", 200, 90)
+    assert legs(short)[-1][1] != 200
+
+
 def test_current_picture_is_the_latest_grid_per_chain() -> None:
     events = run_engine(create("fibonacci", PERCENT), closes(SERIES))
 
