@@ -4,6 +4,12 @@ import { formatMsk } from '../../core/time/msk';
 export const TIMEFRAMES = ['15m', '1h', '4h', '1d', '1w'] as const;
 export type ChartTimeframe = (typeof TIMEFRAMES)[number];
 
+/** Таймфреймы старше `timeframe` (для уровней старшего TF на графике). */
+export function higherTimeframes(timeframe: string): ChartTimeframe[] {
+  const rank = TIMEFRAMES.indexOf(timeframe as ChartTimeframe);
+  return rank < 0 ? [] : TIMEFRAMES.slice(rank + 1);
+}
+
 const UP = '#26a69a';
 const DOWN = '#ef5350';
 

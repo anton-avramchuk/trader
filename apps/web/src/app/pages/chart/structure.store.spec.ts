@@ -751,4 +751,94 @@ describe('StructureStore', () => {
       expect(store.forecast()?.error).toBe('Нет связи с сервером');
     });
   });
+  describe('уровни старшего TF и восстановление вида', () => {
+    const levelAt = (price: number): EngineEvent => ({
+      seq: 0,
+      kind: 'level',
+      status: 'detected',
+      payload: {
+        id: 9,
+        source: 'swing_high',
+        family: 'swing',
+        price,
+        role: 'resistance',
+        state: 'active',
+        touches: 3,
+        created_at: '2026-09-28T04:00:00Z',
+        strength: { score: 40, version: 1, components: {} },
+      },
+      detected_at: '2026-09-28T04:00:00Z',
+      confirmed_at: null,
+      available_at: '2026-09-28T04:00:00Z',
+      revises: null,
+    });
+
+    it('старший TF: отдельный прогон levels и оранжевые линии без ограничения по расстоянию', async () => {
+      const { store, client } = setup();
+      client.GET.mockImplementation((path: string) =>
+        ok(path === '/engine-runs/{run_id}/events' ? [levelAt(500)] : []),
+      );
+      store.setReference({ price: 100, atr: 2 });
+      await store.refresh(CONTEXT);
+      await store.setLayer('levels', true);
+      expect(store.overlay().segments).toEqual([]); // 200 ATR от цены: не для графика
+
+      await store.setHigherTimeframe('1d');
+
+      const timeframes = calls(client.POST)
+        .map(([, r]) => r?.body?.params)
+        .filter((p) => p?.engine === 'levels')
+        .map((p) => p?.timeframe);
+      expect(timeframes.sort()).toEqual(['15m', '1d']);
+      const [line] = store.overlay().segments;
+      expect(line?.label).toBe('1d 500 · 3 кас. · 40');
+      expect(line?.levelId).toBeUndefined();
+    });
+
+    it('выключение старшего TF убирает его линии', async () => {
+      const { store, client } = setup();
+      client.GET.mockImplementation((path: string) =>
+        ok(path === '/engine-runs/{run_id}/events' ? [levelAt(500)] : []),
+      );
+      await store.refresh(CONTEXT);
+      await store.setLayer('levels', true);
+      await store.setHigherTimeframe('1d');
+
+      await store.setHigherTimeframe(null);
+
+      expect(store.higherLevels()).toEqual([]);
+      expect(
+        store.overlay().segments.filter((s) => s.label?.startsWith('1d')),
+      ).toEqual([]);
+    });
+
+    it('restore выставляет слои, фильтр и окно без запросов', () => {
+      const { store, client } = setup();
+
+      store.restore({
+        layers: { levels: true },
+        levelFilter: {
+          maxDistanceAtr: null,
+          minScore: 10,
+          minTouches: 2,
+          perSide: 6,
+          derived: true,
+        },
+        lastBars: 300,
+        higherTimeframe: '1w',
+      });
+
+      expect(store.layers().levels).toBe(true);
+      expect(store.layers().zones).toBe(false);
+      expect(store.levelFilter()).toMatchObject({
+        perSide: 6,
+        maxDistanceAtr: null,
+        reference: null,
+      });
+      expect(store.lastBars()).toBe(300);
+      expect(store.higherTimeframe()).toBe('1w');
+      expect(client.GET).not.toHaveBeenCalled();
+      expect(client.POST).not.toHaveBeenCalled();
+    });
+  });
 });

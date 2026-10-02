@@ -6,6 +6,8 @@ import {
   currentTrend,
   fibonacciSegments,
   levelInfos,
+  HIGHER_COLOR,
+  higherLevelSegments,
   levelSegments,
   manualFibSegments,
   pivotSegments,
@@ -150,8 +152,25 @@ describe('уровни', () => {
     );
     expect(segments.map((s) => s.width)).toEqual([3, 2, 4]); // 60→3, 40→2, выбранный→4
     expect(segments[1]?.dashed).toBe(true); // пробитый
-    expect(segments[0]?.label).toBe('swing_high 60');
+    expect(segments[0]?.label).toBe('102 · 2 кас. · 60'); // цена, касания, сила
+    expect(segments[0]?.levelId).toBe(2);
     expect(infos[0]?.components).toEqual({ touches: 2, age: 5 });
+  });
+
+  it('уровни старшего TF: оранжевый пунктир с пометкой TF, выбрать нельзя', () => {
+    const segments = higherLevelSegments(
+      levelInfos([level(1, 20, 'active', 'support')]),
+      '1d',
+    );
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0]).toMatchObject({
+      color: HIGHER_COLOR,
+      dashed: true,
+      time2: null,
+      label: '1d 101 · 2 кас. · 20',
+    });
+    expect(segments[0]?.levelId).toBeUndefined();
   });
 
   describe('фильтр на график', () => {

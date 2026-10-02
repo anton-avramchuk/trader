@@ -1,9 +1,11 @@
 import { Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import type { Candle } from '@trader/api-client';
 import type { ChartIndicator } from './indicators';
 import { EMPTY_OVERLAY, type Overlay } from './structure';
 import { PriceChart } from './price-chart';
+import { StructurePrimitive } from './structure-primitive';
 
 // jsdom не умеет canvas: подменяем библиотеку и проверяем, что обёртка с ней делает.
 const lib = vi.hoisted(() => {
@@ -20,7 +22,10 @@ const lib = vi.hoisted(() => {
     scrollToRealTime: vi.fn(),
     getVisibleRange: vi.fn(() => ({ from: 1, to: 2 })),
     setVisibleRange: vi.fn(),
+    getVisibleLogicalRange: vi.fn(() => ({ from: 0, to: 20 })),
+    setVisibleLogicalRange: vi.fn(),
   };
+  const priceScale = { applyOptions: vi.fn() };
   const chart = {
     addSeries: vi.fn((...args: [string, unknown?, number?]) => {
       const definition = args[0];
@@ -32,14 +37,14 @@ const lib = vi.hoisted(() => {
       }
       return { setData: vi.fn(), definition };
     }),
-    priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
+    priceScale: vi.fn(() => priceScale),
     timeScale: vi.fn(() => timeScale),
     subscribeCrosshairMove: vi.fn(),
     subscribeClick: vi.fn(),
     removeSeries: vi.fn(),
     remove: vi.fn(),
   };
-  return { candleSeries, volumeSeries, markers, timeScale, chart };
+  return { candleSeries, volumeSeries, markers, timeScale, priceScale, chart };
 });
 
 vi.mock('lightweight-charts', () => ({
@@ -71,6 +76,9 @@ function candle(timestamp: string): Candle {
     [datasetKey]="key"
     [indicators]="indicators()"
     [overlay]="overlay()"
+    [logScale]="log()"
+    [focus]="focus()"
+    (levelPicked)="level = $event"
     (pointPicked)="picked = $event"
     (needOlder)="older = older + 1"
     (hover)="hovered = $event"
@@ -83,6 +91,9 @@ class Host {
   ];
   indicators = signal<ChartIndicator[]>([]);
   overlay = signal<Overlay>(EMPTY_OVERLAY);
+  log = signal(false);
+  focus = signal<{ time: number; seq: number } | null>(null);
+  level: number | undefined;
   picked: { time: number; price: number } | undefined;
   key = 'a';
   older = 0;
@@ -226,6 +237,76 @@ describe('PriceChart', () => {
     await fixture.whenStable();
     // 'b' теперь единственный отдельный (панель 1 — как раньше), 'a' убран
     expect(lib.chart.removeSeries).toHaveBeenCalledTimes(1);
+  });
+
+  it('логарифмическая шкала переключается на лету', async () => {
+    const fixture = await mount();
+
+    fixture.componentInstance.log.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(lib.priceScale.applyOptions).toHaveBeenLastCalledWith({ mode: 1 });
+
+    fixture.componentInstance.log.set(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(lib.priceScale.applyOptions).toHaveBeenLastCalledWith({ mode: 0 });
+  });
+
+  it('вписать и к последней свече', async () => {
+    const fixture = await mount();
+    const chart = fixture.debugElement.query(By.directive(PriceChart))
+      .componentInstance as PriceChart;
+    lib.timeScale.fitContent.mockClear();
+
+    chart.fit();
+    chart.toLast();
+
+    expect(lib.timeScale.fitContent).toHaveBeenCalledTimes(1);
+    expect(lib.timeScale.scrollToRealTime).toHaveBeenCalled();
+  });
+
+  it('переход к моменту центрирует окно на ближайшем баре, повтор того же запроса игнорируется', async () => {
+    const fixture = await mount();
+
+    fixture.componentInstance.focus.set({
+      time: Date.UTC(2026, 8, 28, 4, 15) / 1000,
+      seq: 1,
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(lib.timeScale.setVisibleLogicalRange).toHaveBeenCalledTimes(1);
+    expect(lib.timeScale.setVisibleLogicalRange).toHaveBeenCalledWith({
+      from: -9, // бар №1, окно 20 баров сохранено
+      to: 11,
+    });
+
+    fixture.componentInstance.focus.set({
+      time: Date.UTC(2026, 8, 28, 4, 15) / 1000,
+      seq: 1,
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(lib.timeScale.setVisibleLogicalRange).toHaveBeenCalledTimes(1);
+  });
+
+  it('клик по линии уровня сообщает его id', async () => {
+    const fixture = await mount();
+    const [listener] = lib.chart.subscribeClick.mock.calls[0] as [
+      (param: { time?: number; point?: { x: number; y: number } }) => void,
+    ];
+    const hit = vi.spyOn(StructurePrimitive.prototype, 'levelAt');
+
+    hit.mockReturnValue(7);
+    listener({ time: 1000, point: { x: 5, y: 7 } });
+    expect(fixture.componentInstance.level).toBe(7);
+
+    fixture.componentInstance.level = undefined;
+    hit.mockReturnValue(null);
+    listener({ time: 1000, point: { x: 5, y: 7 } });
+    expect(fixture.componentInstance.level).toBeUndefined();
+    hit.mockRestore();
   });
 
   it('уничтожает график при удалении компонента', async () => {

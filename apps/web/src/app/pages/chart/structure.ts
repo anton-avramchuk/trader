@@ -377,8 +377,32 @@ export function levelSegments(
           : level.score >= 25
             ? 2
             : 1,
-    label: `${level.source} ${Math.round(level.score)}`,
+    label: levelLabel(level),
     levelId: level.id,
+  }));
+}
+
+/** Цена, число касаний и сила: по подписи видно, что это за уровень. */
+function levelLabel(level: LevelInfo): string {
+  return `${level.price} · ${level.touches} кас. · ${Math.round(level.score)}`;
+}
+
+export const HIGHER_COLOR = '#ff9800';
+
+/** Уровни старшего TF: оранжевым пунктиром, с пометкой таймфрейма; выбрать нельзя. */
+export function higherLevelSegments(
+  levels: LevelInfo[],
+  timeframe: string,
+): OverlaySegment[] {
+  return levels.map((level) => ({
+    time1: toChartTime(level.createdAt),
+    price1: level.price,
+    time2: null,
+    price2: level.price,
+    color: HIGHER_COLOR,
+    dashed: true,
+    width: 2,
+    label: `${timeframe} ${levelLabel(level)}`,
   }));
 }
 

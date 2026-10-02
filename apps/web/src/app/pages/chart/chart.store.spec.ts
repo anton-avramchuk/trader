@@ -112,6 +112,50 @@ describe('ChartStore', () => {
     expect(store.hasOlder()).toBe(false);
   });
 
+  it('запомненный инструмент выбирается, если он есть в списке', async () => {
+    const empty = { candles: [], truncated: false };
+    const { store } = setup([empty]);
+
+    await store.loadInstruments(2);
+
+    expect(store.instrumentId()).toBe(2);
+  });
+
+  it('несуществующий запомненный инструмент заменяется первым', async () => {
+    const empty = { candles: [], truncated: false };
+    const { store } = setup([empty]);
+
+    await store.loadInstruments(99);
+
+    expect(store.instrumentId()).toBe(1);
+  });
+
+  it('loadUntil подгружает страницы, пока не дойдёт до даты', async () => {
+    const { store, queries } = setup([
+      { candles: [candle('2026-09-30T04:00:00Z')], truncated: true },
+      { candles: [candle('2026-09-29T04:00:00Z')], truncated: true },
+      { candles: [candle('2026-09-28T04:00:00Z')], truncated: true },
+    ]);
+    await store.loadInstruments();
+
+    await store.loadUntil('2026-09-28T12:00:00Z');
+
+    expect(queries()).toHaveLength(3);
+    expect(store.candles()[0]?.timestamp).toBe('2026-09-28T04:00:00Z');
+  });
+
+  it('loadUntil не запрашивает ничего, если дата уже загружена, и останавливается в конце истории', async () => {
+    const { store, queries } = setup([
+      { candles: [candle('2026-09-30T04:00:00Z')], truncated: false },
+    ]);
+    await store.loadInstruments();
+
+    await store.loadUntil('2026-10-01T00:00:00Z');
+    await store.loadUntil('2020-01-01T00:00:00Z');
+
+    expect(queries()).toHaveLength(1);
+  });
+
   it('ответ на устаревший запрос не затирает свежий', async () => {
     const { store } = setup([]);
     const client = TestBed.inject(API_CLIENT) as unknown as {
