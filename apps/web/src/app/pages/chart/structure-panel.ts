@@ -2,6 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TuiButton } from '@taiga-ui/core';
+import { UiNumber, type UiOption, UiSelect } from '../../core/ui';
 import { MskPipe } from '../../core/time/msk';
 import { allowedSourceTimeframes } from './indicators';
 import { PATTERN_TITLES, type PatternInfo, shortName } from './pattern-layer';
@@ -47,11 +48,14 @@ const REASONS: Record<string, string> = {
     ForecastBlock,
     StatsBlock,
     TuiButton,
+    UiNumber,
+    UiSelect,
   ],
   template: `
+    <h2 class="section-title">Слои</h2>
     <div class="layers" role="group" aria-label="Слои структуры">
       @for (layer of layers; track layer) {
-        <label class="check">
+        <label class="toggle-chip">
           <input
             type="checkbox"
             [ngModel]="store.layers()[layer]"
@@ -60,26 +64,29 @@ const REASONS: Record<string, string> = {
           {{ titles[layer] }}
         </label>
       }
+    </div>
+    <div class="row">
       <button
         tuiButton
         type="button"
-        size="xs"
-        appearance="flat"
+        size="s"
+        appearance="secondary"
+        iconStart="@tui.refresh-cw"
         [disabled]="store.loading()"
         (click)="store.recompute()"
       >
         Пересчитать
       </button>
       @if (store.loading()) {
-        <span class="hint">Расчёт…</span>
+        <span class="muted">Расчёт…</span>
       }
     </div>
 
     @if (store.layers().zones && sources().length) {
-      <div class="row" role="group" aria-label="Source TF зон">
-        <span class="hint">Уровни старших TF в зонах:</span>
+      <h2 class="section-title">Старшие TF в зонах</h2>
+      <div class="layers" role="group" aria-label="Source TF зон">
         @for (tf of sources(); track tf) {
-          <label class="check">
+          <label class="toggle-chip">
             <input
               type="checkbox"
               [ngModel]="store.zoneSources().includes(tf)"
@@ -96,72 +103,58 @@ const REASONS: Record<string, string> = {
     }
 
     @if (store.layers().structure && store.trend(); as trend) {
-      <p class="hint">Состояние тренда: {{ trendTitles[trend] }}</p>
+      <p class="muted">Состояние тренда: {{ trendTitles[trend] }}</p>
     }
 
-    @if (store.layers().levels) {
-      <div class="row" role="group" aria-label="Фильтр уровней">
-        <label class="field">
-          Дальше цены не более
-          <select
+    @if (store.layers().levels || store.layers().patterns) {
+      <h2 class="section-title">Расчёт</h2>
+      <div class="grid" role="group" aria-label="Параметры расчёта">
+        @if (store.layers().levels) {
+          <app-select
+            label="Уровни: до цены"
+            aria-label="Расстояние до цены"
+            [options]="distances"
             [ngModel]="store.levelFilter().maxDistanceAtr"
             (ngModelChange)="store.setLevelFilter({ maxDistanceAtr: $event })"
-          >
-            @for (option of distances; track option) {
-              <option [ngValue]="option">
-                {{ option === null ? 'без ограничения' : option + ' ATR' }}
-              </option>
-            }
-          </select>
-        </label>
-        <label class="field">
-          С каждой стороны
-          <select
+          />
+          <app-select
+            label="С каждой стороны"
+            aria-label="Уровней с каждой стороны"
+            [options]="sides"
             [ngModel]="store.levelFilter().perSide"
             (ngModelChange)="store.setLevelFilter({ perSide: $event })"
-          >
-            @for (option of sides; track option) {
-              <option [ngValue]="option">{{ option }}</option>
-            }
-          </select>
-        </label>
-        <label class="field">
-          Сила от
-          <input
-            type="number"
-            min="0"
-            max="100"
-            step="5"
-            [ngModel]="store.levelFilter().minScore"
-            (ngModelChange)="store.setLevelFilter({ minScore: +$event || 0 })"
           />
-        </label>
-        <label class="check">
+          <app-number
+            label="Сила от"
+            aria-label="Минимальная сила"
+            [min]="0"
+            [max]="100"
+            [ngModel]="store.levelFilter().minScore"
+            (ngModelChange)="store.setLevelFilter({ minScore: $event ?? 0 })"
+          />
+        }
+        <app-number
+          label="Свечей (0 — все)"
+          aria-label="Свечей для расчёта"
+          [min]="0"
+          [ngModel]="store.lastBars()"
+          (ngModelChange)="setLastBars($event)"
+        />
+      </div>
+      @if (store.layers().levels) {
+        <label class="toggle-chip derived">
           <input
             type="checkbox"
             [ngModel]="store.levelFilter().derived"
             (ngModelChange)="store.setLevelFilter({ derived: $event })"
           />
-          Fib и pivot
+          Fib и pivot в списке уровней
         </label>
-      </div>
-    }
-    @if (store.layers().levels || store.layers().patterns) {
-      <div class="row">
-        <label class="field">
-          Свечей для расчёта (0 — все)
-          <input
-            type="number"
-            min="0"
-            step="100"
-            [ngModel]="store.lastBars()"
-            (change)="setLastBars($event)"
-          />
-        </label>
-      </div>
+      }
     }
 
     @if (store.layers().levels && store.levels().length) {
+      <h2 class="section-title">Уровни</h2>
       <div class="levels" role="list" aria-label="Уровни">
         @for (level of shownLevels(); track level.id) {
           <button
@@ -198,7 +191,7 @@ const REASONS: Record<string, string> = {
 
     @if (store.layers().patterns) {
       <div class="row">
-        <label class="check">
+        <label class="toggle-chip">
           <input
             type="checkbox"
             [ngModel]="store.showCancelled()"
@@ -317,19 +310,34 @@ const REASONS: Record<string, string> = {
     }
   `,
   styles: `
+    :host {
+      display: block;
+    }
+    .section-title {
+      margin-top: 1rem;
+    }
+    .section-title:first-child {
+      margin-top: 0;
+    }
     .layers,
     .row {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.75rem;
+      gap: 0.4rem;
       align-items: center;
       margin-bottom: 0.5rem;
     }
-    .check {
-      display: flex;
-      gap: 0.3rem;
-      align-items: center;
-      font-size: 0.85rem;
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .derived {
+      margin-bottom: 0.5rem;
+    }
+    .grid > * {
+      min-width: 0;
     }
     .hint {
       opacity: 0.7;
@@ -392,12 +400,20 @@ export class StructurePanel {
   protected readonly layers = LAYERS;
   protected readonly titles = LAYER_TITLES;
   protected readonly trendTitles = TREND_TITLES;
-  protected readonly distances = [5, 10, 20, 40, null];
-  protected readonly sides = [2, 3, 4, 6, 10];
+  protected readonly distances: UiOption<number | null>[] = [
+    ...[5, 10, 20, 40].map((n) => ({
+      value: n as number | null,
+      label: `${n} ATR`,
+    })),
+    { value: null, label: 'без ограничения' },
+  ];
+  protected readonly sides: UiOption<number>[] = [2, 3, 4, 6, 10].map((n) => ({
+    value: n,
+    label: String(n),
+  }));
 
-  protected setLastBars(event: Event): void {
-    const value = Number((event.target as HTMLInputElement).value);
-    if (Number.isFinite(value)) {
+  protected setLastBars(value: number | null): void {
+    if (value !== null && value !== this.store.lastBars()) {
       void this.store.setLastBars(value);
     }
   }

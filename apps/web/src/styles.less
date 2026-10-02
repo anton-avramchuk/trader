@@ -1,2 +1,112 @@
 @import '@taiga-ui/styles/taiga-ui-theme.less';
 @import '@taiga-ui/styles/taiga-ui-fonts.less';
+
+// Общие приёмы оформления страниц: карточки, панели инструментов, рабочее место
+// «график + боковая панель». Контролы — компоненты из core/ui (Taiga), не браузерные.
+
+main h1 {
+  margin: 0 0 1rem;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.card {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: var(--tui-radius-l, 0.75rem);
+  background: var(--tui-background-base);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.muted {
+  color: var(--tui-text-secondary);
+  font-size: 0.85rem;
+}
+
+.section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tui-text-secondary);
+}
+
+// Переключатель-«таблетка»: прячет чекбокс, но оставляет его доступным с клавиатуры.
+.toggle-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--tui-background-neutral-1-hover);
+  }
+
+  &:has(input:checked) {
+    border-color: transparent;
+    background: var(--tui-background-accent-1);
+    color: var(--tui-text-primary-on-accent-1);
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--tui-border-focus);
+    outline-offset: 2px;
+  }
+
+  input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+// Рабочее место: основная область и боковая панель с собственной прокруткой.
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  gap: 1rem;
+  align-items: start;
+
+  .side {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 6rem);
+    overflow: auto;
+  }
+
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr);
+
+    .side {
+      position: static;
+      max-height: none;
+    }
+  }
+}

@@ -7,7 +7,8 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TuiButton } from '@taiga-ui/core';
+import { TuiButton, TuiCheckbox } from '@taiga-ui/core';
+import { UiNumber, UiSelect, UiText } from '../../core/ui';
 import {
   allowedSourceTimeframes,
   collectParams,
@@ -20,50 +21,41 @@ import { IndicatorsStore } from './indicators.store';
 /** Панель индикаторов: «Добавить индикатор» (форма из схемы), активные, подсказки. */
 @Component({
   selector: 'app-indicator-panel',
-  imports: [FormsModule, TuiButton],
+  imports: [FormsModule, TuiButton, TuiCheckbox, UiNumber, UiSelect, UiText],
   template: `
-    <div class="add" role="group" aria-label="Добавить индикатор">
-      <label class="field">
-        Индикатор
-        <select
-          [ngModel]="selectedName()"
-          (ngModelChange)="select($event)"
-          aria-label="Тип индикатора"
-        >
-          <option value="">— выберите —</option>
-          @for (info of store.catalog(); track info.name) {
-            <option [value]="info.name">{{ info.title }}</option>
-          }
-        </select>
-      </label>
+    <div class="add card" role="group" aria-label="Добавить индикатор">
+      <app-select
+        label="Индикатор"
+        aria-label="Тип индикатора"
+        [options]="typeOptions()"
+        [ngModel]="selectedName()"
+        (ngModelChange)="select($event)"
+      />
       @for (field of fields(); track field.key) {
-        <label class="field">
-          {{ field.label }}
-          @if (field.kind === 'boolean') {
-            <input type="checkbox" [(ngModel)]="field.value" />
-          } @else if (field.kind === 'string') {
-            <input type="text" [(ngModel)]="field.value" />
-          } @else {
-            <input
-              type="number"
-              [min]="field.min ?? null"
-              [max]="field.max ?? null"
-              [step]="field.step"
-              [(ngModel)]="field.value"
-            />
-          }
-        </label>
+        @if (field.kind === 'boolean') {
+          <label class="check">
+            <input type="checkbox" tuiCheckbox [(ngModel)]="field.value" />
+            {{ field.label }}
+          </label>
+        } @else if (field.kind === 'string') {
+          <app-text [label]="field.label" [(ngModel)]="field.value" />
+        } @else {
+          <app-number
+            [label]="field.label"
+            [min]="field.min ?? -1000000"
+            [max]="field.max ?? 1000000"
+            [(ngModel)]="field.value"
+          />
+        }
       }
       @if (selectedName()) {
-        <label class="field">
-          Source TF
-          <select [(ngModel)]="sourceTf" aria-label="Source TF">
-            @for (tf of sourceOptions(); track tf) {
-              <option [value]="tf">{{ tf }}</option>
-            }
-          </select>
-        </label>
-        <button tuiButton type="button" size="s" (click)="add()">
+        <app-select
+          label="Source TF"
+          aria-label="Source TF"
+          [options]="sourceChoices()"
+          [(ngModel)]="sourceTf"
+        />
+        <button tuiButton type="button" size="m" (click)="add()">
           Добавить
         </button>
       }
@@ -150,17 +142,13 @@ import { IndicatorsStore } from './indicators.store';
       display: flex;
       flex-wrap: wrap;
       gap: 0.75rem;
-      align-items: end;
-      margin-bottom: 0.5rem;
+      align-items: center;
     }
-    .field {
+    .check {
       display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      font-size: 0.8rem;
-    }
-    .field input[type='number'] {
-      width: 6rem;
+      gap: 0.4rem;
+      align-items: center;
+      font-size: 0.85rem;
     }
     .active {
       display: flex;
@@ -228,6 +216,13 @@ export class IndicatorPanel {
   protected readonly sourceOptions = computed(() =>
     allowedSourceTimeframes(this.chartTimeframe()),
   );
+  protected readonly sourceChoices = computed(() =>
+    this.sourceOptions().map((tf) => ({ value: tf, label: tf })),
+  );
+  protected readonly typeOptions = computed(() => [
+    { value: '', label: '— выберите —' },
+    ...this.store.catalog().map((i) => ({ value: i.name, label: i.title })),
+  ]);
 
   constructor() {
     // Смена chart TF: source TF по умолчанию — тот же, старший остаётся допустимым.

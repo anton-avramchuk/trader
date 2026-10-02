@@ -3,6 +3,8 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TuiButton } from '@taiga-ui/core';
+import { TuiTextarea } from '@taiga-ui/kit/components/textarea';
+import { UiDate, UiNumber, UiSelect, UiText } from '../../core/ui';
 import type { BacktestLock } from '@trader/api-client';
 import {
   equityChart,
@@ -37,7 +39,17 @@ const REASON_TITLES: Record<string, string> = {
 /** Backtest: параметры стратегии и издержек, walk-forward, результат и сделки (ADR-0027). */
 @Component({
   selector: 'app-backtest',
-  imports: [DecimalPipe, FormsModule, RouterLink, TuiButton],
+  imports: [
+    DecimalPipe,
+    FormsModule,
+    RouterLink,
+    TuiButton,
+    TuiTextarea,
+    UiDate,
+    UiNumber,
+    UiSelect,
+    UiText,
+  ],
   providers: [BacktestStore],
   template: `
     <h1>Backtest</h1>
@@ -47,275 +59,214 @@ const REASON_TITLES: Record<string, string> = {
       критерий оценки: смотрите число сделок и предупреждения.
     </p>
 
-    <form class="grid" (ngSubmit)="store.run()">
-      <label>
-        Инструмент
-        <select
-          name="instrument"
-          [ngModel]="form().instrumentId"
-          (ngModelChange)="store.patch({ instrumentId: $event })"
-        >
-          @for (r of store.instruments(); track r.id) {
-            <option [ngValue]="r.id">{{ r.ticker }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        TF
-        <select
-          name="tf"
-          [ngModel]="form().timeframe"
-          (ngModelChange)="store.patch({ timeframe: $event })"
-        >
-          @for (tf of timeframes; track tf) {
-            <option [value]="tf">{{ tf }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        Режим
-        <select
-          name="kind"
-          [ngModel]="form().kind"
-          (ngModelChange)="store.patch({ kind: $event })"
-        >
-          <option value="single">Один период</option>
-          <option value="walk_forward">Walk-forward</option>
-        </select>
-      </label>
-      <label>
-        С
-        <input
-          name="from"
-          type="date"
-          [ngModel]="form().periodFrom"
-          (ngModelChange)="store.patch({ periodFrom: $event })"
-        />
-      </label>
-      <label>
-        По
-        <input
-          name="to"
-          type="date"
-          [ngModel]="form().periodTo"
-          (ngModelChange)="store.patch({ periodTo: $event })"
-        />
-      </label>
+    <form class="stack" (ngSubmit)="store.run()">
+      <fieldset class="card">
+        <legend class="section-title">Серия и период</legend>
+        <div class="form-grid">
+          <app-select
+            label="Инструмент"
+            name="instrument"
+            [options]="instrumentOptions()"
+            [ngModel]="form().instrumentId"
+            (ngModelChange)="store.patch({ instrumentId: $event })"
+          />
+          <app-select
+            label="TF"
+            name="tf"
+            [options]="timeframeOptions"
+            [ngModel]="form().timeframe"
+            (ngModelChange)="store.patch({ timeframe: $event })"
+          />
+          <app-select
+            label="Режим"
+            name="kind"
+            [options]="kindOptions"
+            [ngModel]="form().kind"
+            (ngModelChange)="store.patch({ kind: $event })"
+          />
+          <app-date
+            label="С"
+            name="from"
+            [ngModel]="form().periodFrom"
+            (ngModelChange)="store.patch({ periodFrom: $event })"
+          />
+          <app-date
+            label="По"
+            name="to"
+            [ngModel]="form().periodTo"
+            (ngModelChange)="store.patch({ periodTo: $event })"
+          />
+        </div>
+      </fieldset>
 
-      <label>
-        Сигнал
-        <select
-          name="source"
-          [ngModel]="form().source"
-          (ngModelChange)="store.patch({ source: $event })"
-        >
-          @for (s of sources; track s.value) {
-            <option [value]="s.value">{{ s.title }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        Типы (через запятую)
-        <input
-          name="groups"
-          [ngModel]="form().groups"
-          (ngModelChange)="store.patch({ groups: $event })"
-          placeholder="все"
-        />
-      </label>
-      <label>
-        Сторона
-        <select
-          name="side"
-          [ngModel]="form().side"
-          (ngModelChange)="store.patch({ side: $event })"
-        >
-          <option value="follow">по событию</option>
-          <option value="fade">обратная</option>
-        </select>
-      </label>
-      <label>
-        Стоп
-        <select
-          name="stopKind"
-          [ngModel]="form().stopKind"
-          (ngModelChange)="store.patch({ stopKind: $event })"
-        >
-          @for (k of stopKinds; track k.value) {
-            <option [value]="k.value">{{ k.title }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        ATR
-        <input
-          name="stopValue"
-          type="number"
-          step="0.1"
-          [ngModel]="form().stopValue"
-          (ngModelChange)="store.patch({ stopValue: $event })"
-        />
-      </label>
-      <label>
-        Цель
-        <select
-          name="targetKind"
-          [ngModel]="form().targetKind"
-          (ngModelChange)="store.patch({ targetKind: $event })"
-        >
-          @for (k of targetKinds; track k.value) {
-            <option [value]="k.value">{{ k.title }}</option>
-          }
-        </select>
-      </label>
-      <label>
-        ATR
-        <input
-          name="targetValue"
-          type="number"
-          step="0.1"
-          [ngModel]="form().targetValue"
-          (ngModelChange)="store.patch({ targetValue: $event })"
-        />
-      </label>
-      <label>
-        Макс. баров
-        <input
-          name="maxBars"
-          type="number"
-          [ngModel]="form().maxBars"
-          (ngModelChange)="store.patch({ maxBars: $event || null })"
-        />
-      </label>
-      <label>
-        Качество от
-        <input
-          name="qualityMin"
-          type="number"
-          [ngModel]="form().qualityMin"
-          (ngModelChange)="store.patch({ qualityMin: $event || null })"
-        />
-      </label>
+      <fieldset class="card">
+        <legend class="section-title">Стратегия</legend>
+        <div class="form-grid">
+          <app-select
+            label="Сигнал"
+            name="source"
+            [options]="sourceOptions"
+            [ngModel]="form().source"
+            (ngModelChange)="store.patch({ source: $event })"
+          />
+          <app-text
+            label="Типы (через запятую)"
+            name="groups"
+            placeholder="все"
+            [ngModel]="form().groups"
+            (ngModelChange)="store.patch({ groups: $event })"
+          />
+          <app-select
+            label="Сторона"
+            name="side"
+            [options]="sideOptions"
+            [ngModel]="form().side"
+            (ngModelChange)="store.patch({ side: $event })"
+          />
+          <app-select
+            label="Стоп"
+            name="stopKind"
+            [options]="stopOptions"
+            [ngModel]="form().stopKind"
+            (ngModelChange)="store.patch({ stopKind: $event })"
+          />
+          <app-number
+            label="Стоп, значение"
+            name="stopValue"
+            [ngModel]="form().stopValue"
+            (ngModelChange)="store.patch({ stopValue: $event })"
+          />
+          <app-select
+            label="Цель"
+            name="targetKind"
+            [options]="targetOptions"
+            [ngModel]="form().targetKind"
+            (ngModelChange)="store.patch({ targetKind: $event })"
+          />
+          <app-number
+            label="Цель, значение"
+            name="targetValue"
+            [ngModel]="form().targetValue"
+            (ngModelChange)="store.patch({ targetValue: $event })"
+          />
+          <app-number
+            label="Макс. баров"
+            name="maxBars"
+            [min]="0"
+            [ngModel]="form().maxBars"
+            (ngModelChange)="store.patch({ maxBars: $event || null })"
+          />
+          <app-number
+            label="Качество от"
+            name="qualityMin"
+            [min]="0"
+            [max]="100"
+            [ngModel]="form().qualityMin"
+            (ngModelChange)="store.patch({ qualityMin: $event || null })"
+          />
+        </div>
+      </fieldset>
 
-      <label>
-        Количество
-        <input
-          name="quantity"
-          type="number"
-          min="1"
-          [ngModel]="form().quantity"
-          (ngModelChange)="store.patch({ quantity: $event })"
-        />
-      </label>
-      <label>
-        Полуспред, тиков
-        <input
-          name="halfSpread"
-          type="number"
-          step="0.1"
-          [ngModel]="form().halfSpread"
-          (ngModelChange)="store.patch({ halfSpread: $event })"
-        />
-      </label>
-      <label>
-        Проскальзывание, тиков
-        <input
-          name="slippage"
-          type="number"
-          step="0.1"
-          [ngModel]="form().slippage"
-          (ngModelChange)="store.patch({ slippage: $event })"
-        />
-      </label>
-      <label>
-        Комиссия за единицу
-        <input
-          name="commission"
-          type="number"
-          step="0.1"
-          [ngModel]="form().commission"
-          (ngModelChange)="store.patch({ commission: $event })"
-        />
-      </label>
+      <fieldset class="card">
+        <legend class="section-title">Издержки</legend>
+        <div class="form-grid">
+          <app-number
+            label="Количество"
+            name="quantity"
+            [min]="1"
+            [ngModel]="form().quantity"
+            (ngModelChange)="store.patch({ quantity: $event })"
+          />
+          <app-number
+            label="Полуспред, тиков"
+            name="halfSpread"
+            [min]="0"
+            [ngModel]="form().halfSpread"
+            (ngModelChange)="store.patch({ halfSpread: $event })"
+          />
+          <app-number
+            label="Проскальзывание, тиков"
+            name="slippage"
+            [min]="0"
+            [ngModel]="form().slippage"
+            (ngModelChange)="store.patch({ slippage: $event })"
+          />
+          <app-number
+            label="Комиссия за единицу"
+            name="commission"
+            [min]="0"
+            [ngModel]="form().commission"
+            (ngModelChange)="store.patch({ commission: $event })"
+          />
+        </div>
+      </fieldset>
 
       @if (form().kind === 'walk_forward') {
-        <label>
-          Train, дней
-          <input
-            name="train"
-            type="number"
-            [ngModel]="form().trainDays"
-            (ngModelChange)="store.patch({ trainDays: $event })"
-          />
-        </label>
-        <label>
-          Validation, дней
-          <input
-            name="valid"
-            type="number"
-            [ngModel]="form().validDays"
-            (ngModelChange)="store.patch({ validDays: $event })"
-          />
-        </label>
-        <label>
-          Шаг, дней
-          <input
-            name="step"
-            type="number"
-            [ngModel]="form().stepDays"
-            (ngModelChange)="store.patch({ stepDays: $event })"
-          />
-        </label>
-        <label>
-          Цель подбора
-          <select
-            name="objective"
-            [ngModel]="form().objective"
-            (ngModelChange)="store.patch({ objective: $event })"
-          >
-            <option value="profit_factor">Profit factor</option>
-            <option value="net">Net</option>
-          </select>
-        </label>
-        <label>
-          Мин. сделок на train
-          <input
-            name="minTrades"
-            type="number"
-            [ngModel]="form().minTrades"
-            (ngModelChange)="store.patch({ minTrades: $event })"
-          />
-        </label>
-        <label class="wide">
-          Сетка ({{ gridKeys }})
-          <textarea
-            name="grid"
-            rows="3"
-            [ngModel]="form().grid"
-            (ngModelChange)="store.patch({ grid: $event })"
-          ></textarea>
-        </label>
-        <label>
-          Test с
-          <input
-            name="testFrom"
-            type="date"
-            [ngModel]="form().testFrom"
-            (ngModelChange)="store.patch({ testFrom: $event })"
-          />
-        </label>
-        <label>
-          Test по
-          <input
-            name="testTo"
-            type="date"
-            [ngModel]="form().testTo"
-            (ngModelChange)="store.patch({ testTo: $event })"
-          />
-        </label>
+        <fieldset class="card">
+          <legend class="section-title">Walk-forward</legend>
+          <div class="form-grid">
+            <app-number
+              label="Train, дней"
+              name="train"
+              [min]="1"
+              [ngModel]="form().trainDays"
+              (ngModelChange)="store.patch({ trainDays: $event })"
+            />
+            <app-number
+              label="Validation, дней"
+              name="valid"
+              [min]="1"
+              [ngModel]="form().validDays"
+              (ngModelChange)="store.patch({ validDays: $event })"
+            />
+            <app-number
+              label="Шаг, дней"
+              name="step"
+              [min]="1"
+              [ngModel]="form().stepDays"
+              (ngModelChange)="store.patch({ stepDays: $event })"
+            />
+            <app-select
+              label="Цель подбора"
+              name="objective"
+              [options]="objectiveOptions"
+              [ngModel]="form().objective"
+              (ngModelChange)="store.patch({ objective: $event })"
+            />
+            <app-number
+              label="Мин. сделок на train"
+              name="minTrades"
+              [min]="1"
+              [ngModel]="form().minTrades"
+              (ngModelChange)="store.patch({ minTrades: $event })"
+            />
+            <app-date
+              label="Test с"
+              name="testFrom"
+              [ngModel]="form().testFrom"
+              (ngModelChange)="store.patch({ testFrom: $event })"
+            />
+            <app-date
+              label="Test по"
+              name="testTo"
+              [ngModel]="form().testTo"
+              (ngModelChange)="store.patch({ testTo: $event })"
+            />
+          </div>
+          <tui-textfield class="wide">
+            <label tuiLabel>Сетка ({{ gridKeys }})</label>
+            <textarea
+              tuiTextarea
+              name="grid"
+              [min]="3"
+              [ngModel]="form().grid"
+              (ngModelChange)="store.patch({ grid: $event })"
+            ></textarea>
+          </tui-textfield>
+        </fieldset>
       }
       <div class="actions">
-        <button tuiButton type="submit" size="s" [disabled]="store.running()">
+        <button tuiButton type="submit" size="m" [disabled]="store.running()">
           Запустить
         </button>
         @if (form().kind === 'walk_forward') {
@@ -692,14 +643,12 @@ const REASON_TITLES: Record<string, string> = {
         }
         @if (unlocking(); as lock) {
           <div class="unlock">
-            <label>
-              Причина разблокировки (попадёт в журнал)
-              <input
-                name="note"
-                [ngModel]="note()"
-                (ngModelChange)="note.set($event)"
-              />
-            </label>
+            <app-text
+              label="Причина разблокировки (попадёт в журнал)"
+              name="note"
+              [ngModel]="note()"
+              (ngModelChange)="note.set($event)"
+            />
             <button
               tuiButton
               type="button"
@@ -745,21 +694,19 @@ const REASON_TITLES: Record<string, string> = {
       font-size: 0.85rem;
       margin: 0.2rem 0;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
-      gap: 0.5rem 0.8rem;
-      align-items: end;
-      margin: 0.75rem 0;
+    .note {
+      margin-bottom: 1rem;
     }
-    label {
-      display: flex;
-      flex-direction: column;
-      font-size: 0.8rem;
-      gap: 0.15rem;
+    fieldset {
+      min-width: 0;
+      margin: 0;
+    }
+    legend {
+      padding: 0 0.4rem;
     }
     .wide {
-      grid-column: span 2;
+      display: block;
+      margin-top: 0.75rem;
     }
     .actions {
       display: flex;
@@ -851,13 +798,37 @@ const REASON_TITLES: Record<string, string> = {
 })
 export class Backtest implements OnInit {
   protected readonly store = inject(BacktestStore);
-  protected readonly timeframes = TIMEFRAMES;
-  protected readonly stopKinds = STOP_KINDS;
-  protected readonly targetKinds = TARGET_KINDS;
+  protected readonly timeframeOptions = TIMEFRAMES.map((tf) => ({
+    value: tf,
+    label: tf,
+  }));
+  protected readonly instrumentOptions = computed(() =>
+    this.store.instruments().map((r) => ({ value: r.id, label: r.ticker })),
+  );
+  protected readonly kindOptions = [
+    { value: 'single' as const, label: 'Один период' },
+    { value: 'walk_forward' as const, label: 'Walk-forward' },
+  ];
+  protected readonly sideOptions = [
+    { value: 'follow' as const, label: 'по событию' },
+    { value: 'fade' as const, label: 'обратная' },
+  ];
+  protected readonly objectiveOptions = [
+    { value: 'profit_factor' as const, label: 'Profit factor' },
+    { value: 'net' as const, label: 'Net' },
+  ];
+  protected readonly stopOptions = STOP_KINDS.map((k) => ({
+    value: k.value,
+    label: k.title,
+  }));
+  protected readonly targetOptions = TARGET_KINDS.map((k) => ({
+    value: k.value,
+    label: k.title,
+  }));
   protected readonly gridKeys = GRID_KEYS.join(', ');
   protected readonly minNote = MIN_NOTE;
-  protected readonly sources = Object.entries(SOURCE_TITLES).map(
-    ([value, title]) => ({ value, title }),
+  protected readonly sourceOptions = Object.entries(SOURCE_TITLES).map(
+    ([value, label]) => ({ value, label }),
   );
   protected readonly units = (
     Object.entries(UNIT_TITLES) as [MetricUnit, string][]

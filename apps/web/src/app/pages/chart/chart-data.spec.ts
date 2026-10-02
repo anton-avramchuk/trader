@@ -50,7 +50,7 @@ describe('describeBar', () => {
     const text = describeBar(candle('2026-09-28T04:00:00Z'));
 
     expect(text).toContain('28.09.2026, 07:00 МСК');
-    expect(text).toContain('C 101.00000000');
+    expect(text).toContain('C 101 ·');
   });
 });
 

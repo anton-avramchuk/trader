@@ -85,7 +85,11 @@ describe('Chart', () => {
     for (const tf of ['15m', '1h', '4h', '1d', '1w']) {
       expect(text).toContain(tf);
     }
-    expect(text).toContain('SBER');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        'app-select[aria-label="Инструмент"] input',
+      )?.value,
+    ).toBe('SBER');
     expect(text).toContain('28.09.2026, 07:00 МСК');
     expect(text).toContain('TradingView');
     expect(text).toContain('Прокрутите влево');

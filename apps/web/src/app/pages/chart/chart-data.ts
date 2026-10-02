@@ -59,13 +59,14 @@ export function toChartData(candles: Candle[]): {
 
 /** Подпись свечи для легенды под курсором. */
 export function describeBar(c: Candle): string {
+  const price = (value: string | number): number => Number(value);
   return [
     formatMsk(c.timestamp, 'datetime') + ' МСК',
-    `O ${c.open}`,
-    `H ${c.high}`,
-    `L ${c.low}`,
-    `C ${c.close}`,
-    `V ${Number(c.volume)}`,
+    `O ${price(c.open)}`,
+    `H ${price(c.high)}`,
+    `L ${price(c.low)}`,
+    `C ${price(c.close)}`,
+    `V ${Number(c.volume).toLocaleString('ru-RU')}`,
   ].join(' · ');
 }
 

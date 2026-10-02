@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideTaiga } from '@taiga-ui/core';
 import { provideEventPlugins } from '@taiga-ui/event-plugins';
 import { API_CLIENT } from '../../core/api/api';
+import { chooseOption, enterNumber, optionLabels } from '../../core/ui/testing';
 import { IndicatorPanel } from './indicator-panel';
 import { IndicatorsStore } from './indicators.store';
 
@@ -71,61 +72,43 @@ describe('IndicatorPanel', () => {
     return { fixture, store, root: fixture.nativeElement as HTMLElement };
   }
 
-  function select(root: HTMLElement, label: string): HTMLSelectElement {
-    return root.querySelector(
-      `select[aria-label="${label}"]`,
-    ) as HTMLSelectElement;
-  }
+  const TYPE = 'app-select[aria-label="Тип индикатора"]';
+  const SOURCE = 'app-select[aria-label="Source TF"]';
 
   it('после выбора типа показывает форму параметров и source TF не младше графика', async () => {
     const { fixture, root } = await mount();
 
-    const type = select(root, 'Тип индикатора');
-    type.value = 'ema';
-    type.dispatchEvent(new Event('change'));
+    chooseOption(fixture, TYPE, 'EMA — экспоненциальная скользящая средняя');
     await settle(fixture);
 
     expect(root.textContent).toContain('Период, баров');
-    const period = root.querySelector(
-      'input[type="number"]',
-    ) as HTMLInputElement;
+    const period = root.querySelector('app-number input') as HTMLInputElement;
     expect(period.value).toBe('20');
-    const options = Array.from(select(root, 'Source TF').options).map(
-      (o) => o.value,
-    );
-    expect(options).toEqual(['15m', '1h', '4h', '1d', '1w']);
+    expect(optionLabels(fixture, SOURCE)).toEqual([
+      '15m',
+      '1h',
+      '4h',
+      '1d',
+      '1w',
+    ]);
   });
 
   it('на старшем графике младшие source TF недоступны', async () => {
     const { fixture, root } = await mount();
     fixture.componentInstance.tf.set('4h');
     fixture.detectChanges();
-    const type = select(root, 'Тип индикатора');
-    type.value = 'ema';
-    type.dispatchEvent(new Event('change'));
+    chooseOption(fixture, TYPE, 'EMA — экспоненциальная скользящая средняя');
     await settle(fixture);
 
-    const options = Array.from(select(root, 'Source TF').options).map(
-      (o) => o.value,
-    );
-
-    expect(options).toEqual(['4h', '1d', '1w']);
+    expect(optionLabels(fixture, SOURCE)).toEqual(['4h', '1d', '1w']);
   });
 
   it('«Добавить» кладёт индикатор с введёнными параметрами и source TF', async () => {
     const { fixture, store, root } = await mount();
-    const type = select(root, 'Тип индикатора');
-    type.value = 'ema';
-    type.dispatchEvent(new Event('change'));
+    chooseOption(fixture, TYPE, 'EMA — экспоненциальная скользящая средняя');
     await settle(fixture);
-    const period = root.querySelector(
-      'input[type="number"]',
-    ) as HTMLInputElement;
-    period.value = '200';
-    period.dispatchEvent(new Event('input'));
-    const source = select(root, 'Source TF');
-    source.value = '1h';
-    source.dispatchEvent(new Event('change'));
+    enterNumber(fixture, 'app-number', 200);
+    chooseOption(fixture, SOURCE, '1h');
     fixture.detectChanges();
 
     (

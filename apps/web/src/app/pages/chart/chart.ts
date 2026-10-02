@@ -8,7 +8,8 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TuiButton } from '@taiga-ui/core';
+import { TuiSegmented } from '@taiga-ui/kit/components/segmented';
+import { UiSelect } from '../../core/ui';
 import type { Candle } from '@trader/api-client';
 import { type ChartTimeframe, describeBar, TIMEFRAMES } from './chart-data';
 import { ChartStore } from './chart.store';
@@ -30,107 +31,89 @@ import { StructureStore } from './structure.store';
     PriceChart,
     ProfileBar,
     StructurePanel,
-    TuiButton,
+    TuiSegmented,
+    UiSelect,
   ],
   providers: [ChartStore, IndicatorsStore, ProfilesStore, StructureStore],
   template: `
     <h1>Chart</h1>
 
-    <div class="inline">
-      <label class="check">
-        Инструмент:
-        <select
-          [ngModel]="store.instrumentId()"
-          (ngModelChange)="store.selectInstrument($event)"
-        >
-          @for (i of store.instruments(); track i.id) {
-            <option [ngValue]="i.id">{{ i.ticker }}</option>
-          }
-        </select>
-      </label>
-      <div class="tabs" role="tablist">
+    <div class="card toolbar">
+      <app-select
+        label="Инструмент"
+        aria-label="Инструмент"
+        [options]="instrumentOptions()"
+        [ngModel]="store.instrumentId()"
+        (ngModelChange)="store.selectInstrument($event)"
+      />
+      <tui-segmented
+        size="m"
+        aria-label="Таймфрейм"
+        [activeItemIndex]="timeframes.indexOf(store.timeframe())"
+      >
         @for (tf of timeframes; track tf) {
-          <button
-            tuiButton
-            type="button"
-            size="xs"
-            role="tab"
-            [appearance]="store.timeframe() === tf ? 'primary' : 'secondary'"
-            (click)="store.selectTimeframe(tf)"
-          >
+          <button type="button" (click)="store.selectTimeframe(tf)">
             {{ tf }}
           </button>
         }
-      </div>
+      </tui-segmented>
       @if (store.loading()) {
-        <span class="status">Загрузка…</span>
+        <span class="muted">Загрузка…</span>
       }
-    </div>
-
-    <app-profile-bar
-      [instrumentId]="store.instrumentId()"
-      [chartTimeframe]="store.timeframe()"
-      (timeframeRequested)="onProfileTimeframe($event)"
-    />
-    <app-indicator-panel [chartTimeframe]="store.timeframe()" />
-    <app-structure-panel [chartTimeframe]="store.timeframe()" />
-
-    <p class="legend">{{ legend() }}</p>
-
-    <div class="chart">
-      <app-price-chart
-        [candles]="store.candles()"
-        [datasetKey]="store.datasetKey()"
-        [indicators]="indicators.series()"
-        [overlay]="structure.overlay()"
-        (pointPicked)="structure.pickPoint($event)"
-        (needOlder)="store.loadOlder()"
-        (hover)="hovered.set($event)"
+      <app-profile-bar
+        class="profiles"
+        [instrumentId]="store.instrumentId()"
+        [chartTimeframe]="store.timeframe()"
+        (timeframeRequested)="onProfileTimeframe($event)"
       />
     </div>
 
-    <p class="hint">
-      Время — МСК. Свечи показаны как есть, без склеек и поправок.
-      @if (store.hasOlder()) {
-        Прокрутите влево — подгрузится более ранняя история.
-      }
-    </p>
-    <p class="hint">
-      Графики:
-      <a href="https://www.tradingview.com/" target="_blank" rel="noopener"
-        >TradingView Lightweight Charts™</a
-      >
-    </p>
+    <div class="workbench">
+      <section class="stack">
+        <app-indicator-panel [chartTimeframe]="store.timeframe()" />
+        <p class="legend">{{ legend() }}</p>
+        <div class="chart">
+          <app-price-chart
+            [candles]="store.candles()"
+            [datasetKey]="store.datasetKey()"
+            [indicators]="indicators.series()"
+            [overlay]="structure.overlay()"
+            (pointPicked)="structure.pickPoint($event)"
+            (needOlder)="store.loadOlder()"
+            (hover)="hovered.set($event)"
+          />
+        </div>
+        <p class="muted">
+          Время — МСК. Свечи показаны как есть, без склеек и поправок.
+          @if (store.hasOlder()) {
+            Прокрутите влево — подгрузится более ранняя история.
+          }
+          Графики:
+          <a href="https://www.tradingview.com/" target="_blank" rel="noopener"
+            >TradingView Lightweight Charts™</a
+          >
+        </p>
+      </section>
+      <aside class="side card">
+        <app-structure-panel [chartTimeframe]="store.timeframe()" />
+      </aside>
+    </div>
   `,
   styles: `
-    .inline {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      align-items: center;
-      margin-bottom: 0.75rem;
+    .toolbar {
+      margin-bottom: 1rem;
     }
-    .tabs {
-      display: flex;
-      gap: 0.25rem;
-    }
-    .check {
-      display: flex;
-      gap: 0.4rem;
-      align-items: center;
+    .profiles {
+      margin-inline-start: auto;
     }
     .chart {
-      height: 60vh;
+      height: calc(100vh - 17rem);
       min-height: 26rem;
     }
     .legend {
-      min-height: 1.5rem;
+      min-height: 1.25rem;
+      margin: 0;
       font-family: monospace;
-      font-size: 0.85rem;
-    }
-    .hint,
-    .status {
-      opacity: 0.7;
       font-size: 0.85rem;
     }
   `,
@@ -140,6 +123,9 @@ export class Chart implements OnInit {
   protected readonly indicators = inject(IndicatorsStore);
   protected readonly structure = inject(StructureStore);
   protected readonly timeframes = TIMEFRAMES;
+  protected readonly instrumentOptions = computed(() =>
+    this.store.instruments().map((i) => ({ value: i.id, label: i.ticker })),
+  );
   protected readonly hovered = signal<Candle | null>(null);
 
   /** Легенда: бар под курсором, иначе последний бар. */
