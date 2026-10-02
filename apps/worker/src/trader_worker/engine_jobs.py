@@ -2,8 +2,11 @@
 
 Параметры: ``engine`` (имя из реестра), ``engine_params``; ``instrument_id``;
 ``timeframe``; необязательный ``mode`` — ``auto`` (продолжить прошлый прогон, если
-бары не менялись, иначе начать новый) или ``full`` (всегда новый прогон). Результат —
-идентификатор прогона, что сделано и сколько событий записано.
+бары не менялись, иначе начать новый) или ``full`` (всегда новый прогон);
+необязательный ``last_bars`` — сколько последних свечей использовать (по умолчанию 1000,
+0 — вся история). Окно сдвигается с новыми барами, поэтому такой прогон
+в режиме ``auto`` обычно начинается заново. Результат — идентификатор прогона, что
+сделано и сколько событий записано.
 """
 
 from typing import Any
@@ -17,6 +20,7 @@ from trader_engine.timeframes import TIMEFRAMES
 from trader_worker.handlers import Handler, JobContext, JobFailed
 
 ENGINE_RUN_JOB_TYPE = "engine.run"
+DEFAULT_LAST_BARS = 1000
 
 
 def make_engine_run_handler(session_factory: sessionmaker[Session]) -> Handler:
@@ -32,6 +36,13 @@ def make_engine_run_handler(session_factory: sessionmaker[Session]) -> Handler:
         mode = params.get("mode", "auto")
         if mode not in ("auto", "full"):
             raise JobFailed(f"Неизвестный режим {mode!r}; доступны: auto, full")
+        last_bars = params.get("last_bars", DEFAULT_LAST_BARS)
+        if (
+            not isinstance(last_bars, int)
+            or isinstance(last_bars, bool)
+            or last_bars < 0
+        ):
+            raise JobFailed("last_bars — целое число ≥ 0 (0 — вся история)")
         name = params.get("engine")
         engine_params = params.get("engine_params") or {}
         try:
@@ -45,7 +56,13 @@ def make_engine_run_handler(session_factory: sessionmaker[Session]) -> Handler:
                 raise JobFailed(f"Инструмент {instrument_id} не найден")
             bars = [
                 BarInput.from_bar(bar)
-                for bar in read_bars(session, instrument_id, timeframe)
+                for bar in read_bars(
+                    session,
+                    instrument_id,
+                    timeframe,
+                    limit=last_bars or None,
+                    tail=True,
+                )
             ]
             if not bars:
                 raise JobFailed("Нет свечей для прогона: сначала загрузите историю")

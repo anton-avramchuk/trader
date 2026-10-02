@@ -98,7 +98,12 @@ describe('StructureStore', () => {
     expect(posted).toHaveLength(1);
     expect(posted[0]?.[1]?.body).toEqual({
       type: 'engine.run',
-      params: { engine: 'zigzag', timeframe: '15m', instrument_id: 1 },
+      params: {
+        engine: 'zigzag',
+        timeframe: '15m',
+        last_bars: 0, // в replay окно «последних» свечей не применяется
+        instrument_id: 1,
+      },
     });
     const query = calls(client.GET).at(-1)?.[1]?.params?.query;
     expect(query).toMatchObject({

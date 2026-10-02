@@ -173,3 +173,41 @@ def test_instrument_without_candles_is_a_readable_error(
     )
 
     assert job.status == "failed" and "Нет свечей" in (job.error or "")
+
+
+def test_last_bars_limits_the_window_and_zero_means_all(
+    loader_worker: Worker, session_factory: sessionmaker[Session], instrument_id: int
+) -> None:
+    worker = worker_with_engine(loader_worker, session_factory, instrument_id)
+    common: dict[str, Any] = {
+        "engine": "job_highs",
+        "instrument_id": instrument_id,
+        "timeframe": "1h",
+    }
+
+    window = run_job(worker, session_factory, "engine.run", last_bars=20, **common)
+    everything = run_job(worker, session_factory, "engine.run", last_bars=0, **common)
+
+    assert window.status == "succeeded", window.error
+    assert window.result["bars_total"] == 20
+    assert everything.result["bars_total"] == 60
+
+
+@pytest.mark.parametrize("value", [-1, "10", True, 2.5])
+def test_bad_last_bars_is_a_readable_error(
+    loader_worker: Worker,
+    session_factory: sessionmaker[Session],
+    instrument_id: int,
+    value: object,
+) -> None:
+    job = run_job(
+        loader_worker,
+        session_factory,
+        "engine.run",
+        engine="job_highs",
+        instrument_id=instrument_id,
+        timeframe="1h",
+        last_bars=value,
+    )
+
+    assert job.status == "failed" and "last_bars" in (job.error or "")

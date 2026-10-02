@@ -18,6 +18,7 @@ import { ProfilesStore } from './profiles.store';
 import { IndicatorsStore } from './indicators.store';
 import { PriceChart } from './price-chart';
 import { StructurePanel } from './structure-panel';
+import { levelReference } from './structure';
 import { StructureStore } from './structure.store';
 
 /** Chart: свечи и объём инструмента, слои структуры, подгрузка истории. */
@@ -159,6 +160,7 @@ export class Chart implements OnInit {
       }
       const series = { instrument_id: instrumentId };
       untracked(() => {
+        this.structure.setReference(levelReference(candles));
         void this.indicators.refresh({
           ...series,
           chartTimeframe: timeframe,
